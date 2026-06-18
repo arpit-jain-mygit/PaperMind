@@ -877,6 +877,481 @@ Use retries for small transient failures. Open the circuit when failures continu
 | Strangler Fig | Replace a legacy system one capability at a time | Route new document types to DCP while older types continue through the legacy collection platform | Reduces the risk of a full rewrite and allows gradual business migration |
 | Anti-corruption layer | Translate between the new and legacy models | Convert legacy status codes and document schemas into DCP's canonical events | Prevents legacy concepts from spreading into new services |
 
+### Detailed DCP business examples
+
+The tables above are useful for quick revision. The following examples explain how each pattern affects the actual DCP workflow and its business users.
+
+#### 1. Decompose by business capability
+
+Split DCP according to business responsibilities:
+
+```text
+Sourcing Service
+Extraction Service
+Quality/Rules Service
+Workflow Service
+Approval Service
+Dissemination Service
+```
+
+This fits DCP because each capability behaves differently:
+
+- Extraction needs high compute and independent scaling.
+- Approval contains human-review and authorization rules.
+- Workflow manages assignments, deadlines and escalation.
+- Dissemination supports different external destinations and formats.
+
+Each capability can be owned, changed, deployed and scaled independently.
+
+#### 2. Database per service
+
+Each service owns its data:
+
+```text
+Extraction Service → extracted document data
+Approval Service   → decisions and comments
+Workflow Service   → assignments and deadlines
+```
+
+For example, Approval Service should not directly update Workflow Service tables. It should send a command or publish an event.
+
+This protects service boundaries and prevents one team's database change from silently breaking another service.
+
+#### 3. Synchronous API
+
+Use synchronous communication when the user needs an immediate answer.
+
+DCP examples:
+
+```text
+Reviewer opens a document
+→ Fetch document details immediately
+
+Administrator validates an extraction template
+→ Return validation errors immediately
+```
+
+Do not make the complete extraction pipeline synchronous. AI extraction may take seconds or minutes, and the upload request should not remain open for the entire process.
+
+#### 4. Asynchronous messaging
+
+Use Kafka for slow or background processing:
+
+```text
+DocumentUploaded
+      ↓
+DocumentSourced
+      ↓
+DocumentExtracted
+      ↓
+QualityChecked
+```
+
+The user receives an upload acknowledgement without waiting for extraction to finish.
+
+This helps DCP:
+
+- Absorb large upload spikes.
+- Process documents in parallel.
+- Scale extraction workers independently.
+- Continue accepting documents while a downstream stage is temporarily slow.
+
+#### 5. API Gateway
+
+The review applications use one controlled entry point:
+
+```text
+L1/L2 Review UI
+       ↓
+API Gateway
+  ├── Document Service
+  ├── Workflow Service
+  └── Approval Service
+```
+
+The gateway handles:
+
+- Authentication
+- L1/L2 role permissions
+- Rate limiting
+- Routing
+- Request logging
+
+The business receives consistent security, while internal services remain private.
+
+Core approval or extraction rules should remain inside their business services rather than being placed in the gateway.
+
+#### 6. Backend for Frontend
+
+A Review BFF returns everything needed by one reviewer screen:
+
+```text
+Document image
+Extracted fields
+Confidence scores
+Validation errors
+Reviewer assignment
+Comments
+```
+
+Without a BFF, the browser may need to call many services and combine the results itself.
+
+The BFF gives reviewers a faster and simpler user experience while hiding internal service boundaries from the UI.
+
+#### 7. API composition
+
+For a low-volume operations screen, an aggregator can fetch live data:
+
+```text
+Operations UI
+      ↓
+Aggregator
+  ├── Extraction status
+  ├── Workflow status
+  └── Dissemination status
+```
+
+Use API composition when:
+
+- Only a few services are involved.
+- Live data is more important than consistently low latency.
+- The query volume is moderate.
+
+The trade-off is that the response becomes slow or incomplete when a participating service is slow or unavailable.
+
+#### 8. CQRS
+
+DCP events can maintain a pre-built document summary:
+
+```text
+DocumentSourced
+DocumentExtracted
+QualityChecked
+DocumentApproved
+DocumentPublished
+        ↓
+DocumentSummary read model
+```
+
+The dashboard performs one fast query:
+
+```text
+GET /documents/DOC-123
+```
+
+It does not call Sourcing, Extraction, Quality, Approval and Dissemination every time a reviewer opens the page.
+
+Use CQRS when:
+
+- The dashboard is requested frequently.
+- Fast and predictable responses matter.
+- The read view combines data owned by several services.
+- A small delay before the view reflects the latest event is acceptable.
+
+CQRS gives fast reads but introduces eventual consistency and requires monitoring of the projection consumers.
+
+#### 9. Saga
+
+A complete DCP business transaction may be:
+
+```text
+Approve document
+→ Publish approved data
+→ Notify downstream users
+```
+
+Each step belongs to a different service or external system. A single database transaction cannot cover all of them.
+
+If publishing fails, the Saga applies the business recovery policy:
+
+```text
+Retry publication
+or
+Mark APPROVED_NOT_PUBLISHED
+or
+Revoke approval and return for review
+```
+
+Saga provides coordination and business-level recovery instead of a cross-service database rollback.
+
+#### 10. Choreography
+
+Use choreography for DCP's simple automatic pipeline:
+
+```text
+DocumentSourced
+→ DocumentExtracted
+→ QualityChecked
+```
+
+Each service reacts to the previous event and publishes its result.
+
+This fits because the pipeline is:
+
+- High volume
+- Mostly sequential
+- Easy to parallelize
+- Suitable for independent service scaling
+
+If the pipeline develops many branches, timers, rework loops or central visibility requirements, orchestration may become easier to manage.
+
+#### 11. Orchestration
+
+Use orchestration for a complex review workflow:
+
+```text
+Assign L1 reviewer
+→ Wait for review
+→ Send reminder
+→ Escalate if overdue
+→ Assign L2 reviewer
+→ Handle approval, rejection or rework
+```
+
+The orchestrator remembers:
+
+```text
+Current reviewer
+Current stage
+Deadline
+Review attempt
+Previous decisions
+```
+
+The presence of a human is not itself the reason for orchestration. The reason is the amount of workflow state, timing and decision logic that must be managed.
+
+#### 12. Transactional outbox
+
+Consider this failure:
+
+```text
+Save document metadata ✅
+Publish DocumentSourced ❌
+```
+
+The document exists in DCP but never enters extraction.
+
+With an outbox, the service saves both records in one database transaction:
+
+```text
+BEGIN
+
+Save document metadata
+Save DocumentSourced in outbox
+
+COMMIT
+```
+
+A background publisher later sends the outbox event to Kafka.
+
+The business benefit is that an accepted document is not silently lost from the processing pipeline.
+
+#### 13. Idempotent consumer
+
+Kafka may deliver `DocumentSourced` more than once.
+
+DCP can use a stable identifier:
+
+```text
+documentId + documentVersion or contentHash
+```
+
+The consumer records that identifier in the same local transaction as its business update:
+
+```text
+First delivery  → Extract and record the identifier
+Second delivery → Identifier already exists, so skip
+```
+
+This prevents duplicate extraction, publication and notification.
+
+#### 14. Dead-letter queue
+
+A corrupt PDF may repeatedly fail extraction:
+
+```text
+Document event
+→ Retry
+→ Retry
+→ Still fails
+→ Dead-letter topic
+```
+
+The remaining documents continue processing.
+
+Operations can inspect the failed message, correct its data or configuration and replay it.
+
+A DLQ must have alerts, ownership and a recovery process. Otherwise, it becomes a place where failed business documents are forgotten.
+
+#### 15. Event sourcing
+
+Store the document's complete history:
+
+```text
+DocumentSourced
+DocumentExtracted
+QualityChecked
+AssignedForReview
+DocumentApproved
+DocumentPublished
+```
+
+This is useful in DCP because financial-data systems need:
+
+- Complete audit history
+- Data lineage
+- Historical state reconstruction
+- Evidence of who approved a document and when
+
+Event sourcing is valuable where these requirements justify the additional storage, schema-versioning and replay complexity.
+
+#### 16. Timeout
+
+DCP should not wait indefinitely for SparkAir, Soniq or a destination API:
+
+```text
+Call SparkAir
+→ Stop waiting after the configured timeout
+```
+
+The document can then move to retry, fallback or manual handling instead of remaining stuck forever.
+
+A timeout is the foundation for retries and circuit breakers. Without it, a call may consume a worker indefinitely.
+
+#### 17. Retry with backoff
+
+For a temporary S3 or network failure:
+
+```text
+Attempt 1 → fail
+Wait 1 second
+Attempt 2 → fail
+Wait 2 seconds
+Attempt 3 → success
+```
+
+Backoff and jitter prevent all workers from retrying at exactly the same time.
+
+Use retries only for temporary failures and safe or idempotent operations. Validation failures, corrupt files and permission errors usually require correction rather than retry.
+
+#### 18. Fallback
+
+DCP can define a sequence of alternative extraction paths:
+
+```text
+SparkAir
+→ Cognize
+→ Manual extraction
+```
+
+The fallback may provide less automation, but it allows the business process to continue instead of stopping completely.
+
+The user should see which path is being used and whether manual action is required.
+
+#### 19. Bulkhead
+
+Use separate worker pools or concurrency limits:
+
+```text
+AI extraction workers
+Soniq entity-mapping workers
+Dissemination workers
+```
+
+If Soniq becomes slow, it consumes only the resources assigned to entity mapping.
+
+Reviewers can continue approving existing documents, and dissemination can continue publishing completed work.
+
+The pattern is named after ship compartments: flooding one compartment should not sink the entire ship.
+
+#### 20. Rate limiting
+
+Suppose one partner uploads 50,000 documents at once.
+
+Without rate limiting, that partner may use all available capacity and delay every other source.
+
+With rate limiting:
+
+```text
+Partner A → controlled submission rate
+Partner B → retains fair access to DCP
+```
+
+Rate limits can be applied per tenant, partner, API key or expensive operation.
+
+The business benefit is predictable and fair service for all users.
+
+#### 21. Cache-aside
+
+Cache frequently reused data:
+
+```text
+Extraction templates
+Validation rules
+Soniq entity mappings
+```
+
+The service checks the cache first:
+
+```text
+Check cache
+├─ Found   → Return quickly
+└─ Missing → Load source data and cache it
+```
+
+This reduces database and external API calls while making extraction and review faster.
+
+The cache needs an expiry or invalidation strategy so users do not continue seeing obsolete templates or rules.
+
+#### 22. Competing consumers
+
+Several Extraction Service pods consume from the same Kafka consumer group:
+
+```text
+Extraction topic
+  ├── Worker 1
+  ├── Worker 2
+  ├── Worker 3
+  └── Worker 20
+```
+
+Kafka assigns partitions among the active consumers.
+
+When the backlog grows, Kubernetes can add workers. When it falls, workers can scale down.
+
+The number of active consumers that can process simultaneously is limited by the number of topic partitions.
+
+#### 23. Strangler Fig
+
+During gradual migration:
+
+```text
+New document types → DCP
+Old document types → Legacy platform
+```
+
+Capabilities move to DCP one at a time instead of replacing the complete legacy platform in one risky release.
+
+The business benefit is lower migration risk and the ability to learn from each migrated capability before moving the next one.
+
+#### 24. Anti-corruption layer
+
+The legacy platform may use unclear models:
+
+```text
+Status = 17
+Document type = FIN_USPF_V2
+```
+
+An anti-corruption layer translates them into DCP concepts:
+
+```text
+Status = APPROVED
+Document type = AuditedFinancialStatement
+```
+
+The anti-corruption layer prevents legacy terminology and data structures from contaminating the new DCP domain model.
+
 ### Quick DCP decision guide
 
 | DCP situation | Prefer |
