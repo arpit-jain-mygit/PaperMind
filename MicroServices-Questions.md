@@ -348,49 +348,190 @@ Also, Kafka does not have to be the authoritative event store. A durable append-
 
 An operation is idempotent when repeating it produces the same final result as executing it once.
 
-Messaging systems commonly provide at-least-once delivery, so the same message may arrive more than once:
+For example, the same money-transfer message may be delivered twice:
 
 ```text
-DocumentApproved received
-       ↓
-Document published
-       ↓
-Acknowledgement is lost
-       ↓
-DocumentApproved delivered again
+Transfer ₹100 from Account A to Account B
+Transfer ID = TX-123
 ```
 
-Without idempotency, the document could be published twice.
+Without idempotency, Account A could be debited twice or Account B could be credited twice. With idempotency, each service processes `TX-123` only once.
 
-The message should contain a stable idempotency key:
+### Simple debit and credit architecture
 
 ```text
-document-123-approved-v7
+transfer-request topic
+        ↓
+JVM 1: Debit Service
+        ↓
+debit-completed topic
+        ↓
+JVM 2: Credit Service
+        ↓
+transfer-completed topic
 ```
 
-The consumer checks whether it has already processed that operation:
+JVM 1 and JVM 2 run independently. Each service has its own Kafka consumer and producer.
+
+### Kafka delivery modes
+
+#### At-most-once
+
+The consumer commits the offset before processing:
 
 ```text
-Key not found → Process and record the key
-Key found     → Skip duplicate processing
+Commit offset → Process message
 ```
 
-### Important implementation detail
-
-This flow is unsafe if it is implemented as three unrelated operations:
+If the consumer crashes after committing the offset but before processing, the message is lost.
 
 ```text
-Check key → Perform work → Save key
+Message loss: Possible
+Duplicate processing: No
 ```
 
-Two consumers could check at the same time and both perform the work.
+#### At-least-once
 
-Safer approaches include:
+The consumer processes the message before committing the offset:
 
-- A database unique constraint
-- An atomic insert-if-absent operation
-- An inbox table in the same local transaction as the business update
-- A naturally idempotent target operation
+```text
+Process message → Commit offset
+```
+
+If the consumer crashes after processing but before committing the offset, Kafka delivers the message again.
+
+```text
+Message loss: Normally avoided
+Duplicate processing: Possible
+```
+
+This is the most common mode, so consumers should be idempotent.
+
+#### Exactly-once
+
+Exactly-once does not mean the processing code executes only once. The code may run again after a crash.
+
+It means that, for Kafka-to-Kafka processing, only one successful result becomes visible.
+
+### Exactly-once in JVM 1: Debit Service
+
+JVM 1 receives `TransferRequested(TX-123)` and performs one Kafka transaction:
+
+```text
+BEGIN KAFKA TRANSACTION
+
+1. Read TransferRequested(TX-123)
+2. Produce DebitCompleted(TX-123)
+3. Commit the transfer-request offset
+
+COMMIT KAFKA TRANSACTION
+```
+
+Kafka commits the output event and consumed offset together.
+
+If JVM 1 crashes before committing:
+
+```text
+DebitCompleted visible? No
+Input offset committed? No
+Input message retried?  Yes
+```
+
+If the transaction succeeds:
+
+```text
+DebitCompleted visible? Yes
+Input offset committed? Yes
+```
+
+### Exactly-once in JVM 2: Credit Service
+
+JVM 2 starts a separate Kafka transaction:
+
+```text
+BEGIN KAFKA TRANSACTION
+
+1. Read DebitCompleted(TX-123)
+2. Produce TransferCompleted(TX-123)
+3. Commit the debit-completed offset
+
+COMMIT KAFKA TRANSACTION
+```
+
+If JVM 2 crashes before committing, neither its output event nor its consumed offset is committed. Kafka delivers `DebitCompleted(TX-123)` again.
+
+Consumers reading transactional output should use `isolation.level=read_committed` so they do not see aborted records.
+
+### Important limitation: Kafka cannot protect database updates
+
+Suppose JVM 1 stores Account A in PostgreSQL:
+
+```text
+1. Debit ₹100 from Account A in PostgreSQL ✅
+2. JVM 1 crashes before committing the Kafka offset ❌
+3. Kafka delivers TX-123 again
+4. Account A could be debited again ❌
+```
+
+Kafka cannot atomically roll back or commit a normal database transaction together with its own transaction.
+
+Therefore, the Debit Service must use `TX-123` as an idempotency key:
+
+```sql
+BEGIN;
+
+INSERT INTO processed_transfers (transfer_id)
+VALUES ('TX-123'); -- UNIQUE constraint
+
+UPDATE accounts
+SET balance = balance - 100
+WHERE account_id = 'A';
+
+COMMIT;
+```
+
+The idempotency record and debit must be saved in the same database transaction.
+
+When Kafka redelivers `TX-123`, the unique constraint shows that the transfer was already processed. JVM 1 skips the second debit.
+
+JVM 2 follows the same approach when crediting Account B:
+
+```text
+TX-123 not processed → Credit B and record TX-123
+TX-123 already exists → Skip duplicate credit
+```
+
+Avoid implementing these as unrelated steps:
+
+```text
+Check transfer ID → Update balance → Save transfer ID
+```
+
+Two consumer instances could check at the same time and both update the balance.
+
+### Complete practical solution
+
+```text
+JVM 1: Debit Service
+  1. Receive TX-123
+  2. Record TX-123 and debit A in one database transaction
+  3. Publish DebitCompleted(TX-123)
+
+JVM 2: Credit Service
+  1. Receive DebitCompleted(TX-123)
+  2. Record TX-123 and credit B in one database transaction
+  3. Publish TransferCompleted(TX-123)
+```
+
+Use:
+
+- **Kafka transactions** to atomically commit Kafka output records and consumed offsets.
+- **Idempotency keys** to prevent duplicate database debit and credit operations.
+- **Saga compensation** to refund Account A if crediting Account B permanently fails.
+
+### Interview-ready answer
+
+> JVM 1 and JVM 2 perform separate Kafka transactions. Kafka exactly-once atomically commits each JVM's output records and consumed offsets, so only one successful Kafka result becomes visible. It does not create one transaction across both JVMs or their databases. Database debit and credit operations still require a stable transfer ID, such as `TX-123`, stored with the balance update in one local transaction. If credit permanently fails, a Saga compensates by refunding the debit.
 
 ---
 
