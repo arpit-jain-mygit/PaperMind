@@ -42,7 +42,15 @@ Every state change becomes an **immutable event** in Kafka.
 
 **Step 2: Saga Pattern (Distributed Transaction)**
 
-A saga is a sequence of local transactions, each publishing an event that triggers the next step.
+A saga is a sequence of local transactions across multiple services. If a step fails, compensating transactions undo the business effect of the earlier completed steps.
+
+Saga is the overall distributed transaction pattern. It does not run "alone": we must choose how its steps are coordinated:
+
+- **Choreography:** Services coordinate themselves by reacting to events.
+- **Orchestration:** A central orchestrator decides and triggers the next step.
+- **Hybrid:** Orchestration can manage the main workflow while events handle some downstream processing.
+
+Events are not limited to choreography. An orchestrated saga may use synchronous API calls, asynchronous commands and events, or a combination of them. The important difference is **who decides the next step**, not whether events are present.
 
 ```
 Approval Service approves doc
@@ -141,6 +149,8 @@ public class ApprovalSagaService {
 
 ### Saga Pattern: Choreography vs Orchestration
 
+> **Simple distinction:** Saga defines the complete business transaction. Choreography and orchestration are two ways to coordinate the steps of that saga.
+
 #### Choreography (Event-Driven, What We Use)
 ```
 Approval Service publishes APPROVED event
@@ -153,6 +163,8 @@ Pros: Loose coupling, no central orchestrator
 Cons: Hard to see overall flow, debugging difficult
 ```
 
+Here, the event controls the flow. Each service knows which event it should react to, and there is no central component deciding the complete sequence.
+
 #### Orchestration (Camunda, Centralized)
 ```
 Camunda Workflow Service orchestrates all steps:
@@ -164,6 +176,30 @@ Camunda Workflow Service orchestrates all steps:
 Pros: Clear flow, easy to debug, central visibility
 Cons: Tighter coupling, Camunda becomes bottleneck
 ```
+
+An orchestrator can communicate in either of these ways:
+
+```text
+Synchronous:
+Orchestrator → POST /publish → Dissemination Service
+
+Asynchronous:
+Orchestrator → PublishDocument command
+Dissemination Service → DocumentPublished event
+Orchestrator receives the event → sends SendNotification command
+```
+
+- A **command** asks a specific service to do something: `PublishDocument`.
+- An **event** announces a fact that already happened: `DocumentPublished`.
+
+Even when events are used, this is still orchestration because the orchestrator receives the result and decides what should happen next.
+
+| Question | Choreography | Orchestration |
+|----------|--------------|---------------|
+| Who decides the next step? | Participating services | Central orchestrator |
+| Are events used? | Yes, they drive the workflow | Optional; commands, APIs and events can all be used |
+| Is there a central workflow owner? | No | Yes |
+| Best suited for | Simple, high-volume event pipelines | Complex workflows, timeouts and human tasks |
 
 **Our Choice: Hybrid**
 - Choreography for fast pipeline (sourcing → extraction → quality)
