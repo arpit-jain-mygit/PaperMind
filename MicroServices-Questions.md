@@ -1,5 +1,21 @@
 # Microservices Architect Interview Questions
 
+## Table of Contents
+
+1. [What is the distributed transaction problem in microservices?](#1-what-is-the-distributed-transaction-problem-in-microservices)
+2. [What is the Saga pattern?](#2-what-is-the-saga-pattern)
+3. [What is Saga choreography?](#3-what-is-saga-choreography)
+4. [What is Saga orchestration?](#4-what-is-saga-orchestration)
+5. [Are events used only in choreography?](#5-are-events-used-only-in-choreography)
+6. [What is the difference between a command and an event?](#6-what-is-the-difference-between-a-command-and-an-event)
+7. [What is a compensating transaction?](#7-what-is-a-compensating-transaction)
+8. [What is event sourcing?](#8-what-is-event-sourcing)
+9. [What is idempotency?](#9-what-is-idempotency)
+10. [How do these patterns work together?](#10-how-do-these-patterns-work-together)
+11. [Interview-ready answer](#interview-ready-answer-2)
+
+---
+
 ## 1. What is the distributed transaction problem in microservices?
 
 In a monolith, one database transaction can update multiple tables:
