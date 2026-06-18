@@ -562,12 +562,148 @@ A practical architecture may use:
 Fast processing pipeline
 → Choreography + idempotent consumers
 
-Human approval workflow
+Complex human approval workflow
 → Orchestration + compensating transactions
 
 Audit-sensitive state
 → Event sourcing
 ```
+
+### Why use choreography for a fast processing pipeline?
+
+Consider a simple automatic pipeline:
+
+```text
+Document uploaded
+        ↓
+Extract text
+        ↓
+Check quality
+        ↓
+Create search index
+```
+
+Each service can react to the event produced by the previous service:
+
+```text
+DocumentUploaded → TextExtracted → QualityChecked → DocumentIndexed
+```
+
+Choreography is a good fit because:
+
+- The flow is simple and predictable.
+- Services can process many documents in parallel.
+- Each service can scale independently.
+- A new consumer, such as Analytics Service, can listen without changing the existing services.
+
+The consumers must be idempotent because Kafka may deliver the same event again after a crash or timeout.
+
+```text
+First delivery  → Process and record event ID
+Second delivery → Event ID already exists, so skip
+```
+
+Therefore, choreography gives loose coupling and scalability, while idempotency makes retries safe.
+
+### Does every human workflow require orchestration?
+
+No. A simple human decision can use choreography:
+
+```text
+Document submitted
+        ↓
+Human clicks Approve or Reject
+        ↓
+DocumentApproved or DocumentRejected event
+        ↓
+Other services react
+```
+
+The presence of a human does not automatically require an orchestrator.
+
+### When does orchestration become useful?
+
+Consider a more complex approval process:
+
+```text
+1. Assign Reviewer 1.
+2. Wait up to two days.
+3. Send a reminder after one day.
+4. Escalate to a manager after two days.
+5. If approved, assign Reviewer 2.
+6. Reviewer 2 may approve, reject or request rework.
+7. Rework returns to Reviewer 1.
+8. The requester may cancel the process.
+9. Operations must see where the document is waiting.
+```
+
+This creates several paths:
+
+```text
+Reviewer 1
+  ├─ No response → Reminder → Escalation
+  ├─ Reject      → Finish
+  └─ Approve     → Reviewer 2
+                      ├─ Approve → Publish
+                      ├─ Reject  → Finish
+                      └─ Rework  → Reviewer 1
+```
+
+Choreography can implement this, but the workflow state becomes scattered across several services:
+
+```text
+Review Service     → approvals and rework
+Timer Service      → reminders and deadlines
+Escalation Service → manager escalation
+Document Service   → cancellation
+```
+
+For example, when a deadline event arrives, a service must answer:
+
+```text
+Was the document already approved?
+Was it cancelled?
+Is it currently in rework?
+Is this an old timer from an earlier review attempt?
+Is Reviewer 1 or Reviewer 2 currently responsible?
+```
+
+With orchestration, one workflow engine remembers the complete current state:
+
+```text
+Workflow ID: DOC-123
+Current step: WAITING_FOR_REVIEWER_2
+Review attempt: 2
+Deadline: 20 June, 5:00 PM
+Status: ACTIVE
+```
+
+If an old Reviewer 1 timer arrives while the workflow is waiting for Reviewer 2, the orchestrator can see that the timer is stale and ignore it.
+
+An orchestrator is helpful for:
+
+- **Long-running workflows:** The process remains active for hours, days or weeks.
+- **Multiple stages:** Steps must happen in a controlled order.
+- **Timers:** Reminders or deadline actions must run at the correct time.
+- **Escalation:** Work moves to a manager when someone does not respond.
+- **Branching:** Approval, rejection and rework have different paths.
+- **Rework:** The workflow returns to and repeats an earlier step.
+- **Central visibility:** Operations can see where a workflow is currently waiting.
+
+Compensating transactions handle steps that have already completed when a later step permanently fails. For example, if publishing fails after approval, the workflow may revoke the approval, return the document for review, or mark it as `APPROVED_NOT_PUBLISHED`.
+
+### Simple decision rule
+
+```text
+One human decision followed by simple reactions
+→ Choreography can work well
+
+A managed process that must remember where it is,
+handle timers and decide the next valid action
+→ Orchestration is usually easier
+```
+
+The reason for choosing orchestration is not simply that a human is involved. The reason is the amount of workflow state and decision logic that must be managed.
 
 ---
 
