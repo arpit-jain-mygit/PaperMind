@@ -12,7 +12,8 @@
 8. [What is event sourcing?](#8-what-is-event-sourcing)
 9. [What is idempotency?](#9-what-is-idempotency)
 10. [How do these patterns work together?](#10-how-do-these-patterns-work-together)
-11. [Interview-ready answer](#interview-ready-answer-2)
+11. [Microservices design patterns and their DCP applicability](#11-microservices-design-patterns-and-their-dcp-applicability)
+12. [Interview-ready answer](#interview-ready-answer-2)
 
 ---
 
@@ -720,6 +721,185 @@ handle timers and decide the next valid action
 ```
 
 The reason for choosing orchestration is not simply that a human is involved. The reason is the amount of workflow state and decision logic that must be managed.
+
+---
+
+## 11. Microservices design patterns and their DCP applicability
+
+The Data Collection Platform (DCP) receives financial documents from sources such as S3, email and APIs. It extracts data using external AI providers, validates the result, sends uncertain documents for human review and publishes approved data to downstream systems.
+
+Each pattern below solves a specific business or technical problem in that flow.
+
+### Circuit breaker: How does it help the business user?
+
+Suppose the Extraction Service calls the external SparkAir AI API.
+
+```text
+DCP Extraction Service → SparkAir
+```
+
+If SparkAir becomes unavailable and there is no circuit breaker, every extraction worker continues calling it:
+
+```text
+Document 1 → wait 30 seconds → fail
+Document 2 → wait 30 seconds → fail
+Document 3 → wait 30 seconds → fail
+```
+
+Workers remain occupied waiting for a service that is already known to be unhealthy. The Kafka backlog grows and users see documents stuck in `EXTRACTION_IN_PROGRESS`.
+
+A circuit breaker watches the recent calls:
+
+```text
+SparkAir calls are healthy
+→ Circuit CLOSED
+→ Calls are allowed
+
+Failure rate crosses the configured limit
+→ Circuit OPEN
+→ Stop calling SparkAir temporarily
+
+After a waiting period
+→ Circuit HALF-OPEN
+→ Allow a small test call
+
+Test succeeds
+→ Close circuit and resume normal traffic
+```
+
+When the circuit opens, DCP can immediately take another business path:
+
+```text
+SparkAir unavailable
+        ↓
+Try Cognize fallback
+        ↓
+If Cognize also fails
+        ↓
+Queue document for manual extraction
+        ↓
+Notify the L1 user
+```
+
+#### Business benefit
+
+The circuit breaker does not repair SparkAir. It prevents one failing dependency from making the whole DCP slow or unavailable.
+
+For the business user, this means:
+
+- The upload request can return quickly instead of hanging.
+- The user sees an honest status such as `QUEUED_FOR_RETRY` or `MANUAL_EXTRACTION_REQUIRED`.
+- Documents continue through the fallback or manual path.
+- Healthy parts of DCP, such as review and dissemination, remain responsive.
+- Recovery is faster because the system does not create a huge pile of timed-out calls.
+
+#### Why not just use retries?
+
+Retries help with a short, temporary error:
+
+```text
+One network call fails → Retry after a short delay → Success
+```
+
+They make a long outage worse:
+
+```text
+2,000 documents × 3 retries = 6,000 calls to an unhealthy provider
+```
+
+Use retries for small transient failures. Open the circuit when failures continue.
+
+### Pattern applicability in DCP
+
+#### Service and data boundaries
+
+| Pattern | Simple meaning | DCP business use case | Why it fits |
+|---|---|---|---|
+| Decompose by business capability | Create services around business responsibilities | Sourcing, Extraction, Rules/Quality, Workflow, Approval and Dissemination services | Each area has different rules, scaling needs and ownership |
+| Database per service | A service owns its data and other services use its API or events | Approval owns review decisions; Extraction owns extracted document data; Workflow owns task state | Prevents one service from changing another service's data behind its back |
+| Polyglot persistence | Use the database that best fits each type of data | PostgreSQL for structured metadata, MongoDB for flexible extracted documents, Elasticsearch for entity search, Redis for short-lived cache | DCP handles structured and highly variable document data |
+
+#### Communication and API patterns
+
+| Pattern | Simple meaning | DCP business use case | Why it fits |
+|---|---|---|---|
+| Synchronous API | Call another service and wait for an immediate answer | Approval UI loads the current document details; template validation returns immediately | The user needs an immediate response |
+| Asynchronous messaging | Publish work and process it later | Sourcing publishes `DocumentSourced`; extraction workers consume documents from Kafka | Upload does not need to wait for slow AI extraction |
+| API Gateway | One controlled entry point for clients | Routes L1/L2 UI requests and applies authentication, RBAC and rate limits | Keeps internal services private and applies common security rules |
+| Backend for Frontend | API designed for a specific client | A Review UI BFF returns document image, extracted fields, confidence scores and validation errors in one response | Reviewers should not make many service calls from the browser |
+| API composition / Aggregator | Fetch live information from several services when a request arrives | Operations screen requests live extraction status, workflow assignment and dissemination status | Useful when the screen needs fresh data from only a few healthy services |
+
+#### Workflow and transaction patterns
+
+| Pattern | Simple meaning | DCP business use case | Why it fits |
+|---|---|---|---|
+| Saga | Break one business transaction into local transactions | Approve document → publish data → notify downstream users | No single database transaction can cover Approval, S3 and Notification |
+| Choreography | Services react to events without a central controller | `DocumentSourced` → `DocumentExtracted` → `QualityChecked` | The automatic pipeline is simple, high-volume and easy to parallelize |
+| Orchestration | A central workflow component decides the next step | L1 assignment → L2 review → reminder → escalation → rework → final approval | The process must remember stages, deadlines, branches and reviewer state |
+| Compensating transaction | Perform a business-level undo after partial failure | Publication fails after approval, so mark `APPROVED_NOT_PUBLISHED`, retry publication or revoke approval based on policy | The completed approval cannot be technically rolled back across services |
+
+#### Reliable messaging and data patterns
+
+| Pattern | Simple meaning | DCP business use case | Why it fits |
+|---|---|---|---|
+| Transactional outbox | Save business data and an event in one database transaction | Sourcing saves document metadata and an outbox `DocumentSourced` record together | Prevents a saved document from being lost to the pipeline because Kafka publication failed |
+| Idempotent consumer | Safely ignore a duplicate message | Extraction uses `documentId + version/hash`; Dissemination uses a publication ID | Kafka redelivery must not extract or publish the same document twice |
+| Dead-letter queue | Move repeatedly failing messages aside | Corrupt PDFs, unsupported formats or permanently invalid extraction events go to a DLQ | One bad document should not block the complete topic; operations can inspect and replay it |
+| Event sourcing | Store every important state change as an immutable event | Record `SOURCED`, `EXTRACTED`, `QUALITY_CHECKED`, `APPROVED` and `PUBLISHED` | Financial data requires lineage, auditing and historical reconstruction |
+| CQRS | Use a write model for changes and a read model optimized for queries | Events update a `DocumentSummary` view used by reviewer and operations dashboards | Users get a fast single view without calling every service |
+| API composition | Combine live responses during the user request | Display a low-volume administrative detail screen using live service calls | Simpler than CQRS when traffic and fan-out are small and freshness is more important |
+
+#### Resilience patterns
+
+| Pattern | Simple meaning | DCP business use case | Business benefit |
+|---|---|---|---|
+| Timeout | Stop waiting after a safe limit | Stop waiting when SparkAir, Soniq or a destination API does not respond | The user request and worker do not hang forever |
+| Retry with backoff and jitter | Retry temporary failures with increasing delays | Retry an S3 timeout or temporary destination API error | Handles short failures without creating an immediate traffic storm |
+| Circuit breaker | Temporarily stop calls to a repeatedly failing dependency | Open the SparkAir circuit, use Cognize, then route to manual extraction if required | Users receive a quick alternative path instead of seeing every document stuck |
+| Fallback | Use an alternative result or provider | SparkAir → Cognize → manual extraction | DCP continues delivering business value during provider outages |
+| Bulkhead | Isolate resources used by different dependencies or workloads | Separate worker pools for AI extraction, Soniq entity mapping and dissemination | Slow entity mapping cannot consume all workers and stop document review |
+| Rate limiting | Restrict how much work one caller can submit | Limit bulk upload or partner API traffic per tenant | One source cannot overload DCP and delay every other business user |
+| Cache-aside | Read from cache first and load on a miss | Cache templates, extraction rules and Soniq entity mappings | Review and extraction become faster while expensive external calls decrease |
+
+#### Scaling, discovery and operational patterns
+
+| Pattern | Simple meaning | DCP business use case | Why it fits |
+|---|---|---|---|
+| Competing consumers | Multiple workers consume from the same topic | Scale extraction workers from 5 to 20 pods based on Kafka lag | Documents are processed in parallel while each partition is owned by one consumer |
+| Service discovery | Find healthy service instances dynamically | Kubernetes Service DNS locates Extraction, Workflow and Approval pods | Pod addresses change during scaling and deployment |
+| Sidecar | Run a supporting component beside the application | A telemetry or proxy sidecar exports logs, metrics and traces | Adds common operational behavior without duplicating it in every service |
+| Service mesh | Apply common service-to-service network policies | Mutual TLS, traffic policies and observability across many DCP services | Useful when the number of services and security policies justifies the operational cost |
+
+#### Migration patterns
+
+| Pattern | Simple meaning | DCP business use case | Why it fits |
+|---|---|---|---|
+| Strangler Fig | Replace a legacy system one capability at a time | Route new document types to DCP while older types continue through the legacy collection platform | Reduces the risk of a full rewrite and allows gradual business migration |
+| Anti-corruption layer | Translate between the new and legacy models | Convert legacy status codes and document schemas into DCP's canonical events | Prevents legacy concepts from spreading into new services |
+
+### Quick DCP decision guide
+
+| DCP situation | Prefer |
+|---|---|
+| Upload should return before extraction finishes | Kafka asynchronous messaging |
+| SparkAir fails briefly | Timeout and retry with backoff |
+| SparkAir keeps failing | Circuit breaker and Cognize fallback |
+| Both AI providers fail | Manual extraction queue and user notification |
+| One malformed document repeatedly fails | Dead-letter queue |
+| The same Kafka event is delivered again | Idempotent consumer |
+| Save document metadata and reliably publish an event | Transactional outbox |
+| Simple automated sourcing-to-quality pipeline | Choreography |
+| L1/L2 review with timers, escalation and rework | Orchestration |
+| Publication fails after approval | Saga compensation and controlled retry |
+| Reviewer dashboard needs a fast combined document view | CQRS read model |
+| Low-volume screen requires the freshest live status | API composition |
+| Regulators need the complete document history | Event sourcing |
+| Soniq becomes slow but extraction must continue | Bulkhead plus cache |
+| One partner sends a very large traffic spike | Rate limiting |
+
+### Architect-level justification
+
+> In DCP, I would choose patterns based on the failure or scaling problem being solved. Choreography and competing consumers support the high-volume automatic document pipeline. Orchestration manages the stateful L1/L2 approval workflow. Outbox and idempotency make Kafka processing reliable. CQRS provides fast reviewer dashboards, while event sourcing provides financial audit history. For external AI and entity providers, timeouts, limited retries, circuit breakers, fallbacks and bulkheads prevent one dependency from stopping the entire platform.
 
 ---
 
