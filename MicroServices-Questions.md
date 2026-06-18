@@ -1372,9 +1372,9 @@ The anti-corruption layer prevents legacy terminology and data structures from c
 | Soniq becomes slow but extraction must continue | Bulkhead plus cache |
 | One partner sends a very large traffic spike | Rate limiting |
 
-### Architect-level justification
+### Architect interview summary
 
-> In DCP, I would choose patterns based on the failure or scaling problem being solved. Choreography and competing consumers support the high-volume automatic document pipeline. Orchestration manages the stateful L1/L2 approval workflow. Outbox and idempotency make Kafka processing reliable. CQRS provides fast reviewer dashboards, while event sourcing provides financial audit history. For external AI and entity providers, timeouts, limited retries, circuit breakers, fallbacks and bulkheads prevent one dependency from stopping the entire platform.
+> For DCP, I use choreography and competing consumers for the high-volume automatic pipeline, and orchestration for the stateful L1/L2 workflow. Outbox and idempotency prevent lost and duplicate processing. CQRS gives reviewers a fast document summary, while event sourcing provides regulatory lineage. External providers are protected with timeout, controlled retry, circuit breaker, fallback and bulkhead. Each pattern is selected for a specific business failure or scaling concern, not simply because it is popular.
 
 ---
 
