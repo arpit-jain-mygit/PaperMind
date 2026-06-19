@@ -432,9 +432,19 @@ Durability → Events survive temporary failures
 
 ## 2. What are brokers, topics, partitions and records?
 
-### Record
+Use this simple mental model:
 
-A record is one event:
+```text
+Record    = One package
+Topic     = Package category
+Partition = Ordered shelf inside that category
+Broker    = Warehouse building that stores shelves
+Cluster   = Group of warehouse buildings working together
+```
+
+### Record: one event
+
+A Kafka record is one message or event:
 
 ```json
 {
@@ -445,7 +455,21 @@ A record is one event:
 }
 ```
 
-### Topic
+In DCP, this record says:
+
+```text
+Document DOC-123 was accepted by Sourcing Service.
+```
+
+A record normally contains:
+
+- **Key:** such as `documentId`
+- **Value:** the event data
+- **Timestamp**
+- **Headers:** optional metadata such as correlation ID
+- **Offset:** assigned after Kafka stores it in a partition
+
+### Topic: a named event category
 
 A topic is a named stream of related events:
 
@@ -457,9 +481,27 @@ document-approved
 document-published
 ```
 
-Think of a topic as a durable event category rather than a temporary queue.
+For example:
 
-### Partition
+```text
+Topic: document-sourced
+Contains: DocumentSourced events
+
+Topic: document-approved
+Contains: DocumentApproved events
+```
+
+A topic is a logical name. It is not one physical server or one file.
+
+Different topics can have different:
+
+- Retention periods
+- Read/write permissions
+- Partition counts
+- Replication settings
+- Business meanings
+
+### Partition: an ordered lane inside a topic
 
 A topic is divided into partitions:
 
@@ -471,11 +513,99 @@ document-sourced
 └── Partition 3
 ```
 
-Partitions allow events to be stored and processed in parallel.
+Each partition is an ordered log:
 
-### Broker
+```text
+document-sourced, Partition 0:
 
-A broker is a Kafka server that stores topic partitions.
+Offset 0 → DOC-100 sourced
+Offset 1 → DOC-104 sourced
+Offset 2 → DOC-108 sourced
+```
+
+Partitions provide:
+
+- Parallel storage and processing
+- Per-partition ordering
+- Work distribution across consumers and brokers
+
+The same topic's partitions may be stored on different brokers.
+
+### Broker: one Kafka server
+
+A broker is a running Kafka server.
+
+Its main job is to store partition data and serve Kafka clients:
+
+```text
+Producer → Broker: “Store this event”
+Consumer → Broker: “Give me records from this partition”
+Broker   → Disk: Store the records durably
+Broker   → Other brokers: Replicate partition data
+```
+
+A broker performs four important jobs.
+
+#### 1. Store records
+
+The broker stores partition records on disk:
+
+```text
+Broker 1
+└── document-sourced Partition 0
+    ├── Offset 0
+    ├── Offset 1
+    └── Offset 2
+```
+
+#### 2. Accept producer writes
+
+The producer discovers which broker is the leader for the target partition and sends the event there:
+
+```text
+Sourcing Service
+      ↓ DocumentSourced
+Broker 1 — leader for DS-P0
+```
+
+The producer does not normally send one event to every broker.
+
+#### 3. Serve consumer reads
+
+Consumers fetch records from the broker serving the partition:
+
+```text
+Broker 1: DS-P0
+      ↓
+Extraction Consumer
+```
+
+The broker does not run the extraction business logic. It only stores and delivers the event.
+
+#### 4. Replicate data for failure recovery
+
+Kafka keeps copies of a partition on multiple brokers:
+
+```text
+DS-P0
+├── Broker 1: Leader
+├── Broker 2: Follower replica
+└── Broker 3: Follower replica
+```
+
+The leader handles normal reads and writes. Followers copy its records.
+
+If Broker 1 fails:
+
+```text
+Broker 2 becomes the new leader
+→ Producers and consumers reconnect
+→ Processing continues
+```
+
+### Kafka cluster: brokers working together
+
+A Kafka cluster is a group of brokers:
 
 ```text
 Kafka cluster
@@ -484,7 +614,72 @@ Kafka cluster
 └── Broker 3
 ```
 
-The cluster distributes and replicates partitions across these brokers.
+Kafka distributes partition leaders and replicas across the cluster:
+
+```text
+Broker 1:
+  Leader:  DS-P0
+  Replica: DS-P1
+
+Broker 2:
+  Leader:  DS-P1
+  Replica: DS-P0
+
+Broker 3:
+  Replica: DS-P0
+  Replica: DS-P1
+```
+
+This provides:
+
+- **Scalability:** Data and traffic are spread across brokers.
+- **Durability:** Partition copies survive a broker failure.
+- **Availability:** Another replica can become leader.
+
+### Complete simple flow
+
+```text
+1. Sourcing Service produces DocumentSourced(DOC-123)
+
+2. Kafka uses the key DOC-123 to select:
+   Topic: document-sourced
+   Partition: DS-P0
+
+3. Broker 1 is the leader for DS-P0
+   → Broker 1 stores the record
+
+4. Broker 2 and Broker 3 copy the record
+
+5. Extraction Consumer reads DS-P0 from Kafka
+   → It processes DOC-123
+```
+
+### Important distinction
+
+```text
+Topic     = Logical event stream
+Partition = Ordered part of that stream
+Broker    = Physical Kafka server storing partitions
+Cluster   = Collection of brokers
+Record    = One event stored in a partition
+```
+
+A broker does not represent a business job. It is infrastructure that safely stores and delivers events.
+
+### DCP example
+
+```text
+Topic: document-sourced
+├── DS-P0 leader on Broker 1
+├── DS-P1 leader on Broker 2
+└── Replicas spread across all three brokers
+
+Extraction consumer group
+├── Pod A reads DS-P0
+└── Pod B reads DS-P1
+```
+
+If Broker 1 fails, a follower copy of `DS-P0` on another broker becomes the leader. The extraction pods can continue after a short recovery pause.
 
 ---
 
