@@ -1100,26 +1100,463 @@ Sourcing Service
 DocumentSourced event
       ↓
 Kafka topic
+      ↓
+Brokers store, replicate, and serve to consumers
 ```
 
-The producer decides:
+The producer must make 4 critical decisions:
 
-- Which topic receives the event
-- What event key to use
-- How long to wait for acknowledgement
-- Whether to retry
-- How records are batched and compressed
+1. **Event Key** — Which partition should this record go to?
+2. **Acknowledgement Wait** — How long to wait for broker confirmation?
+3. **Retry Logic** — How many times and how often should we retry failures?
+4. **Batching & Compression** — How to group and compress records before sending?
 
-DCP example:
+---
+
+### **Decision 1: Event Key — Which Partition?**
+
+Every record needs a key (or can be null). The key determines which partition the record goes to via hashing.
+
+```text
+Same key → Always same partition → Ordered updates
+Null key → Random partition → No ordering guarantee
+```
+
+#### 🍕 Pizza Store Example
+
+```python
+producer.send(
+    topic="orders",
+    key="order-123",  # All updates for order-123 go to same partition
+    value={"customer": "Alice", "item": "Large Margherita"}
+)
+
+Timeline:
+OrderPlaced(order-123) → Partition 0
+PaymentReceived(order-123) → Partition 0  (same partition!)
+PizzaReady(order-123) → Partition 0  (same partition!)
+
+Result: All 3 events processed in order for order-123 ✓
+        No race conditions where payment is processed before order
+```
+
+#### 💾 DCP Example
+
+```python
+producer.send(
+    topic="documents",
+    key="doc-uuid-789",  # All processing steps for this doc in one partition
+    value={"amount": 10000, "vendor": "Acme Corp"}
+)
+
+Timeline:
+DocumentSourced(doc-789) → Partition 2
+DataExtracted(doc-789) → Partition 2
+ValidationPassed(doc-789) → Partition 2
+DataPublished(doc-789) → Partition 2
+
+Result: A $10,000 document is extracted once, validated once, 
+        published once. No duplicate processing ✓
+```
+
+**Trade-off:**
+- ✅ Same key → strong ordering for that entity
+- ❌ Uneven partition load if one key dominates (1 customer = 10,000 orders)
+
+---
+
+### **Decision 2: Acknowledgement Wait — How long to wait for confirmation?**
+
+When you send a record, how long does the producer wait for the broker to say "I received it"?
+
+This is THE most critical decision for reliability.
+
+#### Why Acks Matter: You're Blind Without Them
+
+**Without acks (acks=0):**
+```
+Producer sends message
+    ↓
+Broker receives it
+    ↓
+But producer doesn't wait for confirmation
+    ↓
+Producer returns to app: "Sent successfully!"
+    ↓
+Broker disk crashes 1 second later → Data LOST ❌
+    ↓
+Producer has NO WAY to know the data was lost
+App thinks it's safe. Broker lost it. Customer never gets it.
+```
+
+**With acks:**
+```
+Producer sends message
+    ↓
+Broker writes and confirms: "ack ✓"
+    ↓
+Producer receives ack and returns to app: "Sent successfully!"
+    ↓
+Producer KNOWS the data is safe
+    ↓
+Producer can retry if ack never comes
+Producer can build reliable systems
+```
+
+#### Three Levels of Safety
+
+| Setting | Meaning | Wait For | Latency | Risk |
+|---------|---------|----------|---------|------|
+| `acks=0` | Fire and forget | Nothing | ⚡ Fastest | Broker crashes = data lost |
+| `acks=1` | Leader acknowledged | Leader writes to disk | ⏱️ Medium | Leader dies before replicating = data lost |
+| `acks=all` | All replicas acknowledged | All in-sync replicas write | 🐢 Slowest | Safest — needs 2+ replicas to fail |
+
+#### 🍕 Pizza Store: acks=1 (Speed-First)
+
+```python
+producer = KafkaProducer(
+    acks=1,  # Wait for leader only
+    request_timeout_ms=5000  # Max 5 seconds
+)
+
+try:
+    producer.send(topic="orders", key="order-123", value=order)
+    # App returns to customer: "Order accepted!"
+except:
+    # Ack never came → retry or show error to customer
+
+Timeline:
+t=0ms:    Message in flight
+t=1ms:    Leader writes to disk
+t=2ms:    Leader sends "ack" back
+t=3ms:    Producer returns — app shows customer "Order placed!" ✓
+
+Why acks=1?
+- Pizza orders are low-stakes
+- If one order is lost during leader failure, customer re-orders
+- Speed matters more than absolute safety
+- 5 second timeout is acceptable for a food order
+```
+
+#### 💾 DCP: acks=all (Safety-First)
+
+```python
+producer = KafkaProducer(
+    acks="all",  # Wait for all replicas
+    min_insync_replicas=2,  # At least 2 copies before acking
+    request_timeout_ms=30000  # Max 30 seconds
+)
+
+try:
+    producer.send(
+        topic="documents",
+        key="doc-uuid",
+        value={"amount": 10000, "vendor": "Acme Corp"}
+    )
+    # App returns: "Invoice safely persisted!"
+    log.info(f"Document {doc_uuid} durably stored")
+except KafkaError as e:
+    # Ack never came → CRITICAL ALERT
+    log.critical(f"Failed to persist financial document {doc_uuid}")
+    notify_finance_team()
+    page_oncall()
+
+Timeline:
+t=0ms:    Message in flight
+t=1ms:    Broker-1 (leader) writes to disk
+t=2ms:    Broker-2 (follower) writes to disk
+t=3ms:    Broker-3 (follower) writes to disk
+t=4ms:    All brokers send "ack"
+t=5ms:    Producer receives ack ✓ — data safe on 3 brokers
+
+Why acks=all?
+- Financial data is critical ($10,000 document)
+- Losing data = audit failure + legal liability
+- Losing 100ms for safety is worth it
+- 30 second timeout acceptable for batch operations
+- Even if 1 broker crashes, 2 copies survive
+```
+
+**What happens when ack fails?**
+```python
+future = producer.send(topic="orders", key="order-123", value=order)
+
+try:
+    record_metadata = future.get(timeout=5)
+    # If we reach here, ack was received ✓
+    print(f"Order sent to partition {record_metadata.partition}")
+    
+except KafkaError as e:
+    # Ack never came = exception thrown
+    print(f"Order failed: {e}")
+    # Producer can decide:
+    # - Retry with backoff
+    # - Save to local queue for later
+    # - Alert user: "Failed. Try again later."
+    # - Page on-call (if critical)
+```
+
+---
+
+### **Decision 3: Retry Logic — What if sending fails?**
+
+If a record fails to send, how many times do we retry and how long do we wait between retries?
+
+**Configuration:**
+- `retries`: Number of attempts (0 = no retry, -1 = infinite)
+- `retry.backoff.ms`: Wait time between retries
+
+#### 🍕 Pizza Store: Fast Fail
+
+```python
+producer = KafkaProducer(
+    retries=3,  # Try 3 times max
+    retry_backoff_ms=100  # Wait 100ms between attempts
+)
+
+Scenario: Network glitch
+├─ Attempt 1 (t=0ms): FAIL (broker not responding)
+├─ Wait 100ms
+├─ Attempt 2 (t=100ms): FAIL
+├─ Wait 100ms
+├─ Attempt 3 (t=200ms): SUCCESS ✓
+│
+└─ Total time: 200ms (still fast)
+
+If all 3 fail:
+  Exception thrown → App shows customer "Order failed. Try again."
+  → Customer can manually retry
+
+Why 3 retries?
+- Most transient network issues resolve in milliseconds
+- After 3 tries (200ms), likely a real problem not a blip
+- Pizza shops tolerate failures (orders can be re-placed)
+- Fast failure better than waiting 30 seconds
+```
+
+#### 💾 DCP: Keep Trying
+
+```python
+producer = KafkaProducer(
+    retries=-1,  # Infinite retries
+    retry_backoff_ms=500,  # Start with 500ms
+    # Exponential backoff: 500, 1000, 2000, 4000, 8000...
+    max_in_flight_requests=1  # Send one record, wait for ack, then next
+)
+
+Scenario: Data center connectivity issue (broker recovering)
+├─ Attempt 1 (t=0ms): FAIL (broker not responding)
+├─ Wait 500ms
+├─ Attempt 2 (t=500ms): FAIL
+├─ Wait 1000ms
+├─ Attempt 3 (t=1500ms): FAIL
+├─ Wait 2000ms
+├─ Attempt 4 (t=3500ms): SUCCESS ✓
+│
+└─ Even if takes 10+ retries over minutes: OK
+
+If after very long time still fails:
+  Operator is paged (critical data loss risk)
+  Manual intervention needed
+  Cannot silently lose financial data
+
+Why infinite retries?
+- Financial documents are critical
+- A $100,000 invoice cannot be dropped silently
+- System is OK waiting hours for brokers to recover
+- DCP is batch processing, not real-time
+```
+
+**Key Difference:**
+```
+🍕 Pizza: Fail fast, let user retry → retries=3
+💾 DCP:   Fail slow, keep retrying → retries=-1
+```
+
+---
+
+### **Decision 4: Batching & Compression — Group and compress before sending**
+
+How many records should we batch together? What compression should we use?
+
+**Why batch?**
+- 1 record = 1 network call (slow)
+- 100 records = 1 network call (fast, efficient)
+- Trade-off: latency for throughput
+
+**Compression options:** `none`, `gzip`, `snappy`, `lz4`, `zstd`
+
+#### 🍕 Pizza Store: Small, Fast Batches
+
+```python
+producer = KafkaProducer(
+    batch_size=16384,  # Send when 16KB of data accumulated
+    linger_ms=100,     # OR wait max 100ms for more records
+    compression_type='lz4'  # Fast compression
+)
+
+Timeline:
+t=0ms:    order-001 arrives → batched (2KB)
+t=20ms:   order-002 arrives → batched (2KB)
+t=40ms:   order-003 arrives → batched (2KB)
+t=60ms:   order-004 arrives → batched (2KB)
+t=80ms:   order-005 arrives → batched (2KB) [total 10KB]
+t=100ms:  linger timeout! 
+          └─ Send batch of 5 orders
+             (10KB raw → 7KB compressed with lz4)
+             └─ 1 network call for 5 records ✓
+
+Why lz4?
+- Super fast compression (minimal CPU overhead)
+- Reasonable compression (20-30% reduction)
+- Pizza orders are small (1-2KB each)
+- Speed matters more than maximum compression
+```
+
+#### 💾 DCP: Large, Highly-Compressed Batches
+
+```python
+producer = KafkaProducer(
+    batch_size=65536,  # Wait for 64KB of data
+    linger_ms=1000,    # OR wait max 1 second
+    compression_type='snappy'  # Better compression, slightly slower
+)
+
+Timeline:
+t=0ms:    doc-001 extracted (20KB) → batched
+t=250ms:  doc-002 validated (15KB) → batched
+t=500ms:  doc-003 reviewed (18KB) → batched
+t=750ms:  doc-004 extracted (22KB) → batched [total 75KB]
+t=1000ms: linger timeout!
+          └─ Send batch of 4 documents
+             (75KB raw → 20KB compressed with snappy)
+             └─ 73% compression! (massive savings)
+             └─ 1 network call instead of 4
+
+Why snappy + large batch?
+- DCP extracts rich data: OCR, ML scores, vendor matching, etc.
+- Each document = 15-25KB of extracted data
+- Snappy = better compression (70-80% reduction)
+- Slightly slower CPU cost is fine; throughput matters more
+- Network cost = $$$, compression ROI is high
+- DCP is batch processing, can wait 1 second
+```
+
+**Batch behavior explained:**
+```
+linger_ms = 1000 means:
+"Wait up to 1 second for more records to batch together,
+ OR send immediately if batch_size limit is hit"
+
+DCP behavior:
+  If extraction is slow → hit linger timeout → good batching ✓
+  If extraction is fast → hit batch_size limit → good batching ✓
+  Either way → efficiency wins
+```
+
+---
+
+### **Complete Configuration Examples**
+
+#### 🍕 Pizza Store Producer (Speed-First)
+
+```python
+from kafka import KafkaProducer
+import json
+
+producer = KafkaProducer(
+    bootstrap_servers=['kafka-1:9092', 'kafka-2:9092'],
+    acks=1,                          # Wait for leader only
+    retries=3,                       # Retry 3 times
+    retry_backoff_ms=100,            # 100ms between retries
+    request_timeout_ms=5000,         # Max 5 seconds
+    batch_size=16384,                # 16KB batches
+    linger_ms=100,                   # OR 100ms, whichever comes first
+    compression_type='lz4',          # Fast compression
+    max_in_flight_requests=5         # Parallel requests OK
+)
+
+# Send order
+try:
+    future = producer.send(
+        topic='orders',
+        key='order-123',
+        value={'customer': 'Alice', 'pizza': 'Margherita'}
+    )
+    metadata = future.get(timeout=5)
+    print(f"Order sent to partition {metadata.partition}")
+except Exception as e:
+    print(f"Order failed: {e}")
+    # Customer can retry
+```
+
+#### 💾 DCP Producer (Safety-First)
+
+```python
+from kafka import KafkaProducer
+import json
+
+producer = KafkaProducer(
+    bootstrap_servers=['kafka-1:9092', 'kafka-2:9092'],
+    acks='all',                      # Wait for all replicas
+    min_insync_replicas=2,           # At least 2 copies
+    retries=-1,                      # Infinite retries
+    retry_backoff_ms=500,            # Exponential backoff
+    request_timeout_ms=30000,        # Max 30 seconds
+    batch_size=65536,                # 64KB batches
+    linger_ms=1000,                  # OR 1 second, whichever comes first
+    compression_type='snappy',       # Good compression
+    max_in_flight_requests=1,        # One request at a time (ordering)
+    transactional_id='dcp-sourcing'  # Enables exactly-once
+)
+
+# Send financial document
+try:
+    future = producer.send(
+        topic='documents',
+        key='doc-uuid-789',
+        value={'amount': 10000, 'vendor': 'Acme Corp'}
+    )
+    metadata = future.get(timeout=30)
+    log.info(f"Document persisted to partition {metadata.partition}")
+except KafkaError as e:
+    log.critical(f"Failed to persist financial document: {e}")
+    notify_finance_team()
+    raise  # Fail loudly
+```
+
+---
+
+### **Summary: 4 Producer Decisions**
+
+| **Decision** | **Pizza Store** | **DCP** | **Why Different?** |
+|---|---|---|---|
+| **Event Key** | `order-123` | `doc-uuid` | Both need ordering within their entity |
+| **Acks Wait** | `acks=1` (5s) | `acks=all` (30s) | Pizza: speed; DCP: safety |
+| **Retries** | `retries=3, 100ms backoff` | `retries=-1, 500ms→exponential` | Pizza: transient only; DCP: must not lose |
+| **Batching** | `batch=16KB, linger=100ms, lz4` | `batch=64KB, linger=1000ms, snappy` | DCP: larger payloads, network cost matters |
+
+---
+
+### DCP Example
 
 ```text
 Producer: Sourcing Service
 Topic: document-sourced
-Key: DOC-123
-Value: DocumentSourced event
-```
+Key: doc-uuid-789
+Value: {
+  "vendor": "Acme Corp",
+  "amount": 10000,
+  "invoice_id": "INV-2025-005",
+  "extracted_at": "2025-06-19T10:30:00Z"
+}
 
-The key is important because it normally determines the partition.
+Configuration:
+- acks=all (safety)
+- retries=-1 (never lose financial data)
+- batch_size=65536 (efficient batching)
+- compression_type=snappy (network cost savings)
+```
 
 ---
 
