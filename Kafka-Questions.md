@@ -2849,7 +2849,7 @@ Without protection, the retry could create a duplicate record.
 
 An idempotent producer uses producer identity and sequence information so the broker can reject duplicate retry attempts.
 
-Typical intent:
+Typical configuration:
 
 ```properties
 enable.idempotence=true
@@ -2858,7 +2858,274 @@ acks=all
 
 This protects against duplicates caused by producer retries.
 
-It does not stop application code from intentionally calling `send()` twice with two separate logical sends.
+**Important limitation:** It does not stop application code from intentionally calling `send()` twice with two separate logical sends.
+
+---
+
+### Idempotent Producer vs Idempotent Consumer: Which Do You Need?
+
+This is critical for system design. The answer depends on **where** duplicates can occur and **what** your consumer does.
+
+#### Where Can Duplicates Occur?
+
+```
+1. Producer retry → Kafka stores duplicate
+   ↓
+2. Kafka rebalance → Consumer processes same message twice
+   ↓
+3. Consumer crash → Consumer restarts, reprocesses same message
+   ↓
+4. Consumer writes to external system → Database gets duplicate write
+```
+
+**Idempotent producer** only protects against #1 (producer retry).
+**Idempotent consumer** protects against #2, #3, #4.
+
+#### 🍕 Pizza Store Example
+
+**Scenario: Producer retries order due to timeout**
+
+```
+Order: "2 Large Pizzas"
+Producer sends twice by mistake
+```
+
+**Idempotent producer:**
+```
+Kafka broker: ✓ Stores only 1 copy (deduped at broker)
+Consumer:     Gets 1 message
+Kitchen:      Makes 1 order ✓
+```
+
+**Idempotent consumer (instead):**
+```
+Kafka broker: Stores 2 copies (producer retried)
+Consumer:     Gets 2 messages
+              Checks: "Already made order-123?"
+              YES → Skip second one
+Kitchen:      Makes 1 order ✓
+```
+
+**Both (best practice):**
+```
+Kafka broker: Already deduped (producer idempotent)
+Consumer:     Gets 1 message, still checks dedup logic
+              Defense in depth
+Kitchen:      Makes 1 order ✓
+```
+
+#### 💾 DCP Example: Why Consumer Idempotency is CRITICAL
+
+**Scenario: Consumer crashes after processing but before ACKing**
+
+```
+Document: invoice-123.pdf ($10,000)
+Producer: Sends extraction message (idempotent enabled)
+Consumer: Receives message, extracts, writes to database
+```
+
+**Producer idempotent ONLY:**
+```
+Broker: ✓ Deduped (no producer retries)
+Consumer: ✓ Processes message, inserts $10,000 revenue
+          ✗ Crashes before ACKing to Kafka
+          
+Kafka: "Consumer didn't ACK, resend message"
+Consumer: Restarts, gets SAME message again
+          ✗ Inserts $10,000 revenue AGAIN
+          
+Database: TWO $10,000 entries ❌
+          Ledger is now wrong
+```
+
+**Producer idempotent + Consumer idempotent:**
+```
+Broker: ✓ Deduped (producer idempotent)
+Consumer: Gets message, extracts, inserts $10,000
+          Saves: "processed invoice-123" in same transaction
+          ✗ Crashes before ACKing
+          
+Kafka: "Consumer didn't ACK, resend message"
+Consumer: Restarts, gets message again
+          ✓ Checks: "Already processed invoice-123?"
+          ✓ YES → Skips duplicate
+          
+Database: ONE $10,000 entry ✓
+          Ledger is correct
+```
+
+#### Consumer Idempotency Implementation
+
+The key is to check **before** processing and save the check **atomically** with the work:
+
+```python
+def process_kafka_message(message):
+    doc_id = message['document_id']
+    event_id = message['message_id']  # Kafka message ID
+    
+    # STEP 1: Check if already processed (in same DB transaction)
+    with db.transaction():
+        # Check idempotency key
+        if db.query(f"SELECT * FROM processed_messages WHERE id = {event_id}"):
+            log.info(f"Already processed {event_id}, skipping")
+            return  # Skip duplicate
+        
+        # STEP 2: Do the work
+        extracted_data = extract_with_sparkair(message)
+        db.insert_extraction(extracted_data)
+        
+        # STEP 3: Save idempotency marker (SAME transaction!)
+        db.insert(f"processed_messages", {"id": event_id})
+        
+        # Commit happens here - both operations succeed or both fail
+    
+    # STEP 4: ACK to Kafka
+    consumer.commit()
+```
+
+**Why same transaction?** If the write succeeds but marking "processed" fails, you'll reprocess on restart. If you mark before writing, and write fails, you'll lose the message. Same transaction = atomic all-or-nothing.
+
+---
+
+### Comparison: Producer vs Consumer Idempotency
+
+| Aspect | Producer Idempotent | Consumer Idempotent |
+|--------|---------------------|---------------------|
+| **What it protects** | Producer retries → duplicate sends | Kafka rebalance + consumer failure → duplicate processing |
+| **Where dedup happens** | Broker level (Kafka) | Application level (your code) |
+| **Cost** | Minimal (built-in) | Moderate (requires logic + storage) |
+| **Kafka → Kafka** | ✅ Sufficient alone | Not needed |
+| **Kafka → Database** | ❌ Not enough | ✅ Required |
+| **Kafka → External API** | ❌ Not enough | ✅ Required |
+| **DCP financial data** | ⚠️ Good to have | ✅ Non-negotiable |
+| **Complexity** | Simple config | More application code |
+
+---
+
+### Decision: Which to Use?
+
+#### Scenario 1: Kafka-only Pipeline (Extract → Transform → Aggregate)
+
+```
+Source topic → Extract pod → Transform pod → Output topic
+```
+
+**All within Kafka. No external systems.**
+
+```
+Recommendation: Producer idempotent ONLY
+
+Why:
+- Broker dedup catches producer retries
+- Consumer-to-consumer communication is within Kafka
+- No external durability concerns
+```
+
+#### Scenario 2: Kafka → Database (DCP Extraction)
+
+```
+Sourcing pod → document-sourced topic → Extraction pod → PostgreSQL
+```
+
+**Consumer writes to external system.**
+
+```
+Recommendation: Consumer idempotent REQUIRED
+
+Why:
+- Producer idempotent can't protect external DB writes
+- Consumer may reprocess after Kafka rebalance
+- Database will get duplicates without consumer dedup logic
+```
+
+#### Scenario 3: Critical Kafka → Multi-System
+
+```
+Payment topic → Consumer → Database + Email + Slack + Analytics
+```
+
+**Multiple external systems, financial data.**
+
+```
+Recommendation: BOTH (producer + consumer idempotent)
+
+Why:
+- Defense in depth
+- Producer idempotent = safety net for Kafka layer
+- Consumer idempotent = required for external systems
+- Critical financial data justifies both approaches
+```
+
+#### Scenario 4: DCP (Recommended)
+
+```
+Multiple sources → Extraction → Quality → Approval → Dissemination → External systems
+```
+
+**Complex multi-stage pipeline with external writes.**
+
+```
+Recommendation: BOTH (producer + consumer idempotent)
+
+Why:
+- Each stage is a producer for the next stage
+- Each stage is a consumer from the previous stage
+- Financial documents require no duplicates
+- External dissemination to customers requires safety
+- Producer idempotent at each stage
+- Consumer idempotent at each stage before external write
+```
+
+#### DCP Implementation Example
+
+```python
+# Sourcing service (PRODUCER)
+producer = KafkaProducer(
+    enable_idempotence=True,  # Layer 1: Broker dedup
+    acks='all'
+)
+
+# Extraction service (CONSUMER + PRODUCER)
+def extract_consumer():
+    for message in consumer:
+        doc_id = message['document_id']
+        
+        # Layer 2: Consumer dedup before external write
+        if db.already_processed(doc_id):
+            continue
+        
+        # Do work
+        extracted = sparkair.extract(message)
+        db.save(extracted)
+        db.mark_processed(doc_id)
+        
+        # Produce to next stage (with idempotent producer)
+        producer.send(
+            topic='document-extracted',
+            value=extracted,
+            key=doc_id
+        )
+        
+        consumer.commit()
+
+# Quality service (CONSUMER + PRODUCER with same pattern)
+# Approval service (CONSUMER + PRODUCER with same pattern)
+# Dissemination service (CONSUMER writing to external APIs with dedup)
+```
+
+---
+
+### Summary: The Right Choice
+
+| Use Case | Choice |
+|----------|--------|
+| **Kafka → Kafka only** | Producer idempotent |
+| **Kafka → Database** | Consumer idempotent |
+| **Kafka → External APIs/Email** | Consumer idempotent |
+| **Critical financial** | Both (defense in depth) |
+| **DCP (recommended)** | Both at every stage |
+
+**For DCP:** Use both. Producer idempotent is almost free (just a config), and consumer idempotent is required anyway for external writes. Together they provide the reliability financial data demands.
 
 ---
 
