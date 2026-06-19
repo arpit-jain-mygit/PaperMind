@@ -410,142 +410,99 @@ Each group has its own offsets.
 
 ### Complete picture in one block
 
-```text
-CUSTOMER
-   │ places order
-   ▼
-┌──────────────────────────────────────────────┐
-│ ORDER SERVICE                               │
-│ Kafka role: PRODUCER                        │
-│ Produces EVENT: OrderPlaced                 │
-│ Write permission: pizza-orders              │
-└──────────────────────────────────────────────┘
-   │ publishes EVENT: OrderPlaced(orderId)
-   ▼
-┌────────────────────────────────────────────────┐
-│ TOPIC: pizza-orders                            │
-│ Meaning: A customer placed an order            │
-│ Retention: 7 days                              │
-│ WRITE permission: Order Service only           │
-│ READ permission: Kitchen + Payment groups      │
-│                                                │
-│ PO-P0: Offset 0 → Order A, Offset 1 → Order C │
-│ PO-P1: Offset 0 → Order B, Offset 1 → Order D │
-└────────────────────────────────────────────────┘
-             │
-             ├──────────────────────────────┐
-             ▼                              ▼
-┌────────────────────────────┐   ┌────────────────────────────┐
-│ KITCHEN SERVICE            │   │ PAYMENT SERVICE            │
-│ Kafka role:                │   │ Kafka role:                │
-│ CONSUMER + PRODUCER        │   │ CONSUMER + PRODUCER        │
-│                            │   │                            │
-│ Consumer group:            │   │ Consumer group:            │
-│ kitchen-group              │   │ payment-group              │
-│                            │   │                            │
-│ Consumer/Pod A → PO-P0     │   │ Consumer/Pod A → PO-P0     │
-│ Consumer/Pod B → PO-P1     │   │ Consumer/Pod B → PO-P1     │
-│                            │   │                            │
-│ Consumes EVENT:            │   │ Consumes EVENT:            │
-│ OrderPlaced                │   │ OrderPlaced                │
-│ Business job: Prepare      │   │ Business job: Collect pay  │
-│ Produces EVENT:            │   │ Produces EVENT:            │
-│ PizzaPrepared              │   │ PaymentCompleted           │
-└────────────────────────────┘   └────────────────────────────┘
-             │                              │
-             │ publishes EVENT:             │ publishes EVENT:
-             │ PizzaPrepared                │ PaymentCompleted
-             ▼                              ▼
-┌────────────────────────────┐   ┌────────────────────────────┐
-│ TOPIC: pizza-prepared      │   │ TOPIC: payment-completed   │
-│ Meaning: Kitchen finished  │   │ Meaning: Payment succeeded │
-│ Retention: 3 days          │   │ Retention: 7-year audit    │
-│ WRITE: Kitchen Service     │   │ WRITE: Payment Service     │
-│ READ: Delivery group       │   │ READ: Billing + Delivery   │
-│ Permission: Operational    │   │ Permission: Restricted     │
-│                            │   │ financial data             │
-│ PP-P0: Prepared A, C       │   │ PC-P0: Paid A, C           │
-│ PP-P1: Prepared B, D       │   │ PC-P1: Paid B, D           │
-└────────────────────────────┘   └────────────────────────────┘
-             │                              │
-             │                              ├───────────────────────┐
-             │                              │                       ▼
-             │                              │    ┌────────────────────────────┐
-             │                              │    │ BILLING SERVICE            │
-             │                              │    │ Kafka role: CONSUMER       │
-             │                              │    │ Group: billing-group       │
-             │                              │    │ Consumer A → PC-P0         │
-             │                              │    │ Consumer B → PC-P1         │
-             │                              │    │ Job: Record revenue        │
-             │                              │    │ Output: Write billing      │
-             │                              │    │ ledger database            │
-             │                              │    └────────────────────────────┘
-             │                              │                 │
-             │                              │                 ▼
-             │                              │       ┌──────────────────────┐
-             │                              │       │ BILLING LEDGER DB    │
-             │                              │       │ Payment/order record │
-             │                              │       └──────────────────────┘
-             │                              │
-             └──────────────┬───────────────┘
-                            ▼
-              ┌────────────────────────────────┐
-              │ DELIVERY COORDINATOR SERVICE   │
-              │ Kafka role:                    │
-              │ CONSUMER + PRODUCER            │
-              │                                │
-              │ Consumer group:                │
-              │ delivery-coordinator-group     │
-              │                                │
-              │ Consumer/Pod A                 │
-              │ Consumer/Pod B                 │
-              │ Kafka assigns partitions       │
-              │ from both subscribed topics    │
-              │                                │
-              │ Consumes:                      │
-              │ - EVENT PizzaPrepared          │
-              │   from pizza-prepared          │
-              │ - EVENT PaymentCompleted       │
-              │   from payment-completed       │
-              │                                │
-              │ Stateful JOIN by orderId:       │
-              │ 1. Store first event received  │
-              │ 2. Wait for matching event     │
-              │ 3. When both exist, join       │
-              │                                │
-              │ State store:                   │
-              │ A → PREPARED=true, PAID=false  │
-              │ B → PREPARED=true, PAID=true   │
-              │                                │
-              │ Produces EVENT:                │
-              │ DeliveryRequested              │
-              └────────────────────────────────┘
-                            │
-                            │ publishes EVENT:
-                            │ DeliveryRequested
-                            ▼
-┌────────────────────────────────────────────────┐
-│ TOPIC: delivery-requested                      │
-│ Meaning: An order is ready for delivery        │
-│ Retention: 3 days                              │
-│ WRITE permission: Delivery Coordinator only    │
-│ READ permission: Driver Assignment group       │
-│ Permission: Delivery operations                │
-│                                                │
-│ DR-P0: Offset 0 → Deliver A, Offset 1 → C     │
-│ DR-P1: Offset 0 → Deliver B, Offset 1 → D     │
-└────────────────────────────────────────────────┘
-                         │
-                         ▼
-              ┌──────────────────────────────┐
-              │ DRIVER ASSIGNMENT SERVICE    │
-              │ Kafka role: CONSUMER         │
-              │ Consumer group: driver-group │
-              │ Consumer/Pod A → DR-P0       │
-              │ Consumer/Pod B → DR-P1       │
-              │ Job: Assign driver/pickup    │
-              └──────────────────────────────┘
+### Diagram legend
+
+```mermaid
+flowchart LR
+    L1["Human / external actor"]:::actor
+    L2["Producer-only service"]:::producer
+    L3["Consumer-only service"]:::consumer
+    L4["Consumer + producer service"]:::both
+    L5["Kafka topic"]:::topic
+    L6[("Database / state store")]:::store
+
+    classDef actor fill:#F3F4F6,stroke:#4B5563,color:#111827,stroke-width:2px;
+    classDef producer fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A,stroke-width:2px;
+    classDef consumer fill:#DCFCE7,stroke:#16A34A,color:#14532D,stroke-width:2px;
+    classDef both fill:#F3E8FF,stroke:#9333EA,color:#581C87,stroke-width:2px;
+    classDef topic fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:2px;
+    classDef store fill:#FCE7F3,stroke:#DB2777,color:#831843,stroke-width:2px;
 ```
+
+```mermaid
+flowchart TB
+    CUSTOMER["👤 Customer<br/>Places pizza order"]:::actor
+
+    ORDER["Order Service<br/><b>PRODUCER</b><br/>Produces event: OrderPlaced"]:::producer
+
+    PO["TOPIC: pizza-orders<br/>Meaning: order was placed<br/>Retention: 7 days<br/>WRITE: Order Service<br/>READ: kitchen-group, payment-group<br/><br/>PO-P0: offsets 0,1...<br/>PO-P1: offsets 0,1..."]:::topic
+
+    KITCHEN["Kitchen Service<br/><b>CONSUMER + PRODUCER</b><br/>Group: kitchen-group<br/>Pod A → PO-P0<br/>Pod B → PO-P1<br/>Consumes: OrderPlaced<br/>Produces: PizzaPrepared"]:::both
+
+    PAYMENT["Payment Service<br/><b>CONSUMER + PRODUCER</b><br/>Group: payment-group<br/>Pod A → PO-P0<br/>Pod B → PO-P1<br/>Consumes: OrderPlaced<br/>Produces: PaymentCompleted"]:::both
+
+    STAFF["👩‍🍳 Kitchen Staff<br/>Prepare and mark pizza ready"]:::actor
+
+    PP["TOPIC: pizza-prepared<br/>Meaning: kitchen completed order<br/>Retention: 3 days<br/>WRITE: Kitchen Service<br/>READ: delivery-coordinator-group<br/>Permission: operational<br/><br/>PP-P0: offsets 0,1...<br/>PP-P1: offsets 0,1..."]:::topic
+
+    PC["TOPIC: payment-completed<br/>Meaning: payment succeeded<br/>Retention: 7-year financial audit<br/>WRITE: Payment Service<br/>READ: billing-group, delivery-coordinator-group<br/>Permission: restricted financial<br/><br/>PC-P0: offsets 0,1...<br/>PC-P1: offsets 0,1..."]:::topic
+
+    BILLING["Billing Service<br/><b>CONSUMER</b><br/>Group: billing-group<br/>Consumer A → PC-P0<br/>Consumer B → PC-P1<br/>Consumes: PaymentCompleted<br/>Job: record revenue"]:::consumer
+
+    ACCOUNTANT["🧑‍💼 Accountant<br/>Reviews ledger and reconciles revenue"]:::actor
+    LEDGER[("Billing Ledger DB<br/>Payment and order records")]:::store
+
+    JOIN["Delivery Coordinator Service<br/><b>CONSUMER + PRODUCER</b><br/>Group: delivery-coordinator-group<br/>Consumer Pods A and B<br/><br/>Consumes PizzaPrepared + PaymentCompleted<br/>Joins by orderId<br/>Stores first-arriving event<br/>Waits asynchronously for matching event<br/>Produces DeliveryRequested when both exist"]:::both
+
+    JOINSTORE[("Join State Store<br/>orderId → prepared?, paid?<br/>Example A: true / false<br/>Example B: true / true")]:::store
+
+    DR["TOPIC: delivery-requested<br/>Meaning: order is ready for delivery<br/>Retention: 3 days<br/>WRITE: Delivery Coordinator<br/>READ: driver-group<br/>Permission: delivery operations<br/><br/>DR-P0: offsets 0,1...<br/>DR-P1: offsets 0,1..."]:::topic
+
+    DRIVER["Driver Assignment Service<br/><b>CONSUMER</b><br/>Group: driver-group<br/>Pod A → DR-P0<br/>Pod B → DR-P1<br/>Consumes: DeliveryRequested<br/>Job: assign delivery partner"]:::consumer
+
+    PARTNER["🛵 Delivery Partner<br/>Accepts assignment, picks up and delivers"]:::actor
+
+    CUSTOMER -->|"places order"| ORDER
+    ORDER -->|"publishes EVENT: OrderPlaced(orderId)"| PO
+
+    PO -->|"fan-out to kitchen-group"| KITCHEN
+    PO -->|"fan-out to payment-group"| PAYMENT
+
+    STAFF -->|"prepares pizza through kitchen workflow"| KITCHEN
+    KITCHEN -->|"publishes EVENT: PizzaPrepared(orderId)"| PP
+    PAYMENT -->|"publishes EVENT: PaymentCompleted(orderId)"| PC
+
+    PC -->|"billing-group consumes"| BILLING
+    BILLING -->|"writes revenue record"| LEDGER
+    ACCOUNTANT -->|"reviews / reconciles"| LEDGER
+
+    PP -->|"delivery group receives PizzaPrepared"| JOIN
+    PC -->|"delivery group receives PaymentCompleted"| JOIN
+
+    JOIN -->|"save partial state; no blocked thread"| JOINSTORE
+    JOINSTORE -->|"both prepared=true and paid=true"| JOIN
+
+    JOIN -->|"publishes EVENT: DeliveryRequested(orderId)"| DR
+    DR -->|"driver-group consumes"| DRIVER
+    DRIVER -->|"assigns order"| PARTNER
+    PARTNER -->|"delivers order"| CUSTOMER
+
+    classDef actor fill:#F3F4F6,stroke:#4B5563,color:#111827,stroke-width:2px;
+    classDef producer fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A,stroke-width:2px;
+    classDef consumer fill:#DCFCE7,stroke:#16A34A,color:#14532D,stroke-width:2px;
+    classDef both fill:#F3E8FF,stroke:#9333EA,color:#581C87,stroke-width:2px;
+    classDef topic fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:2px;
+    classDef store fill:#FCE7F3,stroke:#DB2777,color:#831843,stroke-width:2px;
+```
+
+Color summary:
+
+- **Blue:** Produces Kafka events but does not consume one in this flow.
+- **Green:** Consumes Kafka events but does not produce another event in this flow.
+- **Purple:** Consumes one or more events and produces a new event.
+- **Yellow:** Kafka topic, including retention, permissions and independent partitions.
+- **Pink:** Database or durable state store.
+- **Gray:** Human or external business actor.
 
 Yes, a service can act as both a consumer and a producer:
 
