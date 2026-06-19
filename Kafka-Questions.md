@@ -7,6 +7,7 @@ DCP receives financial documents from S3, email, APIs and other sources. It extr
 ## Table of Contents
 
 - [Start here: Kafka components working together](#start-here-how-do-kafka-producers-topics-partitions-and-consumers-work-together)
+  - [General Kafka containment and cardinality](#general-kafka-containment-and-cardinality)
   - [Pizza-store example](#diagram-legend)
   - [DCP example](#the-same-kafka-concepts-applied-to-dcp)
 
@@ -50,6 +51,143 @@ DCP receives financial documents from S3, email, APIs and other sources. It extr
 ---
 
 ## Start here: How do Kafka producers, topics, partitions and consumers work together?
+
+### General Kafka containment and cardinality
+
+#### What has what?
+
+```mermaid
+flowchart TB
+    C["Kafka Cluster 1"]:::cluster
+
+    B1["Broker 1"]:::broker
+    B2["Broker 2"]:::broker
+    B3["Broker 3"]:::broker
+
+    T1["Topic 1<br/>pizza-orders"]:::topic
+    T2["Topic 2<br/>payment-completed"]:::topic
+
+    P1["Partition 1<br/>Topic 1 / P0"]:::partition
+    P2["Partition 2<br/>Topic 1 / P1"]:::partition
+    P3["Partition 3<br/>Topic 2 / P0"]:::partition
+
+    R11["Replica 1<br/>P1 Leader<br/>on Broker 1"]:::replica
+    R12["Replica 2<br/>P1 Follower<br/>on Broker 2"]:::replica
+    R13["Replica 3<br/>P1 Follower<br/>on Broker 3"]:::replica
+
+    E1["Event 1<br/>OrderPlaced A<br/>Offset 0"]:::event
+    E2["Event 2<br/>OrderPlaced B<br/>Offset 1"]:::event
+    E3["Event 3<br/>PaymentCompleted A<br/>Offset 0"]:::event
+
+    C -->|"1:M contains"| B1
+    C -->|"1:M contains"| B2
+    C -->|"1:M contains"| B3
+
+    C -->|"1:M contains logical topics"| T1
+    C -->|"1:M contains logical topics"| T2
+
+    T1 -->|"1:M split into"| P1
+    T1 -->|"1:M split into"| P2
+    T2 -->|"1:M split into"| P3
+
+    P1 -->|"1:M replication factor 3"| R11
+    P1 -->|"1:M"| R12
+    P1 -->|"1:M"| R13
+
+    R11 -.->|"M:1 hosted on"| B1
+    R12 -.->|"M:1 hosted on"| B2
+    R13 -.->|"M:1 hosted on"| B3
+
+    P1 -->|"1:M ordered events"| E1
+    P1 -->|"1:M ordered events"| E2
+    P3 -->|"1:M ordered events"| E3
+
+    classDef cluster fill:#CCFBF1,stroke:#0F766E,color:#134E4A,stroke-width:3px;
+    classDef broker fill:#CFFAFE,stroke:#0891B2,color:#164E63,stroke-width:2px;
+    classDef topic fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:2px;
+    classDef partition fill:#FFEDD5,stroke:#EA580C,color:#7C2D12,stroke-width:2px;
+    classDef replica fill:#EDE9FE,stroke:#7C3AED,color:#4C1D95,stroke-width:2px;
+    classDef event fill:#DCFCE7,stroke:#16A34A,color:#14532D,stroke-width:2px;
+```
+
+#### Relationship summary
+
+| From | To | Relationship | Meaning |
+|---|---|---:|---|
+| Cluster | Broker | **1:M** | One cluster contains many brokers |
+| Broker | Cluster | **M:1** | Many brokers belong to one cluster |
+| Cluster | Topic | **1:M** | One cluster hosts many logical topics |
+| Topic | Partition | **1:M** | One topic is divided into many partitions |
+| Partition | Topic | **M:1** | Many partitions belong to one topic |
+| Partition | Replica | **1:M** | One partition has multiple replicas according to its replication factor |
+| Replica | Partition | **M:1** | Every replica is a copy of one partition |
+| Broker | Replica | **1:M** | One broker stores many replicas from many topics |
+| Replica | Broker | **M:1** | One replica is physically hosted on one broker |
+| Topic | Broker | **M:M** | A topic spans many brokers, and a broker stores replicas from many topics |
+| Partition | Event | **1:M** | One partition contains many ordered events |
+| Event | Partition | **M:1** | Each logical event belongs to one partition |
+| Event | Replica | **M:M** overall | Every event is copied into each replica of its partition; every replica stores many events |
+
+#### Important 1:1 relationship
+
+At a particular moment:
+
+```text
+One partition
+→ exactly one leader replica
+
+One leader replica
+→ leads exactly one partition
+```
+
+The partition may also have multiple follower replicas:
+
+```text
+Partition 1
+├── Replica 1 = Leader
+├── Replica 2 = Follower
+└── Replica 3 = Follower
+```
+
+If the leader broker fails, one in-sync follower is promoted. The 1:1 leader relationship remains, but the broker hosting the leader changes.
+
+#### One logical event, multiple physical copies
+
+`Event 1` logically belongs to only `Partition 1`:
+
+```text
+Event 1 → Partition 1
+```
+
+Because Partition 1 has three replicas, Kafka stores a physical copy of Event 1 in all three replica logs:
+
+```text
+Event 1
+├── Replica 1 on Broker 1
+├── Replica 2 on Broker 2
+└── Replica 3 on Broker 3
+```
+
+Consumers still see one logical event. Replication does not mean the consumer processes three events.
+
+#### Short mental model
+
+```text
+Cluster 1
+├── Broker 1
+├── Broker 2
+└── Broker 3
+
+Topic 1
+├── Partition 1
+│   ├── Event 1
+│   ├── Event 2
+│   └── Replicas 1, 2, 3 spread across Brokers 1, 2, 3
+└── Partition 2
+
+Topic 2
+└── Partition 3
+```
 
 ### Diagram legend
 
