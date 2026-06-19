@@ -2348,26 +2348,33 @@ Kitchen Consumer A → P0, P1
 Kitchen Consumer B → P2, P3
 ```
 
-**Important: These partitions are NOT processed sequentially (one at a time). They are processed in parallel/interleaved.**
+**Important: These partitions are NOT processed one-by-one (finish all P0, then do P1). They are processed with messages interleaved from both partitions. BUT: A single-threaded consumer still processes only ONE message at a time.**
 
 #### How does a consumer process multiple partitions?
+
+**Network level: Parallel fetch** ✅
 
 When Consumer A calls `poll()`, it fetches from ALL assigned partitions simultaneously:
 
 ```
 Consumer A calls poll()
     ↓
-Kafka fetches from P0 AND P1 at the same time
+Kafka BROKERS fetch from P0 AND P1 at the same time (parallel)
     ↓
 Consumer receives batch: [P0-offset-5, P1-offset-3, P0-offset-6, P1-offset-4, P0-offset-7]
     ↓
-Consumer processes these in the order received (INTERLEAVED)
+Consumer's SINGLE THREAD processes batch sequentially:
+  t=0ms: Process P0-5      (only this message runs)
+  t=10ms: Process P1-3     (P0-5 is done)
+  t=20ms: Process P0-6     (P1-3 is done)
+  t=30ms: Process P1-4     (P0-6 is done)
+  t=40ms: Process P0-7     (P1-4 is done)
     ↓
-Not: "Finish all P0, then process P1"
-Yes: "Process P0-5, then P1-3, then P0-6, then P1-4, then P0-7"
+Not: "Finish all P0, then process P1" (sequential per partition)
+Yes: "Process P0-5, then P1-3, then P0-6..." (interleaved, but ONE at a time)
 ```
 
-**The consumer doesn't wait to finish one partition before reading from another.**
+**The fetch is parallel. The processing is sequential but with messages from both partitions mixed in the batch.**
 
 #### 🍕 Pizza Store Example
 
@@ -2470,19 +2477,46 @@ Each partition tracks its own progress independently, even if owned by the same 
 
 #### Single-threaded vs multi-threaded consumer
 
-**Single-threaded consumer (most common):**
+**Single-threaded consumer (DEFAULT, most common):**
 ```
-poll() → Get batch from P0 and P1 → Process sequentially → Commit offsets
-         (but P0 and P1 messages are fetched in parallel by broker)
+poll() → Brokers fetch from P0 and P1 in parallel
+         ↓
+         Consumer receives batch: [P0-msg, P1-msg, P0-msg, P1-msg, ...]
+         ↓
+         ONE application thread processes messages one-by-one
+         ↓
+         Commit offsets for both P0 and P1
+
+Example timeline:
+  t=0ms: process P0-1
+  t=10ms: process P1-1  (P0-1 is done; P1-1 was waiting)
+  t=20ms: process P0-2
+  t=30ms: process P1-2
 ```
 
 **Multi-threaded consumer (less common, needs careful offset management):**
 ```
-poll() → Get batch from P0 and P1 → Spawn threads to process in parallel
-         (both partitions can be processed truly concurrently)
+poll() → Brokers fetch from P0 and P1 in parallel
+         ↓
+         Consumer receives batch: [P0-msg, P1-msg, P0-msg, P1-msg, ...]
+         ↓
+         Spawn threads to process P0 and P1 messages truly in parallel
+         ↓
+         Wait for all to complete (or handle out-of-order completion)
+         ↓
+         Commit offsets for both P0 and P1
+
+Example timeline:
+  t=0ms: Thread 1 starts P0-1 AND Thread 2 starts P1-1 (true parallelism)
+  t=10ms: Both threads done; next batch
 ```
 
-Most Kafka consumers are single-threaded at the application level, but Kafka itself fetches from multiple partitions concurrently at the network level.
+**Bottom line:**
+- Most Kafka consumers are single-threaded (default behavior)
+- The fetch is parallel (brokers send simultaneously)
+- The processing is sequential (one message at a time)
+- Messages are interleaved (not one partition then the other)
+- For true parallelism, you need multi-threading (adds complexity)
 
 ### What happens when a consumer fails?
 
