@@ -424,16 +424,16 @@ ORDER APPLICATION — Producer
 │ Write: Order Application                     │
 │ Read: Kitchen and Payment services           │
 │                                               │
-│ P0: Offset 0 → Order A, Offset 1 → Order C   │
-│ P1: Offset 0 → Order B, Offset 1 → Order D   │
+│ PO-P0: Offset 0 → Order A, Offset 1 → Order C│
+│ PO-P1: Offset 0 → Order B, Offset 1 → Order D│
 └───────────────────────────────────────────────┘
              │
              ├──────────────────────────────┐
              ▼                              ▼
 ┌────────────────────────┐     ┌────────────────────────┐
 │ KITCHEN GROUP          │     │ PAYMENT GROUP          │
-│ Chef A → P0            │     │ Payment Pod A → P0     │
-│ Chef B → P1            │     │ Payment Pod B → P1     │
+│ Chef A → PO-P0         │     │ Payment Pod A → PO-P0  │
+│ Chef B → PO-P1         │     │ Payment Pod B → PO-P1  │
 │ Job: Prepare pizzas    │     │ Job: Collect payment   │
 └────────────────────────┘     └────────────────────────┘
              │                              │
@@ -447,13 +447,13 @@ ORDER APPLICATION — Producer
 │ Write: Kitchen Service      │ │ Write: Payment Service      │
 │ Read: Delivery Coordinator  │ │ Read: Billing + Delivery    │
 │                             │ │ Access: Restricted          │
-│ P0: Prepared A, Prepared C  │ │ P0: Paid A, Paid C         │
-│ P1: Prepared B, Prepared D  │ │ P1: Paid B, Paid D         │
+│ PP-P0: Prepared A, C        │ │ PC-P0: Paid A, Paid C      │
+│ PP-P1: Prepared B, D        │ │ PC-P1: Paid B, Paid D      │
 └─────────────────────────────┘ └─────────────────────────────┘
              │                              │
              │                              ├───────────────► BILLING GROUP
-             │                              │                 Bill A → P0
-             │                              │                 Bill B → P1
+             │                              │                 Bill A → PC-P0
+             │                              │                 Bill B → PC-P1
              │                              │
              └──────────────┬───────────────┘
                             ▼
@@ -474,14 +474,14 @@ ORDER APPLICATION — Producer
 │ Read: Driver Assignment Service              │
 │ Processing: Assign a driver and track pickup │
 │                                               │
-│ P0: Offset 0 → Deliver A, Offset 1 → Deliver C│
-│ P1: Offset 0 → Deliver B, Offset 1 → Deliver D│
+│ DR-P0: Offset 0 → Deliver A, Offset 1 → C   │
+│ DR-P1: Offset 0 → Deliver B, Offset 1 → D   │
 └───────────────────────────────────────────────┘
                          │
                          ▼
               DRIVER ASSIGNMENT GROUP
-              Driver Pod A → P0
-              Driver Pod B → P1
+              Driver Pod A → DR-P0
+              Driver Pod B → DR-P1
 ```
 
 The partition does not represent cooking, payment or delivery. Each topic still has partitions only for ordering and parallelism.
@@ -489,10 +489,15 @@ The partition does not represent cooking, payment or delivery. Each topic still 
 Every topic has its own independent partitions and offsets:
 
 ```text
-pizza-orders P0 offset 1
-≠ pizza-prepared P0 offset 1
-≠ payment-completed P0 offset 1
-≠ delivery-requested P0 offset 1
+PO-P0 = pizza-orders partition 0
+PP-P0 = pizza-prepared partition 0
+PC-P0 = payment-completed partition 0
+DR-P0 = delivery-requested partition 0
+
+PO-P0 offset 1
+≠ PP-P0 offset 1
+≠ PC-P0 offset 1
+≠ DR-P0 offset 1
 ```
 
 An offset is meaningful only with its topic and partition:
