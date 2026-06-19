@@ -68,7 +68,7 @@ flowchart LR
     classDef both fill:#F3E8FF,stroke:#9333EA,color:#581C87,stroke-width:2px;
     classDef topic fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:2px;
     classDef store fill:#FCE7F3,stroke:#DB2777,color:#831843,stroke-width:2px;
-    classDef cluster fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E,stroke-width:3px;
+    classDef cluster fill:#CCFBF1,stroke:#0F766E,color:#134E4A,stroke-width:3px;
 ```
 
 ```mermaid
@@ -122,7 +122,7 @@ flowchart TB
     classDef both fill:#F3E8FF,stroke:#9333EA,color:#581C87,stroke-width:2px;
     classDef topic fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:2px;
     classDef store fill:#FCE7F3,stroke:#DB2777,color:#831843,stroke-width:2px;
-    classDef cluster fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E,stroke-width:3px;
+    classDef cluster fill:#CCFBF1,stroke:#0F766E,color:#134E4A,stroke-width:3px;
 ```
 
 ### The same Kafka concepts applied to DCP
@@ -161,7 +161,7 @@ flowchart LR
     classDef both fill:#F3E8FF,stroke:#9333EA,color:#581C87,stroke-width:2px;
     classDef topic fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:2px;
     classDef store fill:#FCE7F3,stroke:#DB2777,color:#831843,stroke-width:2px;
-    classDef cluster fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E,stroke-width:3px;
+    classDef cluster fill:#CCFBF1,stroke:#0F766E,color:#134E4A,stroke-width:3px;
 ```
 
 The yellow topic boxes are logical event streams. The blue cluster box is the physical Kafka infrastructure:
