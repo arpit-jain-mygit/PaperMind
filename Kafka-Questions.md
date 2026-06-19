@@ -2477,50 +2477,64 @@ Each partition tracks its own progress independently, even if owned by the same 
 
 #### Why parallel fetch for a single-threaded consumer?
 
-**Critical insight: Parallel fetch minimizes network latency, even though processing is single-threaded.**
+**Critical insight: Parallel fetch reduces consumer lag, even though it doesn't save total processing time.**
 
-**Sequential fetch (hypothetically, if done one partition at a time):**
+**Myth to bust:** Reordering messages doesn't reduce total processing time. 100ms + 1000ms = 1100ms whether you do them sequentially or interleaved.
+
+**The real benefit: Lag reduction**
+
+**Sequential fetch (one partition at a time):**
 ```
-Fetch P0 from broker → wait 10ms for round-trip → get reply
-Process P0 messages (while P1 sits idle on broker)
-Fetch P1 from broker → wait 10ms for round-trip → get reply
-Process P1 messages
+t=0ms:    P1 messages arrive on broker
+t=10ms:   Fetch P0 complete
+t=110ms:  Process P0 complete (100ms) ← P1 has been waiting!
+          Fetch P1 (10ms)
+t=120ms:  Start processing P1
 
-Network time: 10ms + 10ms = 20ms
-Problem: P1 messages are blocked waiting for P0 fetch to complete
-```
-
-**Parallel fetch (what Kafka actually does):**
-```
-Fetch P0 from broker AND P1 from broker simultaneously → wait 10ms for both round-trips
-Consumer gets batch: [P0-msg, P1-msg, P0-msg, P1-msg, ...]
-Process messages one-by-one in single thread
-
-Network time: 10ms
-Benefit: 2x faster network, all partitions make progress
+P1 Consumer Lag = 120ms (messages waiting to be processed)
+Total time = 1120ms
 ```
 
-**Real-world impact:**
+**Parallel fetch (all at once):**
+```
+t=0ms:    P0 AND P1 messages both arrive on broker
+t=10ms:   Fetch P0 AND P1 complete (parallel)
+          START processing P1 immediately
+t=1110ms: Process all messages complete
 
-Scenario: P0 (slow, 5 seconds each), P1 (fast, 1 second each)
+P1 Consumer Lag = 10ms (minimal, processed as soon as fetched)
+Total time = 1110ms
+```
 
-Sequential approach:
+**Real-world impact with slow P0 (5s each) and fast P1 (1s each):**
+
+Sequential:
 ```
 Fetch P0 (10ms)
-Process all P0 messages (100 seconds) ← P1 waits on broker
-Fetch P1 (10ms)
-Process all P1 messages (10 seconds)
-Total: 130+ seconds
+Process 100 P0 messages @ 5s each (500s) ← P1 waits on broker!
+  t=510ms: Start fetching P1
+  t=520ms: Start processing P1
+  
+P1 Consumer Lag = 520ms (P1 messages delayed over 500ms)
+Total: 520s + 10s = 530s
 ```
 
-Parallel approach:
+Parallel:
 ```
 Fetch P0 AND P1 (10ms)
-Process interleaved: [P0-slow(5s), P1-fast(1s), P0-slow(5s), P1-fast(1s), ...]
-Total: ~30 seconds
+Start processing both interleaved: [P0(5s), P1(1s), P0(5s), P1(1s), ...]
+
+P1 Consumer Lag = 10ms (processed as soon as fetched!)
+Total: 510s (same total processing, but lag is minimal)
+
+Latency improvement: 520ms - 10ms = 510ms less lag on P1!
 ```
 
-Parallel fetch is **4x faster** even though processing is single-threaded!
+**Why this matters:**
+- **Fairness:** Slow partitions don't starve fast ones
+- **User experience:** Email documents don't wait behind S3 extractions
+- **System health:** Consumer lag stays low on all partitions
+- **Monitoring:** No false alarms about "blocked" consumers
 
 #### Single-threaded vs multi-threaded consumer
 
