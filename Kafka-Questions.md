@@ -678,6 +678,236 @@ Different topics can have different:
 - Replication settings
 - Business meanings
 
+### Why topics and partitions are significant in microservices
+
+A microservice normally owns a specific business capability or bounded context:
+
+```text
+Sourcing Service      → Accept and register documents
+Extraction Service    → Capture financial data
+Approval Service      → Approve or reject data
+Dissemination Service → Publish approved data
+```
+
+Kafka topics become the asynchronous contracts between these domain services.
+
+```text
+Sourcing Service
+→ publishes DocumentSourced
+→ document-sourced topic
+
+Extraction Service
+→ consumes DocumentSourced
+→ publishes DocumentExtracted
+→ document-extracted topic
+```
+
+The topic tells other services:
+
+> “A meaningful business fact occurred in this domain.”
+
+#### Topic = domain event contract
+
+A well-designed topic should have one clear business meaning:
+
+```text
+document-sourced
+document-extracted
+quality-checked
+document-approved
+document-published
+```
+
+This provides loose coupling:
+
+- The producer does not need to know every consumer.
+- New consumers can subscribe without changing the producer.
+- Consumers depend on an event contract rather than the producer's database.
+- Each service can deploy and scale independently.
+- Topic permissions can enforce domain ownership.
+
+Example:
+
+```text
+Only Approval Service may WRITE document-approved.
+
+Dissemination Service and Audit Service may READ it.
+```
+
+The producer that owns the business fact should own its event schema and compatibility policy.
+
+#### A topic is not automatically equal to one microservice
+
+Do not apply this mechanical rule:
+
+```text
+One microservice = exactly one Kafka topic
+```
+
+One service may publish several meaningful event types:
+
+```text
+Approval Service
+├── DocumentApproved
+├── DocumentRejected
+└── ReworkRequested
+```
+
+Several related event types may share a topic when they have the same:
+
+- Business domain
+- Consumers
+- Security requirements
+- Retention policy
+- Ordering requirement
+- Schema-governance policy
+
+Use separate topics when these concerns differ materially.
+
+For example:
+
+```text
+document-approved
+→ restricted approval event
+→ consumed by dissemination and audit
+
+configuration-changed
+→ administrative event
+→ different permissions and compacted retention
+```
+
+#### Events should describe facts, not database changes
+
+Prefer domain language:
+
+```text
+DocumentApproved
+PaymentCompleted
+FinancialDataValidated
+```
+
+Avoid exposing internal tables:
+
+```text
+ApprovalRowUpdated
+MongoDocumentChanged
+StatusColumnSetTo5
+```
+
+Domain events allow a service to change its internal database without breaking every consumer.
+
+#### Partition = technical ordering and scaling boundary
+
+A partition does not represent a domain or business capability.
+
+Incorrect:
+
+```text
+Partition 0 = Sourcing
+Partition 1 = Extraction
+Partition 2 = Approval
+```
+
+Correct:
+
+```text
+Topic: document-sourced
+
+DS-P0 → sourced-document events
+DS-P1 → sourced-document events
+DS-P2 → sourced-document events
+```
+
+Every partition contains the same kind of domain event. Partitions divide that event stream into parallel ordered lanes.
+
+#### The partition key connects technical design to the domain
+
+Choose the key from the business entity whose order must be preserved.
+
+For DCP:
+
+```text
+Key = documentId
+```
+
+This means:
+
+```text
+All events for DOC-123 in a topic
+→ same partition
+→ processed in partition order
+
+Events for DOC-456
+→ may use another partition
+→ process in parallel
+```
+
+The key therefore defines the unit of ordering and concurrency:
+
+```text
+Same document
+→ ordered processing
+
+Different documents
+→ parallel processing
+```
+
+A poor key can damage scalability:
+
+```text
+Key = documentType
+
+80% of documents are PDF
+→ one hot partition
+→ one consumer receives most work
+```
+
+#### Consumer group = business job reacting to the domain event
+
+Topics represent business facts. Consumer groups represent independent jobs that react to those facts:
+
+```text
+document-extracted topic
+├── quality-group → Validate captured financial data
+├── audit-group   → Record lineage
+└── analytics-group → Calculate operational metrics
+```
+
+Consumers inside one group scale the same job:
+
+```text
+quality-group
+├── Quality Pod 1
+├── Quality Pod 2
+└── Quality Pod 3
+```
+
+#### DCP architect summary
+
+```text
+Microservice / bounded context
+→ Owns a business capability
+
+Kafka topic
+→ Publishes meaningful facts from that capability
+
+Topic contract
+→ Decouples producer and consumers
+
+Partition
+→ Provides per-key ordering and parallelism
+
+Partition key
+→ Usually the domain entity ID, such as documentId
+
+Consumer group
+→ Represents one independent business reaction
+```
+
+Interview-ready answer:
+
+> In microservices, Kafka topics should represent meaningful domain-event contracts, not technical tables or individual partitions. The service owning the business fact owns the event it publishes. Other services subscribe without accessing the producer's database, which preserves loose coupling and bounded-context ownership. Partitions are not separate domains; they are technical lanes for scaling and ordering. In DCP, I key document lifecycle events by `documentId`, preserving order for one document while allowing different documents to process in parallel.
+
 ### Partition: an ordered lane inside a topic
 
 A topic is divided into partitions:
