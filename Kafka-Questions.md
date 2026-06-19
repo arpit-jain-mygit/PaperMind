@@ -60,6 +60,7 @@ flowchart LR
     L4["Consumer + producer service"]:::both
     L5["Kafka topic"]:::topic
     L6[("Database / state store")]:::store
+    L7["Kafka cluster / brokers"]:::cluster
 
     classDef actor fill:#F3F4F6,stroke:#4B5563,color:#111827,stroke-width:2px;
     classDef producer fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A,stroke-width:2px;
@@ -67,6 +68,7 @@ flowchart LR
     classDef both fill:#F3E8FF,stroke:#9333EA,color:#581C87,stroke-width:2px;
     classDef topic fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:2px;
     classDef store fill:#FCE7F3,stroke:#DB2777,color:#831843,stroke-width:2px;
+    classDef cluster fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E,stroke-width:3px;
 ```
 
 ```mermaid
@@ -88,6 +90,8 @@ flowchart TB
     DRIVER["Driver Assignment Service<br/><b>CONSUMER</b><br/>Group: driver-group<br/>Pod A → DR-P0<br/>Pod B → DR-P1<br/>Consumes: DeliveryRequested<br/>Job: assign delivery partner"]:::consumer
     PARTNER["🛵 Delivery Partner<br/>Accepts assignment, picks up and delivers"]:::actor
 
+    KAFKA["Kafka Cluster<br/><b>3 Brokers</b><br/><br/>Broker 1: partition leaders + replicas<br/>Broker 2: partition leaders + replicas<br/>Broker 3: partition leaders + replicas<br/><br/>Topic partitions are distributed and replicated<br/>across these brokers"]:::cluster
+
     CUSTOMER -->|"places order"| ORDER
     ORDER -->|"publishes EVENT: OrderPlaced(orderId)"| PO
     PO -->|"fan-out to kitchen-group"| KITCHEN
@@ -107,12 +111,18 @@ flowchart TB
     DRIVER -->|"assigns order"| PARTNER
     PARTNER -->|"delivers order"| CUSTOMER
 
+    KAFKA -.->|"stores/replicates PO partitions"| PO
+    KAFKA -.->|"stores/replicates PP partitions"| PP
+    KAFKA -.->|"stores/replicates PC partitions"| PC
+    KAFKA -.->|"stores/replicates DR partitions"| DR
+
     classDef actor fill:#F3F4F6,stroke:#4B5563,color:#111827,stroke-width:2px;
     classDef producer fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A,stroke-width:2px;
     classDef consumer fill:#DCFCE7,stroke:#16A34A,color:#14532D,stroke-width:2px;
     classDef both fill:#F3E8FF,stroke:#9333EA,color:#581C87,stroke-width:2px;
     classDef topic fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:2px;
     classDef store fill:#FCE7F3,stroke:#DB2777,color:#831843,stroke-width:2px;
+    classDef cluster fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E,stroke-width:3px;
 ```
 
 ### The same Kafka concepts applied to DCP
@@ -135,9 +145,15 @@ flowchart LR
     DISSEM["Dissemination<br/><b>CONSUMER + PRODUCER</b>"]:::both
     T5["document-published"]:::topic
     TARGETS["🏢 Downstream"]:::actor
+    KAFKA["DCP Kafka Cluster<br/><b>3 Brokers across failure zones</b><br/>Broker 1, Broker 2, Broker 3<br/>Partitions distributed + replicated"]:::cluster
 
     SOURCES --> SOURCE --> T1 --> EXTRACT --> T2 --> QUALITY --> T3 --> REVIEW --> T4 --> DISSEM --> T5
     DISSEM --> TARGETS
+    KAFKA -.->|"stores all DCP topic partitions"| T1
+    KAFKA -.-> T2
+    KAFKA -.-> T3
+    KAFKA -.-> T4
+    KAFKA -.-> T5
 
     classDef actor fill:#F3F4F6,stroke:#4B5563,color:#111827,stroke-width:2px;
     classDef producer fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A,stroke-width:2px;
@@ -145,6 +161,32 @@ flowchart LR
     classDef both fill:#F3E8FF,stroke:#9333EA,color:#581C87,stroke-width:2px;
     classDef topic fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:2px;
     classDef store fill:#FCE7F3,stroke:#DB2777,color:#831843,stroke-width:2px;
+    classDef cluster fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E,stroke-width:3px;
+```
+
+The yellow topic boxes are logical event streams. The blue cluster box is the physical Kafka infrastructure:
+
+```text
+Kafka cluster
+├── Broker 1
+├── Broker 2
+└── Broker 3
+
+Topic partitions
+→ distributed across brokers
+→ replicated for broker-failure recovery
+```
+
+For example, a replication factor of 3 could place copies like this:
+
+```text
+DS-P0 leader  → Broker 1
+DS-P0 replica → Broker 2
+DS-P0 replica → Broker 3
+
+DS-P1 leader  → Broker 2
+DS-P1 replica → Broker 3
+DS-P1 replica → Broker 1
 ```
 
 #### DCP diagram 1: Configuration and platform metadata
