@@ -427,42 +427,40 @@ ORDER APPLICATION — Producer
 │ P0: Offset 0 → Order A, Offset 1 → Order C   │
 │ P1: Offset 0 → Order B, Offset 1 → Order D   │
 └───────────────────────────────────────────────┘
-             │                         │
-             ▼                         ▼
-┌────────────────────────┐  ┌────────────────────────┐
-│ KITCHEN GROUP          │  │ PAYMENT GROUP          │
-│ Chef A → P0            │  │ Payment Pod A → P0     │
-│ Chef B → P1            │  │ Payment Pod B → P1     │
-│ Job: Prepare pizzas    │  │ Job: Collect payment   │
-└────────────────────────┘  └────────────────────────┘
-             │                         │
-             │ publishes              │ publishes
-             ▼ PizzaPrepared           ▼ PaymentCompleted
-
-┌───────────────────────────────────────────────┐
-│ TOPIC: pizza-prepared                        │
-│ Meaning: The kitchen completed an order      │
-│ Retention: 3 days                            │
-│ Write: Kitchen Service                       │
-│ Read: Delivery Coordinator                   │
-└───────────────────────────────────────────────┘
-
-┌───────────────────────────────────────────────┐
-│ TOPIC: payment-completed                     │
-│ Meaning: Customer payment was successful     │
-│ Retention: 7 years for financial audit       │
-│ Write: Payment Service                       │
-│ Read: Billing Ledger and Delivery Coordinator│
-│ Access: Restricted financial permissions     │
-└───────────────────────────────────────────────┘
-             │                         │
-             └───────────┬─────────────┘
-                         ▼
-              DELIVERY COORDINATOR
-              Waits for prepared + paid
-                         │
-                         │ publishes DeliveryRequested
-                         ▼
+             │
+             ├──────────────────────────────┐
+             ▼                              ▼
+┌────────────────────────┐     ┌────────────────────────┐
+│ KITCHEN GROUP          │     │ PAYMENT GROUP          │
+│ Chef A → P0            │     │ Payment Pod A → P0     │
+│ Chef B → P1            │     │ Payment Pod B → P1     │
+│ Job: Prepare pizzas    │     │ Job: Collect payment   │
+└────────────────────────┘     └────────────────────────┘
+             │                              │
+             │ Kitchen Service publishes    │ Payment Service publishes
+             │ PizzaPrepared                │ PaymentCompleted
+             ▼                              ▼
+┌─────────────────────────────┐ ┌─────────────────────────────┐
+│ TOPIC: pizza-prepared       │ │ TOPIC: payment-completed    │
+│ Meaning: Kitchen completed  │ │ Meaning: Payment succeeded  │
+│ Retention: 3 days           │ │ Retention: 7-year audit     │
+│ Write: Kitchen Service      │ │ Write: Payment Service      │
+│ Read: Delivery Coordinator  │ │ Read: Billing + Delivery    │
+└─────────────────────────────┘ │ Access: Restricted          │
+             │                 └─────────────────────────────┘
+             │                              │
+             │                              ├───────────────► BILLING GROUP
+             │                              │                 Records revenue
+             │                              │
+             └──────────────┬───────────────┘
+                            ▼
+                 DELIVERY COORDINATOR GROUP
+                 Consumes both topics
+                 Matches events by orderId
+                 Waits for prepared + paid
+                            │
+                            │ publishes DeliveryRequested
+                            ▼
 ┌───────────────────────────────────────────────┐
 │ TOPIC: delivery-requested                    │
 │ Meaning: An order is ready for delivery      │
