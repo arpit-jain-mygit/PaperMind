@@ -446,11 +446,14 @@ ORDER APPLICATION — Producer
 │ Retention: 3 days           │ │ Retention: 7-year audit     │
 │ Write: Kitchen Service      │ │ Write: Payment Service      │
 │ Read: Delivery Coordinator  │ │ Read: Billing + Delivery    │
-└─────────────────────────────┘ │ Access: Restricted          │
-             │                 └─────────────────────────────┘
+│                             │ │ Access: Restricted          │
+│ P0: Prepared A, Prepared C  │ │ P0: Paid A, Paid C         │
+│ P1: Prepared B, Prepared D  │ │ P1: Paid B, Paid D         │
+└─────────────────────────────┘ └─────────────────────────────┘
              │                              │
              │                              ├───────────────► BILLING GROUP
-             │                              │                 Records revenue
+             │                              │                 Bill A → P0
+             │                              │                 Bill B → P1
              │                              │
              └──────────────┬───────────────┘
                             ▼
@@ -458,6 +461,8 @@ ORDER APPLICATION — Producer
                  Consumes both topics
                  Matches events by orderId
                  Waits for prepared + paid
+                 Coordinator pods share their partitions
+                 State store tracks prepared/paid by orderId
                             │
                             │ publishes DeliveryRequested
                             ▼
@@ -468,10 +473,35 @@ ORDER APPLICATION — Producer
 │ Write: Delivery Coordinator                  │
 │ Read: Driver Assignment Service              │
 │ Processing: Assign a driver and track pickup │
+│                                               │
+│ P0: Offset 0 → Deliver A, Offset 1 → Deliver C│
+│ P1: Offset 0 → Deliver B, Offset 1 → Deliver D│
 └───────────────────────────────────────────────┘
+                         │
+                         ▼
+              DRIVER ASSIGNMENT GROUP
+              Driver Pod A → P0
+              Driver Pod B → P1
 ```
 
 The partition does not represent cooking, payment or delivery. Each topic still has partitions only for ordering and parallelism.
+
+Every topic has its own independent partitions and offsets:
+
+```text
+pizza-orders P0 offset 1
+≠ pizza-prepared P0 offset 1
+≠ payment-completed P0 offset 1
+≠ delivery-requested P0 offset 1
+```
+
+An offset is meaningful only with its topic and partition:
+
+```text
+Topic + Partition + Offset
+```
+
+Using the same `orderId` key can place an order in corresponding partitions when topics use the same partition count and partitioning strategy. This is useful for a Kafka Streams join. A normal multi-topic consumer group is not guaranteed to assign the same partition number from both topics to the same consumer, so its coordination state must be shared or partition-aware. Each topic is still an independent ordered log; Kafka does not provide cross-topic ordering.
 
 ```text
 Topic          → Business event meaning and policy boundary
