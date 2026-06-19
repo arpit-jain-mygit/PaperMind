@@ -75,46 +75,56 @@ flowchart LR
 flowchart TB
     CUSTOMER["👤 Customer<br/>Places pizza order"]:::actor
     ORDER["Order Service<br/><b>PRODUCER</b><br/>Produces event: OrderPlaced"]:::producer
-    PO["TOPIC: pizza-orders<br/>Meaning: order was placed<br/>Retention: 7 days<br/>WRITE: Order Service<br/>READ: kitchen-group, payment-group<br/><br/>PO-P0: offsets 0,1...<br/>PO-P1: offsets 0,1..."]:::topic
     KITCHEN["Kitchen Service<br/><b>CONSUMER + PRODUCER</b><br/>Group: kitchen-group<br/>Pod A → PO-P0<br/>Pod B → PO-P1<br/>Consumes: OrderPlaced<br/>Produces: PizzaPrepared"]:::both
     PAYMENT["Payment Service<br/><b>CONSUMER + PRODUCER</b><br/>Group: payment-group<br/>Pod A → PO-P0<br/>Pod B → PO-P1<br/>Consumes: OrderPlaced<br/>Produces: PaymentCompleted"]:::both
     STAFF["👩‍🍳 Kitchen Staff<br/>Prepare and mark pizza ready"]:::actor
-    PP["TOPIC: pizza-prepared<br/>Meaning: kitchen completed order<br/>Retention: 3 days<br/>WRITE: Kitchen Service<br/>READ: delivery-coordinator-group<br/>Permission: operational<br/><br/>PP-P0: offsets 0,1...<br/>PP-P1: offsets 0,1..."]:::topic
-    PC["TOPIC: payment-completed<br/>Meaning: payment succeeded<br/>Retention: 7-year financial audit<br/>WRITE: Payment Service<br/>READ: billing-group, delivery-coordinator-group<br/>Permission: restricted financial<br/><br/>PC-P0: offsets 0,1...<br/>PC-P1: offsets 0,1..."]:::topic
     BILLING["Billing Service<br/><b>CONSUMER</b><br/>Group: billing-group<br/>Consumer A → PC-P0<br/>Consumer B → PC-P1<br/>Consumes: PaymentCompleted<br/>Job: record revenue"]:::consumer
     ACCOUNTANT["🧑‍💼 Accountant<br/>Reviews ledger and reconciles revenue"]:::actor
     LEDGER[("Billing Ledger DB<br/>Payment and order records")]:::store
     JOIN["Delivery Coordinator Service<br/><b>CONSUMER + PRODUCER</b><br/>Group: delivery-coordinator-group<br/>Consumer Pods A and B<br/><br/>Consumes PizzaPrepared + PaymentCompleted<br/>Joins by orderId<br/>Stores first-arriving event<br/>Waits asynchronously for matching event<br/>Produces DeliveryRequested when both exist"]:::both
     JOINSTORE[("Join State Store<br/>orderId → prepared?, paid?<br/>Example A: true / false<br/>Example B: true / true")]:::store
-    DR["TOPIC: delivery-requested<br/>Meaning: order is ready for delivery<br/>Retention: 3 days<br/>WRITE: Delivery Coordinator<br/>READ: driver-group<br/>Permission: delivery operations<br/><br/>DR-P0: offsets 0,1...<br/>DR-P1: offsets 0,1..."]:::topic
     DRIVER["Driver Assignment Service<br/><b>CONSUMER</b><br/>Group: driver-group<br/>Pod A → DR-P0<br/>Pod B → DR-P1<br/>Consumes: DeliveryRequested<br/>Job: assign delivery partner"]:::consumer
     PARTNER["🛵 Delivery Partner<br/>Accepts assignment, picks up and delivers"]:::actor
 
-    KAFKA["Kafka Cluster<br/><b>3 Brokers</b><br/><br/>Broker 1: partition leaders + replicas<br/>Broker 2: partition leaders + replicas<br/>Broker 3: partition leaders + replicas<br/><br/>Topic partitions are distributed and replicated<br/>across these brokers"]:::cluster
+    subgraph KAFKA["Kafka Cluster — shared by Kitchen, Payment, Billing and Delivery"]
+        direction TB
+
+        subgraph BROKERS["Physical Kafka brokers"]
+            direction LR
+            B1["Broker 1<br/>Leaders: PO-P0, PC-P1<br/>Also stores replicas"]:::cluster
+            B2["Broker 2<br/>Leaders: PO-P1, PP-P0<br/>Also stores replicas"]:::cluster
+            B3["Broker 3<br/>Leaders: PC-P0, DR-P0<br/>Also stores replicas"]:::cluster
+        end
+
+        PO["TOPIC: pizza-orders<br/>Retention: 7 days<br/>WRITE: Order Service<br/>READ: kitchen-group, payment-group<br/>PO-P0, PO-P1"]:::topic
+        PP["TOPIC: pizza-prepared<br/>Retention: 3 days<br/>WRITE: Kitchen Service<br/>READ: delivery-coordinator-group<br/>PP-P0, PP-P1"]:::topic
+        PC["TOPIC: payment-completed<br/>Retention: 7-year audit<br/>WRITE: Payment Service<br/>READ: billing-group, delivery-coordinator-group<br/>PC-P0, PC-P1"]:::topic
+        DR["TOPIC: delivery-requested<br/>Retention: 3 days<br/>WRITE: Delivery Coordinator<br/>READ: driver-group<br/>DR-P0, DR-P1"]:::topic
+
+        B1 -.->|"hosts leaders / replicas"| PO
+        B2 -.->|"hosts leaders / replicas"| PP
+        B3 -.->|"hosts leaders / replicas"| PC
+        B1 -.->|"replica copies"| DR
+    end
 
     CUSTOMER -->|"places order"| ORDER
-    ORDER -->|"publishes EVENT: OrderPlaced(orderId)"| PO
-    PO -->|"fan-out to kitchen-group"| KITCHEN
-    PO -->|"fan-out to payment-group"| PAYMENT
+    ORDER -->|"produce OrderPlaced via PO partition leader broker"| PO
+    PO -->|"leader broker serves kitchen-group"| KITCHEN
+    PO -->|"leader broker serves payment-group"| PAYMENT
     STAFF -->|"prepares pizza through kitchen workflow"| KITCHEN
-    KITCHEN -->|"publishes EVENT: PizzaPrepared(orderId)"| PP
-    PAYMENT -->|"publishes EVENT: PaymentCompleted(orderId)"| PC
-    PC -->|"billing-group consumes"| BILLING
+    KITCHEN -->|"produce PizzaPrepared via PP leader broker"| PP
+    PAYMENT -->|"produce PaymentCompleted via PC leader broker"| PC
+    PC -->|"leader broker serves billing-group"| BILLING
     BILLING -->|"writes revenue record"| LEDGER
     ACCOUNTANT -->|"reviews / reconciles"| LEDGER
-    PP -->|"delivery group receives PizzaPrepared"| JOIN
-    PC -->|"delivery group receives PaymentCompleted"| JOIN
+    PP -->|"leader broker serves PizzaPrepared"| JOIN
+    PC -->|"leader broker serves PaymentCompleted"| JOIN
     JOIN -->|"save partial state; no blocked thread"| JOINSTORE
     JOINSTORE -->|"both prepared=true and paid=true"| JOIN
-    JOIN -->|"publishes EVENT: DeliveryRequested(orderId)"| DR
-    DR -->|"driver-group consumes"| DRIVER
+    JOIN -->|"produce DeliveryRequested via DR leader broker"| DR
+    DR -->|"leader broker serves driver-group"| DRIVER
     DRIVER -->|"assigns order"| PARTNER
     PARTNER -->|"delivers order"| CUSTOMER
-
-    KAFKA -.->|"stores/replicates PO partitions"| PO
-    KAFKA -.->|"stores/replicates PP partitions"| PP
-    KAFKA -.->|"stores/replicates PC partitions"| PC
-    KAFKA -.->|"stores/replicates DR partitions"| DR
 
     classDef actor fill:#F3F4F6,stroke:#4B5563,color:#111827,stroke-width:2px;
     classDef producer fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A,stroke-width:2px;
@@ -123,7 +133,33 @@ flowchart TB
     classDef topic fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:2px;
     classDef store fill:#FCE7F3,stroke:#DB2777,color:#831843,stroke-width:2px;
     classDef cluster fill:#CCFBF1,stroke:#0F766E,color:#134E4A,stroke-width:3px;
+    style KAFKA fill:#F0FDFA,stroke:#0F766E,stroke-width:4px
+    style BROKERS fill:#ECFDF5,stroke:#14B8A6,stroke-width:2px
 ```
+
+The actual network path is:
+
+```text
+Producer service
+→ broker that leads the selected topic partition
+→ partition stored and replicated in the Kafka cluster
+→ consumer reads from Kafka through the partition's broker
+```
+
+For Kitchen Service:
+
+```text
+Consume:
+PO-P0 leader is Broker 1
+Broker 1 → Kitchen Pod A
+
+Produce:
+Kitchen Pod A → PizzaPrepared
+PP-P0 leader is Broker 2
+Kitchen Pod A → Broker 2 → PP-P0
+```
+
+Kitchen Service is not permanently attached to Broker 1 or Broker 2. Kafka clients discover the current partition leaders and connect to the appropriate broker automatically.
 
 ### The same Kafka concepts applied to DCP
 
