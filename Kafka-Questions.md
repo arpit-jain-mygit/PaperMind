@@ -4,6 +4,48 @@ This guide explains Kafka concepts in simple language and relates each concept t
 
 DCP receives financial documents from S3, email, APIs and other sources. It extracts data using AI providers, validates the result, routes uncertain documents for L1/L2 review and disseminates approved data to downstream systems.
 
+## Table of Contents
+
+- [Start here: Kafka components working together](#start-here-how-do-kafka-producers-topics-partitions-and-consumers-work-together)
+
+1. [Why does DCP use Kafka?](#1-why-does-dcp-use-kafka)
+2. [What are brokers, topics, partitions and records?](#2-what-are-brokers-topics-partitions-and-records)
+3. [What does a Kafka producer do?](#3-what-does-a-kafka-producer-do)
+4. [What does a Kafka consumer do?](#4-what-does-a-kafka-consumer-do)
+5. [What is a consumer group?](#5-what-is-a-consumer-group)
+6. [Why are partitions important?](#6-why-are-partitions-important)
+7. [How does Kafka preserve ordering?](#7-how-does-kafka-preserve-ordering)
+8. [How should DCP choose a partition key?](#8-how-should-dcp-choose-a-partition-key)
+9. [How many partitions should a topic have?](#9-how-many-partitions-should-a-topic-have)
+10. [What is an offset?](#10-what-is-an-offset)
+11. [When should a consumer commit its offset?](#11-when-should-a-consumer-commit-its-offset)
+12. [What are Kafka delivery guarantees?](#12-what-are-kafka-delivery-guarantees)
+13. [What does Kafka exactly-once really mean?](#13-what-does-kafka-exactly-once-really-mean)
+14. [How does DCP prevent duplicate processing?](#14-how-does-dcp-prevent-duplicate-processing)
+15. [What is an idempotent producer?](#15-what-is-an-idempotent-producer)
+16. [What do acknowledgements mean?](#16-what-do-acknowledgements-mean)
+17. [What are replication, leader, follower and ISR?](#17-what-are-replication-leader-follower-and-isr)
+18. [What happens when a Kafka broker fails?](#18-what-happens-when-a-kafka-broker-fails)
+19. [What is consumer lag?](#19-what-is-consumer-lag)
+20. [How does DCP handle backpressure and traffic spikes?](#20-how-does-dcp-handle-backpressure-and-traffic-spikes)
+21. [What is a consumer rebalance?](#21-what-is-a-consumer-rebalance)
+22. [How should Kafka retries be designed?](#22-how-should-kafka-retries-be-designed)
+23. [What is a dead-letter topic?](#23-what-is-a-dead-letter-topic)
+24. [What are retention and log compaction?](#24-what-are-retention-and-log-compaction)
+25. [How should event schemas be versioned?](#25-how-should-event-schemas-be-versioned)
+26. [What is the transactional outbox pattern?](#26-what-is-the-transactional-outbox-pattern)
+27. [How does Kafka support choreography, Saga, CQRS and event sourcing?](#27-how-does-kafka-support-choreography-saga-cqrs-and-event-sourcing)
+28. [What are Kafka Connect and Kafka Streams?](#28-what-are-kafka-connect-and-kafka-streams)
+29. [How should Kafka be secured?](#29-how-should-kafka-be-secured)
+30. [What should be monitored in production?](#30-what-should-be-monitored-in-production)
+31. [How should Kafka disaster recovery be designed?](#31-how-should-kafka-disaster-recovery-be-designed)
+32. [Kafka or RabbitMQ: how do you choose?](#32-kafka-or-rabbitmq-how-do-you-choose)
+33. [Common Kafka failure scenarios in DCP](#33-common-kafka-failure-scenarios-in-dcp)
+34. [Architect-level DCP Kafka design](#34-architect-level-dcp-kafka-design)
+35. [Architect interview summary](#35-architect-interview-summary)
+
+---
+
 ## Start here: How do Kafka producers, topics, partitions and consumers work together?
 
 ### Diagram legend
@@ -79,46 +121,6 @@ The diagram demonstrates:
 - Different consumer groups receive the same event independently.
 - Consumers inside one group divide the topic partitions.
 - The Delivery Coordinator performs a stateful asynchronous join instead of blocking a thread.
-
-## Table of Contents
-
-- [Start here: Kafka components working together](#start-here-how-do-kafka-producers-topics-partitions-and-consumers-work-together)
-
-1. [Why does DCP use Kafka?](#1-why-does-dcp-use-kafka)
-2. [What are brokers, topics, partitions and records?](#2-what-are-brokers-topics-partitions-and-records)
-3. [What does a Kafka producer do?](#3-what-does-a-kafka-producer-do)
-4. [What does a Kafka consumer do?](#4-what-does-a-kafka-consumer-do)
-5. [What is a consumer group?](#5-what-is-a-consumer-group)
-6. [Why are partitions important?](#6-why-are-partitions-important)
-7. [How does Kafka preserve ordering?](#7-how-does-kafka-preserve-ordering)
-8. [How should DCP choose a partition key?](#8-how-should-dcp-choose-a-partition-key)
-9. [How many partitions should a topic have?](#9-how-many-partitions-should-a-topic-have)
-10. [What is an offset?](#10-what-is-an-offset)
-11. [When should a consumer commit its offset?](#11-when-should-a-consumer-commit-its-offset)
-12. [What are Kafka delivery guarantees?](#12-what-are-kafka-delivery-guarantees)
-13. [What does Kafka exactly-once really mean?](#13-what-does-kafka-exactly-once-really-mean)
-14. [How does DCP prevent duplicate processing?](#14-how-does-dcp-prevent-duplicate-processing)
-15. [What is an idempotent producer?](#15-what-is-an-idempotent-producer)
-16. [What do acknowledgements mean?](#16-what-do-acknowledgements-mean)
-17. [What are replication, leader, follower and ISR?](#17-what-are-replication-leader-follower-and-isr)
-18. [What happens when a Kafka broker fails?](#18-what-happens-when-a-kafka-broker-fails)
-19. [What is consumer lag?](#19-what-is-consumer-lag)
-20. [How does DCP handle backpressure and traffic spikes?](#20-how-does-dcp-handle-backpressure-and-traffic-spikes)
-21. [What is a consumer rebalance?](#21-what-is-a-consumer-rebalance)
-22. [How should Kafka retries be designed?](#22-how-should-kafka-retries-be-designed)
-23. [What is a dead-letter topic?](#23-what-is-a-dead-letter-topic)
-24. [What are retention and log compaction?](#24-what-are-retention-and-log-compaction)
-25. [How should event schemas be versioned?](#25-how-should-event-schemas-be-versioned)
-26. [What is the transactional outbox pattern?](#26-what-is-the-transactional-outbox-pattern)
-27. [How does Kafka support choreography, Saga, CQRS and event sourcing?](#27-how-does-kafka-support-choreography-saga-cqrs-and-event-sourcing)
-28. [What are Kafka Connect and Kafka Streams?](#28-what-are-kafka-connect-and-kafka-streams)
-29. [How should Kafka be secured?](#29-how-should-kafka-be-secured)
-30. [What should be monitored in production?](#30-what-should-be-monitored-in-production)
-31. [How should Kafka disaster recovery be designed?](#31-how-should-kafka-disaster-recovery-be-designed)
-32. [Kafka or RabbitMQ: how do you choose?](#32-kafka-or-rabbitmq-how-do-you-choose)
-33. [Common Kafka failure scenarios in DCP](#33-common-kafka-failure-scenarios-in-dcp)
-34. [Architect-level DCP Kafka design](#34-architect-level-dcp-kafka-design)
-35. [Architect interview summary](#35-architect-interview-summary)
 
 ---
 
