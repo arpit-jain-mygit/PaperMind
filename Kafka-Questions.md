@@ -2341,22 +2341,148 @@ Consumer group + Topic + Partition
 
 ### One group with multiple partitions and consumers
 
+A consumer can own multiple partitions. For example:
+
 ```text
 Kitchen Consumer A → P0, P1
 Kitchen Consumer B → P2, P3
 ```
 
-The group still has a separate committed offset for every partition:
+**Important: These partitions are NOT processed sequentially (one at a time). They are processed in parallel/interleaved.**
+
+#### How does a consumer process multiple partitions?
+
+When Consumer A calls `poll()`, it fetches from ALL assigned partitions simultaneously:
+
+```
+Consumer A calls poll()
+    ↓
+Kafka fetches from P0 AND P1 at the same time
+    ↓
+Consumer receives batch: [P0-offset-5, P1-offset-3, P0-offset-6, P1-offset-4, P0-offset-7]
+    ↓
+Consumer processes these in the order received (INTERLEAVED)
+    ↓
+Not: "Finish all P0, then process P1"
+Yes: "Process P0-5, then P1-3, then P0-6, then P1-4, then P0-7"
+```
+
+**The consumer doesn't wait to finish one partition before reading from another.**
+
+#### 🍕 Pizza Store Example
+
+```text
+Kitchen Consumer A owns:
+  - Partition 0 (orders from Location 1)
+  - Partition 1 (orders from Location 2)
+
+Consumer A's poll() loop:
+
+Iteration 1:
+  ├─ Fetches from P0 and P1 simultaneously
+  ├─ Gets: [P0-order-001, P1-order-051, P0-order-002, P1-order-052]
+  ├─ Processes all 4 in order (interleaved from both partitions)
+  └─ Commits offsets for both P0 and P1
+
+Iteration 2:
+  ├─ Fetches from P0 and P1 again
+  ├─ Gets: [P0-order-003, P0-order-004, P1-order-053, P1-order-054]
+  ├─ Processes all 4 in order
+  └─ Commits offsets for both P0 and P1
+
+Timeline:
+  t=0ms:   Process order-001 (from P0)
+  t=10ms:  Process order-051 (from P1)
+  t=20ms:  Process order-002 (from P0)  ← NOT waiting for P0 to finish
+  t=30ms:  Process order-052 (from P1)
+  ...
+  
+Result: Both partitions progress together, not one-by-one
+```
+
+#### 💾 DCP Example
+
+```text
+Extraction Consumer owns:
+  - Partition 0 (documents from S3)
+  - Partition 1 (documents from Email)
+
+Consumer's poll() loop:
+
+Iteration 1:
+  ├─ Fetches from P0 and P1 simultaneously
+  ├─ Gets: [P0-doc-S3-001, P1-doc-email-051, P0-doc-S3-002, P1-doc-email-052]
+  │
+  ├─ Process P0-doc-S3-001 (extract with SparkAir)
+  ├─ Process P1-doc-email-051 (extract with SparkAir)
+  ├─ Process P0-doc-S3-002 (extract with SparkAir)
+  ├─ Process P1-doc-email-052 (extract with SparkAir)
+  │
+  ├─ Commit offset for P0 → 2
+  └─ Commit offset for P1 → 2
+
+Iteration 2:
+  ├─ Fetches from P0 and P1 again
+  ├─ Gets: [P0-doc-S3-003, P0-doc-S3-004, P1-doc-email-053]
+  │
+  ├─ Process P0-doc-S3-003
+  ├─ Process P0-doc-S3-004  ← P0 progresses faster
+  ├─ Process P1-doc-email-053
+  │
+  ├─ Commit offset for P0 → 4
+  └─ Commit offset for P1 → 3
+
+Timeline:
+  t=0s:    Extract S3-001 (from P0)
+  t=2s:    Extract email-051 (from P1)
+  t=4s:    Extract S3-002 (from P0)  ← Not waiting for P0 to "finish"
+  t=6s:    Extract email-052 (from P1)
+  t=8s:    Extract S3-003 (from P0)
+  t=10s:   Extract S3-004 (from P0)
+  t=12s:   Extract email-053 (from P1)
+
+Result: Partitions progress independently, messages are processed in the order they arrive
+```
+
+#### The group still has a separate committed offset for every partition
 
 ```text
 Kitchen group:
-P0 → 120
-P1 → 87
-P2 → 203
-P3 → 51
+P0 → 120  (committed offset for Partition 0)
+P1 → 87   (committed offset for Partition 1)
+P2 → 203  (committed offset for Partition 2)
+P3 → 51   (committed offset for Partition 3)
 ```
 
-There is no single offset for the whole topic or consumer group.
+**Key insight: There is no single offset for the whole topic or consumer group.**
+
+Each partition tracks its own progress independently, even if owned by the same consumer.
+
+#### Important implications
+
+| Aspect | Behavior |
+|--------|----------|
+| **Fetch pattern** | Parallel from all assigned partitions |
+| **Processing order** | Interleaved in the order messages arrive |
+| **Offset commit** | Independent per partition |
+| **Partition rebalance** | If Consumer A dies, P0 and P1 both reassigned to other consumers |
+| **Maximum parallelism** | Consumer's threads/thread pool (default is single-threaded poll) |
+
+#### Single-threaded vs multi-threaded consumer
+
+**Single-threaded consumer (most common):**
+```
+poll() → Get batch from P0 and P1 → Process sequentially → Commit offsets
+         (but P0 and P1 messages are fetched in parallel by broker)
+```
+
+**Multi-threaded consumer (less common, needs careful offset management):**
+```
+poll() → Get batch from P0 and P1 → Spawn threads to process in parallel
+         (both partitions can be processed truly concurrently)
+```
+
+Most Kafka consumers are single-threaded at the application level, but Kafka itself fetches from multiple partitions concurrently at the network level.
 
 ### What happens when a consumer fails?
 
