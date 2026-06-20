@@ -4343,21 +4343,225 @@ A DLT is not a solution by itself. It requires:
 
 ## 24. What are retention and log compaction?
 
-### Time or size retention
+### Time or Size Retention (TTL)
 
 Kafka keeps events for a configured time or until size limits are reached:
 
-```text
-Keep document processing events for 30 days
+```properties
+retention.days=7
+retention.hours=168
+retention.bytes=1073741824  # 1GB
+```
+
+After the retention period expires, Kafka's cleanup thread automatically **DELETES** old messages.
+
+---
+
+### Why Is Retention Required?
+
+#### 1️⃣ **Storage is Finite**
+
+```
+Without TTL (infinite retention):
+  1000 messages/day × 365 days = 365,000 messages/year
+  Each message = 1KB → 365 MB/year
+  10 years = 3.65 GB (× 3 replication = 11 GB!)
+
+With TTL (7 days):
+  Only ~7000 messages stored
+  ~7 MB (× 3 replication = 21 MB)
+  
+Savings: 99%+ less storage needed!
+```
+
+#### 2️⃣ **Cost**
+
+```
+SSD storage: $100-200/TB/year
+HDD storage: $20-50/TB/year
+Network bandwidth: $0.12/GB transferred
+
+Without TTL (100 TB): $2,000-20,000/year
+With TTL (100 GB): $2-20/year
+```
+
+#### 3️⃣ **Performance**
+
+```
+Large log files cause:
+  • Slower message reads (more disk seeks)
+  • Slower log compaction and cleanup
+  • Slower consumer rebalancing (copying data)
+  • Slower broker recovery after crash
+
+Example: Broker crash recovery
+  Without TTL (10 TB): 30+ minutes
+  With TTL (10 GB): 30 seconds
+```
+
+#### 4️⃣ **Privacy & Compliance**
+
+```
+GDPR: Right to be forgotten
+  TTL = Automatic deletion (no manual cleanup needed)
+  Don't keep customer data longer than necessary
+```
+
+---
+
+### How Long Should TTL Be?
+
+#### **The Key Principle**
+
+```
+Kafka is for REAL-TIME PROCESSING
+Database is for LONG-TERM STORAGE
+
+Keep in Kafka: As long as service might be down
+Keep in Database: As long as business requires
+```
+
+#### 🍕 **Pizza Store Example: 7-Day TTL**
+
+```
+Day 1: Order arrives → Kitchen processes → Extracts immediately
+       Data goes to database
+       
+Day 2: Kitchen crashes, comes back up Day 3
+       Needs to replay orders from Day 2
+       Kafka has them! (within 7-day window)
+       
+Day 8: Old orders deleted from Kafka
+       But data is already in database ✓
+       
+Why 7 days?
+  • Service unlikely to be down > 7 days
+  • Data safe in database, doesn't need Kafka backup
+  • Reduces storage cost
+```
+
+#### 💾 **DCP Example: Single 7-Day TTL for ALL Topics**
+
+```
+WRONG approach (what I suggested before):
+  document-sourced: 30 days
+  document-extracted: 7 days
+  document-published: 90 days
+  audit-events: 365 days
+  
+Problem: Why keep in Kafka longer than needed?
+
+CORRECT approach:
+  All operational topics: 7 days
+    Why? Service recovery buffer
+    
+  Separate audit database: 365 days
+    Why? Compliance requirement, not Kafka's job
+    
+  Example:
+    document-sourced (Kafka): 7 days
+      ↓ (during processing)
+    Database: Kept forever (business rules)
+    
+    audit-events (Kafka): 7 days
+      ↓ (during processing)
+    Audit database: Kept 365 days (compliance)
+```
+
+#### **Why NOT 30/90/365 Days in Kafka?**
+
+```
+Scenario: Extraction crashes on Day 2
+
+With 7-day Kafka retention:
+  Day 2: Documents buffered in Kafka
+  Day 3: Service recovers, replays from Kafka ✓
+  Day 8: Old Kafka messages deleted
+         (data already in database) ✓
+
+With 30-day Kafka retention:
+  Days 8-30: Useless data in Kafka (no service recovery benefit)
+  Just wasting storage cost!
+  
+Problem: Confusing two requirements:
+  • How long to keep DATA for recovery? (7 days)
+  • How long to keep DATA for business? (database job, not Kafka)
+```
+
+---
+
+### At Which Level Does TTL Apply?
+
+#### **Configuration Level: TOPIC**
+
+```bash
+kafka-topics --create \
+  --topic document-sourced \
+  --config retention.days=7
+```
+
+All partitions in the topic inherit this policy.
+
+#### **Enforcement Level: PARTITION**
+
+```
+Topic: document-sourced (retention = 7 days)
+├── Partition 0
+│   ├── Offsets 0-500: From 7 days ago → DELETED
+│   ├── Offsets 501-1000: From today → KEPT
+│   └── Cleanup happens independently
+│
+├── Partition 1
+│   ├── Offsets 0-400: From 7 days ago → DELETED
+│   ├── Offsets 401-900: From today → KEPT
+│   └── Cleanup happens independently
+│
+└── Partition 2 (same pattern)
+```
+
+Each partition's cleanup happens independently, but all follow the same retention policy from the topic.
+
+---
+
+### Correct DCP Retention Design
+
+| Topic | Kafka Retention | Why | Separate Storage |
+|-------|-----------------|-----|-----------------|
+| document-sourced | 7 days | Service recovery buffer | Database: Keep per business rules |
+| document-extracted | 7 days | Service recovery buffer | Database: Keep per business rules |
+| document-published | 7 days | Service recovery buffer | Database: Keep per business rules |
+| audit-events | 7 days | Real-time processing | Audit DB: 365 days (compliance) |
+
+**Key insight:** Don't keep data in Kafka longer just because business needs it longer. Keep it in **Kafka for recovery**, keep it in **database for business needs**.
+
+---
+
+### Edge Case: Consumer Lag Exceeds Retention
+
+```
+Scenario: Consumer is slow
+
+document-sourced retention: 7 days
+Consumer lag: 10 days behind
+
+Problem:
+  Consumer wants offset 100 (from 10 days ago)
+  But offset 100 was deleted (older than 7 days)
+  Error: OffsetOutOfRange
+
+Solutions:
+  1. Speed up consumer (add workers)
+  2. Increase retention (but costs more)
+  3. Reset consumer offset (loses data)
 ```
 
 Consumption does not immediately delete the event.
 
 This enables:
 
-- Replay
-- New consumers
-- Recovery after downtime
+- **Replay:** Service crash on Day 2, resume from offset on Day 3
+- **New consumers:** Joining consumer can read last 7 days of history
+- **Recovery after downtime:** Come back up and catch the backlog
 
 ### Log compaction
 
