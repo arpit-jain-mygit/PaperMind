@@ -1370,11 +1370,85 @@ Producer can build reliable systems
 
 #### Three Levels of Safety
 
-| Setting | Meaning | Wait For | Latency | Risk |
-|---------|---------|----------|---------|------|
-| `acks=0` | Fire and forget | Nothing | ⚡ Fastest | Broker crashes = data lost |
-| `acks=1` | Leader acknowledged | Leader writes to disk | ⏱️ Medium | Leader dies before replicating = data lost |
-| `acks=all` | All replicas acknowledged | All in-sync replicas write | 🐢 Slowest | Safest — needs 2+ replicas to fail |
+| Setting | Meaning | Wait For | Latency | Risk | Real-Life Use Cases |
+|---------|---------|----------|---------|------|-------------------|
+| `acks=0` | Fire and forget | Nothing | ⚡ Fastest | Broker crashes = data lost | Metrics, logs, analytics where loss is acceptable. Example: Sending app crashes/heartbeats to monitoring system |
+| `acks=1` | Leader acknowledged | Leader writes to disk | ⏱️ Medium | Leader dies before replicating = data lost | Pizza orders, user actions, API events. Speed matters more than absolute safety. Loss during broker failure is rare and tolerable |
+| `acks=all` | All replicas acknowledged | All in-sync replicas write | 🐢 Slowest | Safest — needs 2+ replicas to fail | Financial transactions (DCP: $10,000 invoices), inventory changes, payment records. Data loss = audit failure, legal liability, revenue loss |
+
+#### When to Use Each acks Value
+
+**acks=0 (Never wait) — Metrics & Non-Critical Events**
+
+```text
+Real-life use cases:
+  • Application metrics (CPU, memory, response times)
+  • User page view tracking
+  • Internal logging (where some logs can be lost)
+  • Mobile analytics
+  • IoT sensor readings
+  
+Why acks=0?
+  - These are high-volume, low-value events
+  - Losing 0.1% is acceptable
+  - Speed is critical (don't block producer)
+  - If one metric is lost, aggregate data is still good
+  
+Example: Mobile app sends 10,000 events/sec
+  - Can't afford 30ms per event × acks=all
+  - acks=0 lets producer send in 100 microseconds
+  - If some crash, daily aggregate still accurate
+```
+
+**acks=1 (Wait for leader) — Default for Most Businesses**
+
+```text
+Real-life use cases:
+  • Pizza orders (Order Service → Kitchen)
+  • E-commerce orders (Shopping Cart → Payment)
+  • User actions (clicks, form submissions)
+  • API events (request/response pairs)
+  • Session logs
+  
+Why acks=1?
+  - Business data is important but recoverable
+  - If leader crashes, at most 1 event lost
+  - 1-5ms latency is acceptable
+  - 99.99% uptime + replication means loss is rare
+  
+Example: Order from Pizza Store
+  - Customer expects response in ~1 second
+  - acks=1 adds 1-3ms (acceptable)
+  - If broker fails and 1 order lost, customer re-orders
+  - Customer service can handle occasional failures
+```
+
+**acks=all (Wait for all replicas) — Mission-Critical Data**
+
+```text
+Real-life use cases:
+  • Financial transactions (DCP: invoices, payments)
+  • Banking ledger entries
+  • Inventory system (stock changes)
+  • Billing records
+  • Compliance/audit events
+  • Order status changes (once marked paid, can't lose it)
+  
+Why acks=all?
+  - Data loss causes financial/legal problems
+  - Losing an invoice is audit failure ($$$)
+  - Losing a payment record breaks reconciliation
+  - 10-30ms latency is acceptable for batch operations
+  
+Example: DCP Financial Document
+  - $10,000 invoice from Acme Corp
+  - acks=all + min_insync_replicas=2
+  - Broker 1, 2, 3 all write = ack sent
+  - Even if Broker 1 and 2 crash, Broker 3 has it
+  - Accounting can be confident data is safe
+```
+
+---
 
 #### 🍕 Pizza Store: acks=1 (Speed-First)
 
