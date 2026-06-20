@@ -2137,6 +2137,55 @@ Required consumers
 = approximately 12–13 consumers
 ```
 
+**What does "20-30% headroom" mean?**
+
+Headroom covers two scenarios:
+
+**Growth (planning for future):**
+```text
+Today:     100 documents/second → 10 consumers needed
+6 months:  200 documents/second → 20 consumers needed (2× growth)
+1 year:    300 documents/second → 30 consumers needed
+
+Headroom calculation:
+10 consumers today
+× 1.3 (30% growth buffer)
+= 13 consumers as safe initial capacity
+
+This gives you 3 extra "slots" before maxing out
+```
+
+**Failure (one consumer crashes):**
+```text
+Running 10 consumers needed for target throughput
+One consumer dies → 9 consumers still active
+Lag starts accumulating while Kubernetes restarts the pod
+
+With 13 partitions and 9 active consumers:
+- 9 consumers get 1 partition each
+- 4 partitions are idle, ready for replacement
+
+Remaining 9 consumers still handle 90% of throughput
+Not ideal, but system doesn't fall behind while recovering
+```
+
+**Why 20-30%?**
+
+```text
+20% = Covers mild growth (1.2× multiplier)
+30% = Covers significant growth (1.3× multiplier)
+   
+Pick based on:
+- How volatile is your traffic?
+- How fast do you want to scale?
+- How much buffer do you want before rebalancing?
+
+DCP example:
+- If documents are growing 40% year-over-year → use 30%
+- If documents are stable → use 20%
+- If unpredictable → use 30%
+```
+
 #### Step 5: Choose enough partitions
 
 If the expected maximum is 20 active consumers:
@@ -2216,6 +2265,218 @@ Measure:
 - Database saturation
 
 Do not create thousands of partitions “just in case.” Too many partitions increase broker metadata, open files, replication work, rebalance work and recovery time.
+
+---
+
+### Can You Increase Partitions at Runtime?
+
+**Short answer: YES, but there are important caveats.**
+
+#### How to Increase Partitions
+
+```bash
+# Add 10 more partitions to a topic (24 → 34)
+kafka-topics --bootstrap-server broker:9092 \
+  --alter \
+  --topic document-sourced \
+  --partitions 34
+```
+
+**This is a live operation.** Existing messages stay where they are; new messages go to the new partitions.
+
+#### The Key Problem: Partition Key Hash Distribution
+
+When you increase partitions, the key-to-partition mapping changes:
+
+```text
+Original setup (10 partitions):
+Key “doc-123” → hash % 10 = Partition 3
+
+After increase (24 partitions):
+Key “doc-123” → hash % 24 = Partition 14
+
+SAME KEY, DIFFERENT PARTITION!
+```
+
+**This breaks ordering guarantees for that key.**
+
+#### 🍕 Pizza Store Example
+
+```text
+Original: 10 partitions
+Orders for customer-123 → all in Partition 3
+
+Timeline:
+  Offset 100: OrderPlaced(customer-123)
+  Offset 101: OrderPlaced(customer-456)
+  Offset 102: PaymentCompleted(customer-123)
+  Offset 103: OrderPlaced(customer-789)
+  
+Consumer sees: Order→Order→Payment (all customer-123 together)
+```
+
+**After increasing to 24 partitions:**
+
+```text
+Old messages (offset 0-1000): Still in original partitions
+  customer-123 messages → Partition 3
+
+New messages (offset 1001+): Distributed to all 24 partitions
+  customer-123 messages → Now go to Partition 14!
+  
+Consumer reading partition 3: Sees ONLY old messages
+                                No new customer-123 events
+Consumer reading partition 14: Sees ONLY new messages
+                                Missing the history
+
+Result: Ordering is broken for customer-123
+        Consumer processing customer-123 sees gaps
+```
+
+#### 💾 DCP Example
+
+```text
+Original: 12 partitions
+Document doc-789 lifecycle:
+  All processing in Partition 5:
+    - DocumentSourced
+    - DataExtracted
+    - ValidationPassed
+    - DataPublished
+
+Increase to 32 partitions:
+
+Old messages (1-10000): Partition 5 still has them
+New messages (10001+): doc-789 goes to Partition 18!
+
+Extraction service (reading P5):
+  Sees: DocumentSourced, DataExtracted, ValidationPassed
+  BUT: Missing DataPublished (it's in P18)
+  
+Quality service (reading P18):
+  Sees: DataPublished first
+  Missing the extraction data (it's in P5)
+  
+Result: Data pipeline breaks for new documents
+```
+
+#### When Increasing Partitions is Safe
+
+You CAN increase partitions safely if:
+
+```text
+1. You don't rely on key ordering across the partition change
+   Example: Random key, or key only matters within partition
+   
+2. You use a distributed stream processor (Kafka Streams, Flink)
+   These handle repartitioning automatically
+   
+3. Your consumer is stateless and reprocesses everything
+   Example: Analytics job that rebuilds from scratch
+```
+
+#### When Increasing Partitions is DANGEROUS
+
+You MUST NOT increase partitions if:
+
+```text
+1. Key ordering matters (DCP!)
+   DocumentId MUST stay in same partition
+   Increasing partitions = breaking ordering
+
+2. Your consumer groups are expecting old messages
+   in their current assignment
+   Rebalance happens, lag spikes
+   
+3. You have a compacted topic with key ordering
+   Log compaction relies on partition boundaries
+```
+
+#### Safe Approach for DCP
+
+**Never increase partitions on operational topics.**
+
+Instead:
+
+```
+Step 1: Size correctly at creation (using sizing guide)
+Step 2: If you miscalculated, create a new topic
+Step 3: Migrate messages using a recopying job:
+        
+        Old topic (10 partitions) 
+             ↓
+        Recopy job (reads all, writes with new config)
+             ↓
+        New topic (24 partitions, reordered by doc ID)
+        
+Step 4: Switch consumers to new topic
+Step 5: Deprecate old topic
+```
+
+**Cost:** ~1-2 hours of recopying work, but preserves ordering.
+
+**Why not just increase?** Because reordering messages by key across all partitions is complex and error-prone without a recopying step.
+
+#### Practical DCP Sizing Strategy
+
+To avoid needing to increase partitions:
+
+```text
+Step 1: Measure current peak
+        100 documents/second
+
+Step 2: Estimate growth
+        Expected 2× in 2 years = 200/second
+
+Step 2b: Add buffer
+         Future 2× + 50% safety margin
+         = 3× = 300/second
+
+Step 3: Calculate partitions needed
+        300/second ÷ 5 docs/sec per consumer
+        = 60 partitions minimum
+
+Step 4: Round up and overprovision
+        ~72 partitions (plenty of headroom)
+
+Step 5: Validate with load test
+        Run at 3× peak, confirm queue clears
+        
+Step 6: Done
+        You won't need to increase for years
+        All documents keep their partition assignment
+```
+
+**Cost-benefit:**
+
+```text
+Cost of oversizing:
+  - ~30-50 more files per broker
+  - ~50ms longer rebalance (one-time)
+  - Minimal metadata overhead
+  
+Cost of increasing partitions later:
+  - Document reordering breaks
+  - Full data recopy required (~hours)
+  - Possible SLA breach
+  - Manual intervention
+
+Verdict: Oversize upfront. Much cheaper.
+```
+
+---
+
+### Summary: Partition Sizing Best Practices
+
+| Decision | DCP Best Practice |
+|----------|-------------------|
+| **Initial partition count** | 3× peak expected load |
+| **Growth buffer** | 30% headroom (1.3× multiplier) |
+| **Failure buffer** | Extra partitions for 1-2 pod crashes |
+| **Increasing partitions** | Don't. Size correctly at creation |
+| **If miscalculated** | Create new topic + recopy |
+| **Key ordering** | NEVER increase partitions on topic |
+| **Monitoring** | Alert on per-partition lag > 30 seconds |
 
 ### DCP sizing example
 
