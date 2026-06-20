@@ -2098,31 +2098,359 @@ The main trade-off is:
 
 ## 7. How does Kafka preserve ordering?
 
-Kafka guarantees order only within a partition.
+### The Core Rule
+
+**Kafka guarantees order ONLY within a partition.**
 
 ```text
-Partition 2:
-DocumentSourced
-→ DocumentExtracted
-→ QualityChecked
+Partition 0:
+Message 1 → Message 2 → Message 3 → Message 4
+(Order guaranteed)
+
+Partition 1:
+Message A → Message B → Message C
+(Order guaranteed)
+
+But: No guarantee about order between P0 and P1
 ```
 
-Kafka does not guarantee order across different partitions:
+### The Parallelism vs Ordering Trade-off
+
+This is the fundamental tension in Kafka design:
 
 ```text
-Partition 1 event and Partition 2 event
-→ No global ordering guarantee
+More Partitions = More Parallelism (faster) BUT Less Ordering
+Fewer Partitions = More Ordering (correct) BUT Less Parallelism (slower)
+
+Choose your partition KEY carefully. It determines EVERYTHING.
 ```
 
-For DCP, use `documentId` as the key when events for the same document must remain ordered:
+---
+
+### 🍕 Pizza Store: Why Ordering Matters
+
+#### Scenario 1: Order → Payment → Preparation
 
 ```text
-Key DOC-123 → always routed to the same partition
+Customer Alice places order:
+  1. OrderPlaced(order-123, "2 Large Pizzas", $50)
+  2. PaymentReceived(order-123, $50, "APPROVED")
+  3. PizzaReady(order-123, "2 Large Pizzas at counter")
+
+These MUST happen in order!
 ```
 
-Then consumers see DOC-123 events in partition order.
+**What if they arrive out of order?**
 
-This does not automatically prevent every business race. Producers must publish logically correct versions, and consumers should reject stale state transitions when necessary.
+```text
+If PaymentReceived comes before OrderPlaced:
+  Kitchen system: "Payment received for unknown order!"
+  →Confusion, possible double-charge or lost order
+
+If PizzaReady comes before PaymentReceived:
+  Delivery: "Pizza is ready but not paid yet!"
+  → Do we give unpaid pizza to customer?
+  → Breaks the business logic
+```
+
+#### Scenario 2: With Partition Key = order-123
+
+```text
+All events for order-123:
+├── OrderPlaced(order-123, "2 Large Pizzas", $50)
+├── PaymentReceived(order-123, $50, "APPROVED")
+└── PizzaReady(order-123, "2 Large Pizzas at counter")
+
+All go to SAME partition (e.g., Partition 5)
+
+Kafka guarantees: Order preserved!
+Processor sees: 1 → 2 → 3 (always in order)
+Business logic: Works perfectly
+```
+
+#### Scenario 3: With Bad Partition Key = "USD" (currency type)
+
+```text
+All orders using USD currency:
+├── OrderPlaced(order-456, "Pepperoni", $20)
+├── OrderPlaced(order-123, "Margherita", $18)
+├── PaymentReceived(order-123, $18, "APPROVED")
+├── PaymentReceived(order-456, $20, "APPROVED")
+├── PizzaReady(order-456, "Pepperoni")
+└── PizzaReady(order-123, "Margherita")
+
+All go to SAME partition because same currency
+
+But: Events for different orders are MIXED!
+
+Consumer receives:
+  456-ordered → 123-ordered → 123-paid → 456-paid → ...
+
+Now consumer must track state for multiple orders
+If 456-ready arrives before 456-paid gets processed:
+  → Kitchen makes pizza before payment confirmed
+  → Business logic breaks!
+```
+
+**The lesson:** Partition key must be about the ENTITY that needs ordering, not a property of the event.
+
+---
+
+### 💾 DCP: Why Ordering Matters Even More
+
+#### Scenario 1: Document Processing Pipeline
+
+```text
+Document: invoice-789.pdf ($10,000 from Acme Corp)
+
+Events that MUST stay in order:
+  1. DocumentSourced(doc-789, "acme-invoice-2024.pdf")
+  2. DataExtracted(doc-789, {vendor: "Acme", amount: 10000})
+  3. ValidationPassed(doc-789, "All fields valid")
+  4. DataPublished(doc-789, "Sent to accounting system")
+
+If out of order:
+  DataExtracted before DocumentSourced: "Extracting nothing!"
+  DataPublished before Validation: "Publishing unvalidated data!"
+  → Financial system is corrupted
+```
+
+#### Scenario 2: With Partition Key = documentId (CORRECT)
+
+```text
+doc-789 key → Always routed to Partition 7
+
+Pipeline:
+  [P7] DocumentSourced(doc-789)
+  [P7] DataExtracted(doc-789)
+  [P7] ValidationPassed(doc-789)
+  [P7] DataPublished(doc-789)
+
+Kafka guarantees: Partition 7 keeps order
+Extraction service: Sees events in correct order
+Quality service: Sees extraction result before validating it
+Dissemination: Only publishes validated data
+
+Result: System works correctly ✓
+```
+
+#### Scenario 3: With Bad Partition Key = documentType (WRONG)
+
+```text
+All invoices have key "invoice"
+
+Multiple documents routed to same partition:
+  [P3] DocumentSourced(doc-789, invoice)
+  [P3] DocumentSourced(doc-456, invoice)  ← Different document!
+  [P3] DataExtracted(doc-789, invoice)
+  [P3] DataExtracted(doc-456, invoice)
+  [P3] ValidationPassed(doc-789, invoice)
+  [P3] ValidationPassed(doc-456, invoice)
+
+Now extraction service sees:
+  doc-789 sourced
+  doc-456 sourced
+  doc-789 extracted
+  doc-456 extracted ← But doc-456's extraction metadata is next!
+  
+When processing doc-456 extracted:
+  System queries: "What was sourced for doc-456?"
+  Finds: doc-456 was sourced ✓
+  Finds: doc-789's extraction data ❌
+  
+Result: Cross-document contamination!
+        doc-456 gets doc-789's extracted data
+        Financial data is CORRUPTED
+```
+
+**The lesson:** In DCP, document lifecycle MUST use documentId as key. Using documentType creates hot partitions AND breaks ordering.
+
+---
+
+### The Parallelism vs Ordering Trade-off Explained
+
+#### Maximum Parallelism (Bad Ordering)
+
+```text
+Partition key = NULL (random)
+
+Events go to random partitions:
+  P0: order-123 → payment received → order-456 → ...
+  P1: order-789 → pizza ready → order-123 → ...
+  P2: order-456 → order-789 → payment received → ...
+
+Result:
+  ✓ Perfect parallelism (events spread evenly)
+  ✓ No bottleneck partition
+  ✗ NO ordering guarantees
+  ✗ Consumer must buffer and reconstruct state
+  ✗ Complex, fragile logic
+
+Use case: When you DON'T care about order
+  Example: Page view analytics, sensor readings (if one is dropped, OK)
+```
+
+#### Perfect Ordering (Limited Parallelism)
+
+```text
+Partition key = order-123 (sticky to one partition)
+
+Events for order-123 go ALWAYS to same partition:
+  P5: order-123 ordered → payment received → ready → delivered
+
+Result:
+  ✓ Perfect ordering for order-123
+  ✓ Simple consumer logic
+  ✗ Only 1 consumer can process order-123 (no parallelism for that key)
+  ✗ If partition 5 is slow, order-123 waits
+
+Use case: When order MUST be preserved
+  Example: Financial transactions, document lifecycle, order processing
+```
+
+#### Balanced (Partition Key = Entity ID)
+
+```text
+Partition key = order-123, order-456, order-789, ...
+
+Orders distributed across partitions by hash:
+  P0: order-123, order-789, order-456, ... (different orders)
+  P1: order-234, order-567, order-901, ... (different orders)
+  P2: order-345, order-678, order-012, ... (different orders)
+
+Result for order-123:
+  ✓ All order-123 events in P0 (ordering preserved)
+  ✓ 3 consumers can process P0, P1, P2 in parallel
+  ✓ If order-123 is slow, other orders in other partitions progress
+  ✓ Load distributed (assuming keys are evenly distributed)
+
+Result:
+  ✓ Per-entity ordering (order-123 events ordered)
+  ✓ Parallelism across entities (order-456 doesn't wait for 123)
+  ✓ Optimal for most business systems
+
+Use case: Most real systems (orders, documents, users)
+```
+
+---
+
+### When Ordering Breaks: Real Failure Scenarios
+
+#### Pizza Store: Lost Order Payment
+
+```text
+Scenario:
+  Order-123 → Payment must be received before pizza starts
+
+Bad key (key = "pizza-order"):
+  Partition assignment (random):
+    P0: Order-123-ordered
+    P1: Order-123-payment-received
+    P2: Order-123-pizza-start
+
+Kitchen reads P2 first (it's ahead): "Start pizza for order-123!"
+Billing reads P1: "Payment received for order-123"
+Inventory reads P0: "Order placed for order-123"
+
+Result: Pizza cooked, customer doesn't pay
+Outcome: Lost $20, angry customer
+Root cause: No ordering guarantee across partitions
+```
+
+#### DCP: Financial Document Corruption
+
+```text
+Scenario:
+  doc-789 ($10,000 from Acme)
+  doc-456 ($5,000 from CompanyB)
+
+Bad key (key = "document"):
+  P5: DocumentSourced(doc-789)
+  P5: DocumentSourced(doc-456)
+  P5: DataExtracted(doc-789)
+  P5: DataExtracted(doc-456) ← extraction for which document?
+
+Extraction service reads all from P5:
+  Sees: doc-789 sourced, doc-456 sourced, extraction data, extraction data
+  Doesn't know which extraction belongs to which doc
+  
+Possible result:
+  doc-789 gets extracted as $5,000 (doc-456's amount)
+  doc-456 gets extracted as $10,000 (doc-789's amount)
+  
+Accounting system: Wrong vendor payments!
+Legal: Document traceability lost!
+Outcome: Audit failure, legal liability
+Root cause: No ordering, no per-document grouping
+```
+
+---
+
+### How to Choose the Right Partition Key
+
+#### The Golden Rule
+
+```text
+Partition key should be:
+  1. The entity that needs ordering
+  2. High-cardinality (many unique values)
+  3. Stable (doesn't change)
+```
+
+#### Pizza Store
+
+```text
+Key = order-123 ✓
+  - Entity needing order: individual order
+  - Cardinality: millions of unique orders
+  - Stable: never changes
+  
+Key = customer-name ✗
+  - Multiple orders per customer go to same partition
+  - If customer "John Smith" has 1000 orders, bottleneck!
+  - "John Smith" vs "Smith, John" changes over time
+  
+Key = "pizza-order" ✗
+  - All orders go to same partition!
+  - No parallelism (only 1 partition)
+  - Bottleneck
+```
+
+#### DCP
+
+```text
+Key = documentId ✓
+  - Entity needing order: document lifecycle
+  - Cardinality: millions of unique documents
+  - Stable: UUID, never changes
+  
+Key = documentType ✗
+  - "invoice", "receipt", "contract" (only ~10 types)
+  - Hot partition: 80% of documents are PDFs
+  - Breaks ordering (mixing different documents)
+  
+Key = tenantId ✗
+  - Large tenant has 100,000 documents
+  - All go to same partition
+  - Bottleneck when tenant uploads documents
+```
+
+---
+
+### Summary: Ordering vs Parallelism
+
+| Design | Ordering | Parallelism | Complexity | Use Case |
+|--------|----------|-------------|-----------|----------|
+| **No key (random)** | ❌ None | ✅ Maximum | ⚠️ High (buffering) | Analytics, metrics |
+| **Bad key** | ⚠️ Wrong scope | ❌ Limited | ❌ High (confusing) | Avoid! |
+| **Entity key** | ✅ Per-entity | ✅ Good | ✓ Simple | Order processing, documents |
+| **Global key** | ✅ Global | ❌ None | ✓ Simplest | Very few cases |
+
+**Recommendation for DCP:** Use `documentId` as partition key.
+- Preserves document lifecycle ordering
+- Distributes load across partitions (millions of documents)
+- Keeps consumer logic simple
+- No cross-document contamination
 
 ---
 
