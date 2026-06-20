@@ -1704,6 +1704,147 @@ The simplest common design is one application instance per pod, contributing one
 
 If a pod crashes, Kafka reassigns its partitions to healthy consumers. Kubernetes then starts a replacement pod, which joins the group and causes another assignment.
 
+### Detailed Example: Pizza Store with Multiple Consumer Groups
+
+**Scenario: Friday night at a busy pizza restaurant**
+
+**The topic: `pizza-orders`**
+```text
+3 partitions, orders arriving continuously
+P0: [Alice-order, Bob-order, Carol-order, Dave-order, Eve-order, Frank-order...]
+P1: [Grace-order, Hank-order, Iris-order, Jack-order...]
+P2: [Kelly-order, Liam-order, Mia-order...]
+```
+
+**Three independent consumer groups on the SAME topic:**
+
+#### 🍳 Kitchen Group (3 workers)
+
+```text
+Kitchen Worker A → Partition 0
+Kitchen Worker B → Partition 1
+Kitchen Worker C → Partition 2
+
+Current offsets (what they've processed):
+P0: Offset 5 ✓ (prepared Alice through Frank)
+P1: Offset 3 ✓ (prepared Grace through Jack)
+P2: Offset 2 ✓ (prepared Kelly through Mia)
+```
+
+**Why fast?** Preparing pizza is simple: put dough on oven. No network calls.
+
+#### 💰 Billing Group (2 workers)
+
+```text
+Billing Worker A → Partition 0, Partition 1
+Billing Worker B → Partition 2
+
+Current offsets:
+P0: Offset 2 ⚠️ (only processed Alice, Bob, Carol)
+P1: Offset 1 ⚠️ (only processed Grace)
+P2: Offset 1 ⚠️ (only processed Kelly)
+
+Consumer lag: Behind by ~6 orders per partition
+```
+
+**Why slower?** Writing to database is slower than kitchen work.
+
+#### 🚚 Delivery Group (1 worker)
+
+```text
+Delivery Dispatcher → Partition 0, Partition 1, Partition 2
+                     (one worker handling all 3 partitions!)
+
+Current offsets:
+P0: Offset 1 ❌ (only processed Alice)
+P1: Offset 0 ❌ (hasn't started P1)
+P2: Offset 0 ❌ (hasn't started P2)
+
+Consumer lag: Way behind! Only 1 worker for 3 partitions
+```
+
+**Why slowest?** Finding drivers, notifying them, etc. Complex workflow.
+
+#### Key Insight: All Groups Process the SAME Topic
+
+```text
+New order arrives: Order-Nathan (goes to P0 at offset 6)
+
+Kitchen Group:   "I can immediately start at offset 6!" ✓
+Billing Group:   "I'll get to it after I finish offset 2..." ⚠️
+Delivery Group:  "I'll get to it after I finish offset 1..." ❌
+
+Each group:
+- Gets ALL messages
+- Maintains OWN offsets
+- Processes at OWN speed
+- Doesn't block the others
+```
+
+#### What Happens When Delivery Worker Crashes?
+
+```text
+Before: 1 delivery dispatcher at offsets P0:1, P1:0, P2:0
+
+Dispatcher dies!
+
+Kafka automatically triggers rebalance:
+  New dispatcher starts
+  Kafka says: "Resume from your last committed offsets"
+    P0: Start at offset 1
+    P1: Start at offset 0
+    P2: Start at offset 0
+  
+Messages 0-1 on P0 are NOT lost
+No messages were skipped
+Everything picks up where it left off
+```
+
+#### What Happens When You Add More Delivery Workers?
+
+```text
+Manager: "We're drowning in orders. Add 2 more delivery workers!"
+
+Rebalance triggers:
+  Old: 1 worker has [P0, P1, P2]
+  New: 3 workers
+    Worker A: P0 (from offset 1)
+    Worker B: P1 (from offset 0)
+    Worker C: P2 (from offset 0)
+
+Result: Can process much faster now!
+        3 workers in parallel instead of 1
+
+Kitchen and Billing don't care
+They're still processing independently
+```
+
+#### Offset Tracking: The Critical Difference
+
+```
+kitchen-group offsets:  P0→5, P1→3, P2→2
+billing-group offsets:  P0→2, P1→1, P2→1
+delivery-group offsets: P0→1, P1→0, P2→0
+
+Three completely independent offset tracks!
+
+Kitchen says: "I'm at offset 5 on P0"
+Billing says: "I'm at offset 2 on P0"
+           (Different message!)
+Delivery says: "I'm at offset 1 on P0"
+           (Yet another different message!)
+
+When new message arrives at offset 6 on P0:
+Kitchen: "Process offset 6!"
+Billing: "I need to catch up from offset 3 first"
+Delivery: "I need to catch up from offset 2 first"
+
+No blocking, no waiting
+All groups progress independently
+```
+
+---
+
 ### DCP example
 
 ```text
@@ -1728,12 +1869,26 @@ Different consumer groups receive the same events independently:
 
 ```text
 document-extracted topic
-├── quality-engine group
-├── audit-projection group
-└── analytics group
+├── quality-engine group       (validates data)
+├── audit-projection group     (logs for compliance)
+└── analytics group            (tracks metrics)
 ```
 
-Each group has its own offsets.
+Each group has its own offsets:
+
+```text
+quality-engine offsets:   P0→120, P1→115, P2→118, P3→122
+audit-projection offsets: P0→80,  P1→79,  P2→81,  P3→78
+analytics offsets:        P0→150, P1→148, P2→152, P3→150
+```
+
+- **Quality group is slower:** Validation involves external ML calls
+- **Audit group is slowest:** Writing to compliance database
+- **Analytics group is fast:** Just counting metrics
+
+All groups process the same topic independently!
+
+**The Kafka advantage:** One extracted document reaches all three groups automatically. No need to copy messages three times or create three topics. One topic, three consumer groups, independent processing.
 
 The complete color-coded component diagram is intentionally placed at the [top of this guide](#start-here-how-do-kafka-producers-topics-partitions-and-consumers-work-together) so it can be understood before the individual concepts below.
 
