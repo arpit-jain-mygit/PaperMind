@@ -1341,6 +1341,173 @@ Startup or small company:
 
 ---
 
+### Active-Active vs Active-Passive Cluster Setup
+
+When running two clusters, there are two main deployment patterns:
+
+#### **Active-Passive (Most Common)**
+
+One cluster is active, one is standby/ready.
+
+```text
+┌─────────────────────────────────────────────────┐
+│ NORMAL OPERATION                                │
+│                                                 │
+│ All traffic → Cluster 1 (Primary/Active)       │
+│   • Producers write here                        │
+│   • Consumers read here                         │
+│   • 100% of the traffic                         │
+│                                                 │
+│ Cluster 2 (Standby/Passive)                    │
+│   • Receives replicated data only               │
+│   • Not serving traffic                         │
+│   • Ready to take over if Cluster 1 fails      │
+└─────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────┐
+│ FAILURE SCENARIO                                │
+│                                                 │
+│ Cluster 1 goes down (network issue, data center│
+│ failure, etc.)                                  │
+│   ↓                                             │
+│ All traffic switches to Cluster 2               │
+│   • Services reconnect to Cluster 2             │
+│   • Data already there (from replication)       │
+│   • Processing resumes                          │
+└─────────────────────────────────────────────────┘
+
+Examples:
+  • Pizza Store: Primary (East) → Standby (West)
+  • DCP: Primary (North America) → Standby (Europe)
+
+Pros:
+  ✓ Simple: One cluster handles everything
+  ✓ No conflicts: Only one active cluster writing
+  ✓ Cheaper: Standby just receives data, doesn't process
+  ✓ Easier to manage: Clear primary/secondary roles
+
+Cons:
+  ✗ Slower failover: Need to detect failure + switch traffic
+  ✗ During failover: Brief downtime (seconds to minutes)
+  ✗ Standby idle: Paying for hardware that doesn't serve traffic
+```
+
+**Real timeline example:**
+
+```text
+t=0ms:    Cluster 1 network failure detected
+t=100ms:  Services notice Cluster 1 not responding
+t=150ms:  Health check confirms Cluster 1 down
+t=200ms:  DNS updated to point to Cluster 2
+t=500ms:  All producers/consumers reconnect to Cluster 2
+t=600ms:  Processing resumes (all data already replicated)
+
+Total downtime: ~500ms to ~1 minute
+```
+
+---
+
+#### **Active-Active (More Complex)**
+
+Both clusters are active and serving traffic simultaneously.
+
+```text
+┌─────────────────────────────────────────────────┐
+│ NORMAL OPERATION                                │
+│                                                 │
+│ Cluster 1 (Active)                             │
+│   • Producers write here                        │
+│   • Consumers read here                         │
+│   • Serves 50% of traffic (e.g., East Coast)   │
+│                                                 │
+│ Cluster 2 (Active)                             │
+│   • Producers write here                        │
+│   • Consumers read here                         │
+│   • Serves 50% of traffic (e.g., West Coast)   │
+│                                                 │
+│ Bidirectional replication:                     │
+│   Cluster 1 ↔ Cluster 2                        │
+│   Data synced both directions continuously      │
+└─────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────┐
+│ FAILURE SCENARIO                                │
+│                                                 │
+│ Cluster 1 goes down                             │
+│   ↓                                             │
+│ East Coast traffic switches to Cluster 2        │
+│   • Zero downtime (Cluster 2 always up)        │
+│   • Data already in Cluster 2 (bidirectional)   │
+│   • Seamless failover                          │
+└─────────────────────────────────────────────────┘
+
+Real example:
+  • Global payment processor: US Cluster + EU Cluster
+  • Both processing payments from their regions
+  • Sync between them for resilience
+
+Pros:
+  ✓ Zero downtime: Both clusters always serving
+  ✓ Instant failover: No need to switch, already serving
+  ✓ Better resource utilization: Both clusters busy
+  ✓ Load distribution: Traffic spread across regions
+
+Cons:
+  ✗ Very complex: Handle writes to both clusters
+  ✗ Ordering issues: Same event may reach different clusters at different times
+  ✗ Conflict resolution: If both write same partition key at same time?
+  ✗ More expensive: Both clusters fully utilized
+  ✗ Eventual consistency: Data eventually matches, but not immediately
+```
+
+**Real timeline example:**
+
+```text
+t=0ms:    Cluster 1 network failure
+t=1ms:    East Coast traffic already served by Cluster 2
+t=2ms:    Processing continues uninterrupted
+t=3ms:    Engineers start investigating (no user impact)
+
+Total downtime: ~0 (seamless)
+```
+
+---
+
+#### **Comparison Table**
+
+| Aspect | Active-Passive | Active-Active |
+|--------|---|---|
+| **Failover Speed** | Seconds to minutes (detected + switch) | Instant (already serving) |
+| **Data Consistency** | Strong (single primary) | Eventually consistent (async sync) |
+| **Complexity** | Low (one active cluster) | High (distributed consensus) |
+| **Cost** | Medium (standby idle) | High (both clusters busy) |
+| **Typical Use Case** | Disaster recovery, high availability | Global distribution, zero downtime SLA |
+| **Risk** | Brief downtime during failover | Split-brain scenarios (both think they're primary) |
+
+---
+
+#### **Decision Tree: Which One to Use?**
+
+```text
+Do you need zero downtime during failure?
+  ├─ NO → Active-Passive (simpler, cheaper)
+  │       Example: Pizza Store, most SaaS apps
+  │
+  └─ YES → Do you have global users in different regions?
+           ├─ NO → Active-Passive with fast detection
+           │       Example: DCP with standby
+           │
+           └─ YES → Can you tolerate eventual consistency?
+                    ├─ NO → Active-Passive with careful failover
+                    │       Example: Financial transactions
+                    │
+                    └─ YES → Active-Active (complex)
+                             Example: Global payment processors,
+                                      distributed databases
+```
+
+---
+
 ### Broker: one Kafka server
 
 A broker is a running Kafka server that belongs to a cluster.
