@@ -1055,6 +1055,169 @@ Messages in Cluster 1 are NOT visible in Cluster 2
 
 ---
 
+### Why Have Multiple Clusters?
+
+Companies run multiple separate Kafka clusters for different reasons:
+
+#### **1. Geographic Distribution — Low Latency**
+
+```text
+Problem: East Coast users experience high latency talking to West Coast cluster
+
+Solution: Run Cluster in each region
+
+Pizza Store East Coast Services
+    ↓ (fast, local)
+Cluster 1 (New York)
+
+Pizza Store West Coast Services
+    ↓ (fast, local)
+Cluster 2 (San Francisco)
+
+Result: 5ms latency instead of 100ms
+```
+
+#### **2. High Availability & Disaster Recovery**
+
+```text
+Scenario: Natural disaster hits West Coast data center
+
+Single Cluster: ALL data and services DOWN ❌
+Multi-Cluster: East Cluster still running ✓
+    - East Coast operations continue
+    - West Coast team switches to East Cluster
+    - Services reroute to available cluster
+    - Business continuity maintained
+```
+
+#### **3. Regulatory Compliance — Data Residency**
+
+```text
+EU customers:
+    ↓ (data must stay in EU per GDPR)
+Cluster (Europe)
+
+US customers:
+    ↓ (no EU data required)
+Cluster (US)
+
+Brazil customers:
+    ↓ (data must stay in Brazil)
+Cluster (Brazil)
+
+Different clusters in different countries = compliance ✓
+```
+
+#### **4. Performance Isolation — Workload Separation**
+
+```text
+Problem: Heavy batch processing (analytics) slows down real-time orders
+
+Solution: Separate clusters
+
+Cluster 1 (Production)
+├── orders topic
+├── payments topic
+└── real-time consumer services
+
+Cluster 2 (Analytics)
+├── events topic
+└── heavy batch jobs that process 1TB+ data
+
+Real-time orders stay fast ✓
+Analytics processing doesn't impact orders ✓
+```
+
+#### **5. Multi-Tenancy — Separate Customer Data**
+
+```text
+Problem: Customer A and Customer B both use Pizza Store platform
+
+Solution: Separate clusters
+
+Cluster A (Customer A's data)
+├── Customer A's orders
+└── Customer A's payments
+
+Cluster B (Customer B's data)
+├── Customer B's orders
+└── Customer B's payments
+
+Data isolation ✓
+No cross-customer leaks ✓
+Each customer scales independently ✓
+```
+
+#### **6. Blue-Green Deployments — Safe Upgrades**
+
+```text
+Problem: Need to upgrade Kafka version with zero downtime
+
+Solution: Two identical clusters
+
+Cluster 1 (v3.4.0) ← Currently serving traffic
+Cluster 2 (v3.5.0) ← Test the new version
+
+Step 1: Deploy v3.5.0 to Cluster 2
+Step 2: Run tests on Cluster 2
+Step 3: If tests pass: Switch traffic to Cluster 2
+Step 4: If tests fail: Stay on Cluster 1 (no downtime)
+```
+
+---
+
+### DCP Real Example: Multiple Clusters
+
+```text
+Data Collection Platform (DCP) Company
+
+Production Cluster (North America)
+├── Broker 1, 2, 3 in AWS us-east-1
+├── document-sourced topic (replicated 3x)
+├── document-extracted topic
+└── Serves 95% of traffic
+
+Disaster Recovery Cluster (Europe)
+├── Broker 4, 5, 6 in AWS eu-west-1
+├── Same topics (replicated from production)
+└── Ready if North America region fails
+
+Test Cluster (Staging)
+├── Broker 7, 8, 9 in AWS us-west-2
+├── Used for testing Kafka upgrades
+└── No customer data
+
+Cost: Multiple clusters is expensive, but business continuity is worth it
+```
+
+---
+
+### When to Use Multiple Clusters
+
+| Reason | Cost | Complexity | Use When |
+|--------|------|-----------|----------|
+| Geographic | High | Medium | Services spread across regions, latency matters |
+| Disaster Recovery | High | High | Data loss is unacceptable (financial, healthcare) |
+| Compliance | Medium | Medium | Regulatory requirement (GDPR, HIPAA, data residency) |
+| Performance | Medium | Medium | Heavy analytics would slow down real-time services |
+| Multi-tenant | Medium | High | Hosting multiple customers, need data isolation |
+
+---
+
+### Single Cluster is Typical for Small Teams
+
+```text
+Startup or small company:
+  ✓ Single cluster with 3 brokers
+  ✓ Replication within cluster for HA
+  ✓ 99.9% uptime is enough
+  ✓ Much simpler to manage
+  ✗ If data center goes down, entire service down
+  ✗ No geographic redundancy
+```
+
+---
+
 ### Broker: one Kafka server
 
 A broker is a running Kafka server that belongs to a cluster.
