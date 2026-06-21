@@ -886,6 +886,730 @@ Result: Two trace IDs in system
 
 ---
 
+### DCP Hybrid Approach: Complete Implementation
+
+The DCP is a perfect example of a hybrid system that needs sophisticated tracing:
+
+```text
+Multiple entry points:
+  1. REST API (Sourcing Service)
+  2. Kafka webhooks (resubmitted documents)
+  3. Scheduled retry task (failed documents)
+  4. Manual re-approval workflow
+```
+
+#### DCP Architecture with Tracing
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│ ENTRY POINT 1: REST API (External Source)                      │
+│                                                                 │
+│ External Client                                                 │
+│   POST /api/upload {document: pdf}                             │
+│         ↓                                                       │
+│   API Gateway                                                  │
+│   ├─ Generate trace_id = "550e8400-e29b-41d4-a716..."        │
+│   ├─ Log: "Received document upload" [trace_id]               │
+│   └─ Forward to Sourcing Service with X-Trace-ID header       │
+│         ↓                                                       │
+│   Sourcing Service                                             │
+│   ├─ Extract trace_id from header                             │
+│   ├─ Validate, scan, deduplicate document                     │
+│   ├─ Publish DocumentSourced event with trace_id              │
+│   └─ Log: "Document sourced" [trace_id]                       │
+└─────────────────────────────────────────────────────────────────┘
+         ↓ (Kafka event with trace_id)
+┌─────────────────────────────────────────────────────────────────┐
+│ EXTRACTION SERVICE                                              │
+│                                                                 │
+│ Kafka: DocumentSourced [550e...]                               │
+│     ↓                                                           │
+│ Extraction Service consumes                                    │
+│ ├─ Extract trace_id from event                                │
+│ ├─ Call ML providers (SparkAir, Cognaize)                     │
+│ ├─ Store extracted data in MongoDB                            │
+│ ├─ Publish DocumentExtracted event with SAME trace_id         │
+│ └─ Log: "Document extracted" [trace_id]                       │
+└─────────────────────────────────────────────────────────────────┘
+         ↓ (Kafka event with trace_id)
+┌─────────────────────────────────────────────────────────────────┐
+│ QUALITY SERVICE                                                 │
+│                                                                 │
+│ Kafka: DocumentExtracted [550e...]                             │
+│     ↓                                                           │
+│ Quality Service consumes                                       │
+│ ├─ Extract trace_id from event                                │
+│ ├─ Validate fields, confidence scores                         │
+│ ├─ Check business rules                                       │
+│ ├─ Publish QualityChecked event with SAME trace_id            │
+│ └─ Log: "Quality validation passed" [trace_id]                │
+└─────────────────────────────────────────────────────────────────┘
+         ↓ (Kafka event with trace_id)
+┌─────────────────────────────────────────────────────────────────┐
+│ APPROVAL SERVICE (L1/L2 Review)                                │
+│                                                                 │
+│ Kafka: QualityChecked [550e...]                               │
+│     ↓                                                           │
+│ Approval Service consumes                                      │
+│ ├─ Extract trace_id from event                                │
+│ ├─ Create task for L1 review                                  │
+│ ├─ Wait for human approval                                    │
+│ ├─ Publish DocumentApproved event with SAME trace_id          │
+│ └─ Log: "Document approved by L2" [trace_id]                  │
+└─────────────────────────────────────────────────────────────────┘
+         ↓ (Kafka event with trace_id)
+┌─────────────────────────────────────────────────────────────────┐
+│ DISSEMINATION SERVICE                                          │
+│                                                                 │
+│ Kafka: DocumentApproved [550e...]                              │
+│     ↓                                                           │
+│ Dissemination Service consumes                                 │
+│ ├─ Extract trace_id from event                                │
+│ ├─ Publish to external APIs, S3, Email                        │
+│ ├─ Publish DocumentPublished event with SAME trace_id         │
+│ └─ Log: "Document disseminated" [trace_id]                    │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│ ENTRY POINT 2: Kafka Webhook (Resubmitted Document)            │
+│                                                                 │
+│ External System (SQS/SNS/Webhook)                              │
+│   Sends: "Document resubmitted"                                │
+│         ↓                                                       │
+│ DCP Webhook Handler                                            │
+│ ├─ Event has NO trace_id (external system)                    │
+│ ├─ Generate NEW trace_id = UUID()                             │
+│ ├─ Publish DocumentResubmitted event with NEW trace_id         │
+│ └─ Log: "Resubmitted document" [NEW trace_id]                 │
+└─────────────────────────────────────────────────────────────────┘
+         ↓ (Continues with NEW trace_id)
+         Extraction Service consumes with NEW trace_id...
+
+┌─────────────────────────────────────────────────────────────────┐
+│ ENTRY POINT 3: Scheduled Retry Task                            │
+│                                                                 │
+│ Scheduler (3 AM daily)                                         │
+│ ├─ Find failed documents                                       │
+│ ├─ Generate NEW trace_id for this batch = UUID()              │
+│ ├─ Log: "Starting daily retry job" [NEW trace_id]             │
+│ ├─ For each failed doc:                                        │
+│ │  ├─ Publish DocumentRetry event with SAME trace_id          │
+│ │  └─ Log: "Retrying doc-789" [trace_id]                      │
+│ └─ Different trace_id than REST API uploads!                  │
+└─────────────────────────────────────────────────────────────────┘
+         ↓ (Continues with RETRY trace_id)
+         Extraction Service consumes with RETRY trace_id...
+```
+
+---
+
+#### DCP Implementation: Hybrid Tracing Code
+
+**1. API Gateway (REST Entry Point)**
+
+```python
+# api_gateway.py - Handles REST API uploads
+
+from flask import Flask, request, g
+import uuid
+import logging
+import requests
+
+app = Flask(__name__)
+logger = logging.getLogger(__name__)
+
+@app.before_request
+def add_trace_id():
+    """Add trace_id to every incoming request"""
+    
+    # Client might provide trace_id for debugging/tracking
+    trace_id = request.headers.get("X-Trace-ID")
+    
+    if not trace_id:
+        # Generate new trace_id for this user action
+        trace_id = str(uuid.uuid4())
+    
+    # Store in Flask g object (request-local)
+    g.trace_id = trace_id
+    g.source = "REST_API"
+    
+    # Log at gateway level
+    logger.info(
+        f"Received request: {request.method} {request.path}",
+        extra={
+            "trace_id": trace_id,
+            "source": "API_GATEWAY",
+            "client_ip": request.remote_addr
+        }
+    )
+
+@app.route("/api/documents/upload", methods=["POST"])
+def upload_document():
+    """REST endpoint for document upload"""
+    
+    trace_id = g.trace_id
+    
+    # Forward to Sourcing Service with trace_id header
+    response = requests.post(
+        "http://sourcing-service:8001/upload",
+        json=request.json,
+        headers={
+            "X-Trace-ID": trace_id,  # Pass trace_id to backend
+            "X-Source": "API_GATEWAY"
+        }
+    )
+    
+    # Return response with trace_id header
+    response.headers["X-Trace-ID"] = trace_id
+    
+    logger.info(
+        f"Forwarded to Sourcing Service",
+        extra={"trace_id": trace_id}
+    )
+    
+    return response
+
+if __name__ == "__main__":
+    app.run(port=8000)
+```
+
+**2. Sourcing Service (First Microservice)**
+
+```python
+# sourcing_service.py - Entry point for REST API
+
+from flask import Flask, request
+import json
+import logging
+from kafka import KafkaProducer
+
+app = Flask(__name__)
+logger = logging.getLogger(__name__)
+producer = KafkaProducer(
+    bootstrap_servers=['kafka:9092'],
+    enable_idempotence=True,
+    value_serializer=lambda v: json.dumps(v).encode('utf-8')
+)
+
+@app.route("/upload", methods=["POST"])
+def upload():
+    """Handle document upload from API Gateway"""
+    
+    # Extract trace_id from API Gateway
+    trace_id = request.headers.get("X-Trace-ID")
+    
+    doc_data = request.json
+    doc_id = doc_data.get("doc_id")
+    
+    logger.info(
+        f"Received document upload: {doc_id}",
+        extra={
+            "trace_id": trace_id,
+            "service": "SOURCING"
+        }
+    )
+    
+    try:
+        # Validate document
+        validate_document(doc_data)
+        
+        # Store in database (with trace_id for audit)
+        db.insert("sourced_documents", {
+            "doc_id": doc_id,
+            "content": doc_data["content"],
+            "trace_id": trace_id,  # Store for audit trail
+            "status": "SOURCED"
+        })
+        
+        # Publish event with trace_id
+        event = {
+            "type": "DocumentSourced",
+            "doc_id": doc_id,
+            "trace_id": trace_id,  # Continue trace
+            "content": doc_data["content"],
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        producer.send("document-sourced", value=event, key=doc_id)
+        
+        logger.info(
+            f"Published DocumentSourced event",
+            extra={
+                "trace_id": trace_id,
+                "doc_id": doc_id,
+                "service": "SOURCING"
+            }
+        )
+        
+        return {
+            "status": "success",
+            "doc_id": doc_id,
+            "trace_id": trace_id
+        }
+        
+    except Exception as e:
+        logger.error(
+            f"Failed to source document: {e}",
+            extra={
+                "trace_id": trace_id,
+                "doc_id": doc_id,
+                "service": "SOURCING",
+                "error": str(e)
+            }
+        )
+        return {"status": "error", "error": str(e)}, 500
+
+if __name__ == "__main__":
+    app.run(port=8001)
+```
+
+**3. Extraction Service (Kafka Consumer)**
+
+```python
+# extraction_service.py - Consumes DocumentSourced event
+
+import json
+import logging
+from kafka import KafkaConsumer, KafkaProducer
+from datetime import datetime
+
+logger = logging.getLogger(__name__)
+consumer = KafkaConsumer(
+    "document-sourced",
+    bootstrap_servers=['kafka:9092'],
+    group_id="extraction-group",
+    value_deserializer=lambda m: json.loads(m.decode('utf-8'))
+)
+producer = KafkaProducer(
+    bootstrap_servers=['kafka:9092'],
+    enable_idempotence=True,
+    value_serializer=lambda v: json.dumps(v).encode('utf-8')
+)
+
+def handle_kafka_events():
+    """Consume DocumentSourced events"""
+    
+    for message in consumer:
+        event = message.value
+        doc_id = event["doc_id"]
+        
+        # Extract trace_id from event (CRITICAL)
+        trace_id = event.get("trace_id")
+        
+        if not trace_id:
+            # Fallback: generate new if not provided (shouldn't happen)
+            import uuid
+            trace_id = str(uuid.uuid4())
+            logger.warning(
+                f"No trace_id in event, generated new one",
+                extra={"doc_id": doc_id, "trace_id": trace_id}
+            )
+        
+        logger.info(
+            f"Received DocumentSourced event",
+            extra={
+                "trace_id": trace_id,
+                "doc_id": doc_id,
+                "service": "EXTRACTION",
+                "offset": message.offset
+            }
+        )
+        
+        try:
+            # Extract fields using ML (with trace_id in logs)
+            extracted = extract_with_ml(event["content"], trace_id)
+            
+            # Save to database (with trace_id for audit)
+            db.insert("extracted_documents", {
+                "doc_id": doc_id,
+                "extracted_data": extracted,
+                "trace_id": trace_id,  # Store for audit
+                "status": "EXTRACTED"
+            })
+            
+            logger.info(
+                f"Successfully extracted fields",
+                extra={
+                    "trace_id": trace_id,
+                    "doc_id": doc_id,
+                    "service": "EXTRACTION"
+                }
+            )
+            
+            # Publish next event with SAME trace_id
+            next_event = {
+                "type": "DocumentExtracted",
+                "doc_id": doc_id,
+                "trace_id": trace_id,  # SAME trace_id
+                "extracted_data": extracted,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            producer.send("document-extracted", value=next_event, key=doc_id)
+            
+            logger.info(
+                f"Published DocumentExtracted event",
+                extra={
+                    "trace_id": trace_id,
+                    "doc_id": doc_id,
+                    "service": "EXTRACTION"
+                }
+            )
+            
+            # ACK to Kafka
+            consumer.commit()
+            
+        except Exception as e:
+            logger.error(
+                f"Failed to extract document: {e}",
+                extra={
+                    "trace_id": trace_id,
+                    "doc_id": doc_id,
+                    "service": "EXTRACTION",
+                    "error": str(e),
+                    "offset": message.offset
+                }
+            )
+            # Don't commit - will retry
+            producer.send("dead-letter-queue", value={
+                "type": "ExtractionFailed",
+                "doc_id": doc_id,
+                "trace_id": trace_id,
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            })
+
+def extract_with_ml(content, trace_id):
+    """Extract fields from document"""
+    # ML extraction with trace_id in logs
+    logger.info(
+        f"Calling SparkAir ML service",
+        extra={"trace_id": trace_id}
+    )
+    # ... extraction logic ...
+    return extracted_data
+
+if __name__ == "__main__":
+    handle_kafka_events()
+```
+
+**4. Quality Service (Kafka Consumer)**
+
+```python
+# quality_service.py - Consumes DocumentExtracted event
+
+import json
+import logging
+from kafka import KafkaConsumer, KafkaProducer
+from datetime import datetime
+
+logger = logging.getLogger(__name__)
+consumer = KafkaConsumer(
+    "document-extracted",
+    bootstrap_servers=['kafka:9092'],
+    group_id="quality-group",
+    value_deserializer=lambda m: json.loads(m.decode('utf-8'))
+)
+producer = KafkaProducer(
+    bootstrap_servers=['kafka:9092'],
+    enable_idempotence=True,
+    value_serializer=lambda v: json.dumps(v).encode('utf-8')
+)
+
+def handle_kafka_events():
+    """Consume DocumentExtracted events"""
+    
+    for message in consumer:
+        event = message.value
+        doc_id = event["doc_id"]
+        trace_id = event.get("trace_id")  # Extract trace_id
+        
+        logger.info(
+            f"Received DocumentExtracted event",
+            extra={
+                "trace_id": trace_id,
+                "doc_id": doc_id,
+                "service": "QUALITY"
+            }
+        )
+        
+        try:
+            # Validate extracted data
+            is_valid = validate_extraction(
+                event["extracted_data"],
+                trace_id
+            )
+            
+            if is_valid:
+                logger.info(
+                    f"Quality validation passed",
+                    extra={
+                        "trace_id": trace_id,
+                        "doc_id": doc_id,
+                        "service": "QUALITY"
+                    }
+                )
+                
+                # Publish next event with SAME trace_id
+                next_event = {
+                    "type": "QualityChecked",
+                    "doc_id": doc_id,
+                    "trace_id": trace_id,  # SAME trace_id
+                    "validated_data": event["extracted_data"],
+                    "confidence": 0.95,
+                    "timestamp": datetime.now().isoformat()
+                }
+                
+                producer.send("quality-checked", value=next_event, key=doc_id)
+            else:
+                logger.warning(
+                    f"Quality validation failed",
+                    extra={
+                        "trace_id": trace_id,
+                        "doc_id": doc_id,
+                        "service": "QUALITY"
+                    }
+                )
+                
+                # Publish rejection with SAME trace_id
+                reject_event = {
+                    "type": "QualityCheckFailed",
+                    "doc_id": doc_id,
+                    "trace_id": trace_id,  # SAME trace_id
+                    "reason": "Validation failed",
+                    "timestamp": datetime.now().isoformat()
+                }
+                
+                producer.send("quality-failed", value=reject_event, key=doc_id)
+            
+            consumer.commit()
+            
+        except Exception as e:
+            logger.error(
+                f"Quality check error: {e}",
+                extra={
+                    "trace_id": trace_id,
+                    "doc_id": doc_id,
+                    "service": "QUALITY",
+                    "error": str(e)
+                }
+            )
+
+def validate_extraction(data, trace_id):
+    """Validate extracted data"""
+    logger.info(
+        f"Validating extracted fields",
+        extra={"trace_id": trace_id}
+    )
+    # ... validation logic ...
+    return True
+
+if __name__ == "__main__":
+    handle_kafka_events()
+```
+
+**5. Scheduled Retry Task (Different Entry Point)**
+
+```python
+# scheduled_retry_task.py - Batch retry job
+
+import schedule
+import uuid
+import json
+import logging
+from kafka import KafkaProducer
+from datetime import datetime
+
+logger = logging.getLogger(__name__)
+producer = KafkaProducer(
+    bootstrap_servers=['kafka:9092'],
+    enable_idempotence=True,
+    value_serializer=lambda v: json.dumps(v).encode('utf-8')
+)
+
+def daily_retry_failed_documents():
+    """Scheduled job to retry failed documents"""
+    
+    # Generate NEW trace_id for this batch job
+    # Different from REST API uploads!
+    batch_trace_id = str(uuid.uuid4())
+    
+    logger.info(
+        f"Starting daily retry job",
+        extra={
+            "trace_id": batch_trace_id,
+            "service": "SCHEDULER",
+            "job_type": "DAILY_RETRY"
+        }
+    )
+    
+    try:
+        # Find failed documents
+        failed_docs = db.query("""
+            SELECT doc_id, extraction_error 
+            FROM extracted_documents 
+            WHERE status = 'FAILED' 
+            AND last_retry < NOW() - INTERVAL '1 hour'
+            LIMIT 100
+        """)
+        
+        logger.info(
+            f"Found {len(failed_docs)} documents to retry",
+            extra={
+                "trace_id": batch_trace_id,
+                "count": len(failed_docs)
+            }
+        )
+        
+        for doc_record in failed_docs:
+            doc_id = doc_record["doc_id"]
+            
+            logger.info(
+                f"Retrying failed document",
+                extra={
+                    "trace_id": batch_trace_id,
+                    "doc_id": doc_id,
+                    "service": "SCHEDULER"
+                }
+            )
+            
+            # Publish retry event with BATCH trace_id
+            retry_event = {
+                "type": "DocumentRetry",
+                "doc_id": doc_id,
+                "trace_id": batch_trace_id,  # SAME batch trace
+                "previous_error": doc_record["extraction_error"],
+                "retry_attempt": 2,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            producer.send("document-retry", value=retry_event, key=doc_id)
+            
+            # Update database
+            db.update("extracted_documents", doc_id, {
+                "last_retry": datetime.now(),
+                "retry_count": db.get(doc_id, "retry_count") + 1
+            })
+        
+        logger.info(
+            f"Daily retry job completed",
+            extra={
+                "trace_id": batch_trace_id,
+                "documents_queued": len(failed_docs)
+            }
+        )
+        
+    except Exception as e:
+        logger.error(
+            f"Daily retry job failed: {e}",
+            extra={
+                "trace_id": batch_trace_id,
+                "service": "SCHEDULER",
+                "error": str(e)
+            }
+        )
+
+# Schedule the job
+schedule.every().day.at("03:00").do(daily_retry_failed_documents)
+
+if __name__ == "__main__":
+    while True:
+        schedule.run_pending()
+        time.sleep(60)
+```
+
+---
+
+#### DCP Debugging: Following a Trace ID
+
+**Scenario: User uploads document, something fails in Quality service**
+
+```bash
+# Search all logs for this trace_id across all services
+$ logs.filter(trace_id="550e8400-e29b-41d4-a716-446655440000")
+
+Results (in chronological order):
+
+[2024-01-15 10:30:01] API_GATEWAY: Received request: POST /api/documents/upload
+  trace_id: 550e8400...
+  source: API_GATEWAY
+  client_ip: 203.0.113.42
+
+[2024-01-15 10:30:02] API_GATEWAY: Forwarded to Sourcing Service
+  trace_id: 550e8400...
+
+[2024-01-15 10:30:03] SOURCING: Received document upload: doc-789
+  trace_id: 550e8400...
+  service: SOURCING
+
+[2024-01-15 10:30:04] SOURCING: Published DocumentSourced event
+  trace_id: 550e8400...
+  doc_id: doc-789
+
+[2024-01-15 10:30:15] EXTRACTION: Received DocumentSourced event
+  trace_id: 550e8400...
+  doc_id: doc-789
+  offset: 12345
+
+[2024-01-15 10:30:20] EXTRACTION: Calling SparkAir ML service
+  trace_id: 550e8400...
+
+[2024-01-15 10:30:45] EXTRACTION: Successfully extracted fields
+  trace_id: 550e8400...
+  doc_id: doc-789
+
+[2024-01-15 10:30:46] EXTRACTION: Published DocumentExtracted event
+  trace_id: 550e8400...
+  doc_id: doc-789
+
+[2024-01-15 10:30:52] QUALITY: Received DocumentExtracted event
+  trace_id: 550e8400...
+  doc_id: doc-789
+
+[2024-01-15 10:30:53] QUALITY: Validating extracted fields
+  trace_id: 550e8400...
+
+[2024-01-15 10:30:54] QUALITY: Quality validation failed ❌
+  trace_id: 550e8400...
+  doc_id: doc-789
+  service: QUALITY
+  reason: Confidence score too low (0.62 < 0.75)
+
+[2024-01-15 10:30:55] QUALITY: Published QualityCheckFailed event
+  trace_id: 550e8400...
+  doc_id: doc-789
+
+Complete flow captured! We can see:
+  1. Request came from API Gateway at 10:30:01
+  2. Sourcing processed and published at 10:30:04
+  3. Extraction consumed at 10:30:15 (11 second lag)
+  4. Extraction took 30 seconds (10:30:20 to 10:30:45)
+  5. Quality consumed at 10:30:52 (6 second lag)
+  6. Quality validation failed due to low confidence
+
+NEXT STEP: Check why confidence is low
+  - Was ML model updated?
+  - Is document quality bad?
+  - Are thresholds correct?
+```
+
+---
+
+#### Summary: DCP Hybrid Tracing
+
+| Entry Point | Generates Trace ID | Example Trace |
+|---|---|---|
+| **REST API Upload** | API Gateway | 550e8400-e29b-41d4-a716-... |
+| **Kafka Webhook** | Webhook Handler | 660f9511-f30c-52e5-b827-... |
+| **Scheduled Retry** | Scheduler | 770g0622-g41d-63f6-c938-... |
+| **Manual Re-approval** | Approval Service | 880h1733-h52e-74g7-d049-... |
+
+**Each entry point = unique trace ID = independent business transaction**
+
+All downstream services continue with same trace ID, creating a complete audit trail.
+
+---
+
 ## 5. Are events used only in choreography?
 
 No. Events can be used in both choreography and orchestration.
