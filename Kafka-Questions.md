@@ -6612,7 +6612,454 @@ Kafka may delete the original lifecycle event after its operational replay perio
 | Why replication factor 3? | Continue through a broker failure with multiple copies |
 | What is the main Kafka trade-off? | Strong scalability and replay in exchange for operational and eventual-consistency complexity |
 
+---
+
+## Bonus: Kafka Streams — Processing Kafka Events
+
+### What is Kafka Streams?
+
+**Kafka Streams is a library that lets you write event processing logic that reads from Kafka topics, transforms events, and writes to other Kafka topics.**
+
+Instead of building a separate application that consumes from Kafka and does complex processing, Kafka Streams lets you do it cleanly inside the Kafka ecosystem.
+
+```text
+Without Kafka Streams (traditional way):
+  Kafka topic → [Your app with complex logic] → Output
+
+With Kafka Streams (simpler):
+  Kafka topic → [Kafka Streams DSL] → Output
+```
+
+---
+
+### Reused Concepts from Kafka (You Already Know These!)
+
+**Topics:**
+- Input topics (where events come from)
+- Output topics (where results go)
+- Same topics, same partitions, same ordering
+
+```python
+# Kafka Streams uses regular Kafka topics
+stream = builder.stream("orders")  # Read from orders topic
+```
+
+**Partitions & Keys:**
+- Still partitioned by key
+- Ordering still guaranteed within partition
+- Consumer groups still handle parallelism
+
+```python
+# Same key-based ordering as regular Kafka
+orders.filter(lambda k, v: v["amount"] > 100)
+```
+
+**Consumer Groups:**
+- Kafka Streams instances form a group
+- Multiple Streams instances share partitions
+- Scale by adding more instances
+
+```python
+# Multiple Kafka Streams apps = consumer group
+# All instances share the "orders" topic partitions
+```
+
+**Offsets:**
+- Kafka Streams tracks offset progress automatically
+- Same as regular consumers
+
+**Retention & Replayability:**
+- Can re-run the same logic if you reset offsets
+- Same replay guarantee as regular Kafka
+
+---
+
+### New Concepts in Kafka Streams
+
+#### 1. **Topology** (Data Flow)
+
+A Topology is the processing plan: which topics to read, what transformations to apply, where to write results.
+
+```python
+# Define a topology
+builder = StreamsBuilder()
+
+input_stream = builder.stream("orders")
+result = input_stream.filter(lambda k, v: v["status"] == "paid")
+result.to("paid-orders")
+
+topology = builder.build()
+```
+
+**Why new?** Regular Kafka consumers write the processing logic themselves. Kafka Streams gives you a DSL (Domain-Specific Language) for declarative processing.
+
+#### 2. **Streams vs Tables**
+
+```text
+Stream = Topic viewed as unbounded events
+  Example: "order-placed", "payment-received"
+  
+Table = Topic viewed as state snapshot
+  Example: "current order status"
+```
+
+```python
+# Stream: events
+orders_stream = builder.stream("orders")  # OrderPlaced events
+
+# Table: state
+order_status_table = builder.table("order-status")  # Current status per order_id
+```
+
+**Why new?** Regular Kafka is just events. Kafka Streams lets you model things as "current state" (table), which is useful for joins and lookups.
+
+#### 3. **State Stores**
+
+Kafka Streams can maintain local state (in-memory or persistent disk storage) to remember things between events.
+
+```python
+# State store: remember the balance for each account
+from kafka.streams.state import Serdes
+
+def process_transaction(key, transaction):
+    # Kafka Streams maintains store["balance"]
+    current_balance = store.get(key)
+    new_balance = current_balance - transaction["amount"]
+    store.put(key, new_balance)
+    return new_balance
+
+stream.process(process_transaction, state_store_name="balances")
+```
+
+**Why new?** Regular Kafka only gives you one event at a time. State stores let you remember history (like "what's the balance?") without querying a database.
+
+#### 4. **Stateless Transformations**
+
+Transform one event → one output (no memory needed):
+
+```python
+# Stateless: just modify the event
+orders.map(lambda k, v: (k, {"order_id": v["id"], "total": v["amount"] * 1.1}))
+
+# Stateless: filter
+orders.filter(lambda k, v: v["amount"] > 100)
+
+# Stateless: branch
+paid, unpaid = orders.branch(
+    lambda k, v: (v["status"] == "paid",
+    lambda k, v: (v["status"] != "paid")
+)
+```
+
+**Reused?** These are like regular stream processing, no Kafka-specific state.
+
+#### 5. **Stateful Transformations**
+
+Operations that need memory:
+
+```python
+# Stateful: aggregate (need to remember all values seen so far)
+orders.groupByKey().aggregate(
+    initializer=lambda: {"count": 0, "total": 0},
+    adder=lambda k, v, agg: {
+        "count": agg["count"] + 1,
+        "total": agg["total"] + v["amount"]
+    }
+)
+
+# Stateful: join (need to remember one stream while waiting for another)
+orders_stream.join(
+    payments_stream,
+    joiner=lambda order, payment: {"order_id": order["id"], "paid": True},
+    windows=TimeWindows.of(60000)  # Wait 60 seconds for payment
+)
+```
+
+**Why new?** Regular Kafka consumers would need to implement this logic manually using databases. Kafka Streams does it for you.
+
+#### 6. **Windowing**
+
+Group events by time:
+
+```python
+# 5-minute windows: process orders placed in each 5-min window
+orders.groupByKey().windowedBy(TimeWindows.of(300000)).count()
+
+# Result: For each 5-min window and each order_id, how many events?
+```
+
+**Why new?** Regular Kafka topics don't have time windows. Kafka Streams adds this concept.
+
+---
+
+### Why is Kafka Streams Needed?
+
+#### Problem 1: Processing Logic is Scattered
+
+Without Kafka Streams:
+```text
+DCP Extraction Service (Python)
+  Reads from Kafka
+  Does extraction (calls ML API)
+  Writes to Kafka
+  
+DCP Quality Service (Java)
+  Reads from Kafka
+  Does validation
+  Writes to Kafka
+  
+DCP Audit Service (Go)
+  Reads from Kafka
+  Tracks history
+  Writes to Kafka
+  Writes to PostgreSQL
+```
+
+Same pattern repeated in 3 different languages!
+
+**With Kafka Streams:**
+```text
+Single language (Java, Python, Go - pick one)
+All 3 services use same framework
+Consistent error handling
+Consistent state management
+Easier to test
+```
+
+#### Problem 2: State Management is Hard
+
+Without Kafka Streams, keeping state is complicated:
+
+```python
+# Regular Kafka consumer
+consumer.subscribe(["orders"])
+
+order_status = {}  # Keep in memory
+
+for message in consumer:
+    order_id = message.key
+    if order_id not in order_status:
+        order_status[order_id] = {}
+    
+    order_status[order_id].update(message.value)
+    
+    # But if app crashes, order_status is lost!
+    # Need to rebuild from scratch
+```
+
+**With Kafka Streams:**
+```python
+# Kafka Streams handles this automatically
+orders = builder.stream("orders")
+order_status = builder.table("orders")
+
+# State is automatically persisted to local disk (changelog topic)
+# If app crashes and restarts, state is recovered
+```
+
+#### Problem 3: Joining Multiple Topics is Complex
+
+Without Kafka Streams:
+
+```python
+# DCP: Need to join documents with their metadata
+# Regular Kafka: One consumer reads both topics, but order is not guaranteed
+
+documents = consumer.poll()  # Get doc-123 from topic A
+metadata = consumer.poll()   # Get metadata from topic B
+
+# But what if topic B is slower?
+# You're waiting with doc-123 in memory
+# Complex buffering and timeout logic needed
+```
+
+**With Kafka Streams:**
+```python
+# Kafka Streams handles join automatically
+documents = builder.stream("documents")
+metadata = builder.stream("metadata")
+
+joined = documents.join(
+    metadata,
+    joiner=lambda doc, meta: {...},
+    windows=TimeWindows.of(60000)  # Wait 60 sec for matching metadata
+)
+joined.to("documents-with-metadata")
+```
+
+#### Problem 4: Aggregations Need Complex State
+
+Without Kafka Streams:
+
+```python
+# Calculate: orders per customer in last hour
+orders = consume from topic
+
+per_customer = {}
+for order in orders:
+    customer = order.customer_id
+    if customer not in per_customer:
+        per_customer[customer] = 0
+    per_customer[customer] += 1
+    
+    # But what if you want hourly buckets?
+    # What if order timestamp is 1 minute old?
+    # Need to manage time windows manually
+```
+
+**With Kafka Streams:**
+```python
+orders.groupByKey()\
+    .windowedBy(TimeWindows.of(3600000))\  # 1 hour
+    .count()\
+    .to("orders-per-customer-hourly")
+    
+# Kafka Streams handles time windows and state automatically
+```
+
+---
+
+### Real Example: Pizza Store with Kafka Streams
+
+#### Without Kafka Streams (Traditional):
+
+```python
+# Pizza Order Analytics Service (custom code)
+consumer = KafkaConsumer("orders")
+
+orders_by_size = {}  # State
+
+for message in consumer:
+    order = json.loads(message.value)
+    size = order["pizza_size"]
+    
+    if size not in orders_by_size:
+        orders_by_size[size] = 0
+    orders_by_size[size] += 1
+    
+    # Send to topic
+    producer.send("pizza-stats", json.dumps(orders_by_size))
+```
+
+**Problems:**
+- State lost if service crashes
+- Manual error handling
+- Manual Kafka client management
+- Hard to test
+
+#### With Kafka Streams (Cleaner):
+
+```python
+from kafka import KafkaStreams, StreamsBuilder
+
+builder = StreamsBuilder()
+
+orders = builder.stream("orders")
+
+# Group by pizza size and count
+stats = orders.groupBy(lambda k, v: v["pizza_size"])\
+    .count()
+
+stats.to("pizza-stats")
+
+# That's it!
+# Kafka Streams handles:
+# - State persistence
+# - Recovery on crash
+# - Error handling
+# - Parallelism
+# - Offset management
+```
+
+**Benefits:**
+- Clear, concise DSL
+- Automatic state persistence
+- Built-in error handling
+- Automatic scaling with partitions
+- Testable, reusable
+
+---
+
+### DCP Example: Document Processing with Kafka Streams
+
+```python
+builder = StreamsBuilder()
+
+# Read sourced documents
+sourced = builder.stream("document-sourced")
+
+# Read extracted data
+extracted = builder.stream("document-extracted")
+
+# Join them: wait 60 seconds for extraction result
+enriched = sourced.join(
+    extracted,
+    joiner=lambda sourced_doc, extracted_data: {
+        "document_id": sourced_doc["id"],
+        "source": sourced_doc,
+        "extraction": extracted_data
+    },
+    windows=TimeWindows.of(60000)
+)
+
+# Filter: only documents with high confidence extraction
+validated = enriched.filter(
+    lambda k, v: v["extraction"].get("confidence", 0) > 0.8
+)
+
+# Write results
+validated.to("quality-checked")
+
+# Build and run
+topology = builder.build()
+streams = KafkaStreams(topology, config)
+streams.start()
+```
+
+This replaces the need for:
+- Manually tracking which documents are waiting for extraction
+- Timeout logic
+- Buffering logic
+- State persistence
+
+---
+
+### Quick Comparison: Regular Kafka vs Kafka Streams
+
+| Aspect | Regular Kafka | Kafka Streams |
+|--------|---|---|
+| **What you get** | Events in topics | Library for processing events |
+| **State management** | Manual (use database) | Automatic (local state store) |
+| **Joins** | Manual (buffer and match) | Built-in (with windowing) |
+| **Aggregations** | Manual (write code) | DSL (one-liner) |
+| **Parallelism** | Scale by adding consumers | Scale by adding Streams instances |
+| **Error handling** | Your responsibility | Framework handles automatically |
+| **Language** | SDK for all languages | Kafka Streams (Java) or ksqlDB (SQL) |
+| **Use case** | Publish events, simple consumption | Complex transformations, joins, aggregations |
+
+---
+
+### Should You Use Kafka Streams?
+
+**Use Kafka Streams if you need:**
+- Complex event transformations
+- Joins across multiple topics
+- Windowed aggregations
+- Local state that needs to survive crashes
+- Cleaner code than managing Kafka clients manually
+
+**Use regular Kafka consumers if you need:**
+- Simple publish/subscribe (just one event per consumer)
+- Processing in a different language or tech stack
+- Integration with external systems
+- Maximum control over logic
+
+**For DCP:** Would benefit from Kafka Streams for join logic (matching sourced documents with extracted data), but currently uses custom services for fine-grained control.
+
+---
+
 ## References
 
 - [Apache Kafka Introduction](https://kafka.apache.org/intro/)
 - [Apache Kafka Documentation](https://kafka.apache.org/documentation/)
+- [Kafka Streams Documentation](https://kafka.apache.org/documentation/streams/)
