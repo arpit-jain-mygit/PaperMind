@@ -4881,29 +4881,370 @@ Two consumers could pass the check at the same time.
 
 ## 15. What is an idempotent producer?
 
-A producer may retry because it did not receive an acknowledgement:
+### The Problem: Lost Acknowledgements Cause Duplicates
+
+When a producer sends a message, it waits for the broker's acknowledgement. But what if the acknowledgement is lost?
 
 ```text
-Producer sends event
-Broker stores event
-Acknowledgement is lost
-Producer retries
+Producer sends: "Store order-123"
+      ↓
+Broker receives & stores order-123
+      ↓
+Broker sends ack: "Got it!"
+      ↓
+Network problem: Ack never reaches producer
+      ↓
+Producer thinks: "Ack never came, broker rejected it"
+      ↓
+Producer retries: "Store order-123" (again!)
+      ↓
+Broker now has TWO copies of order-123 ❌
 ```
 
-Without protection, the retry could create a duplicate record.
+**Result:** Duplicate message in Kafka, consumer processes same order twice.
 
-An idempotent producer uses producer identity and sequence information so the broker can reject duplicate retry attempts.
+---
 
-Typical configuration:
+### The Solution: Idempotent Producer
 
-```properties
-enable.idempotence=true
-acks=all
+An **idempotent producer** makes the broker automatically deduplicate retries.
+
+**How it works:**
+
+```text
+Producer generates unique ID for this message:
+  producer_id = "producer-1"
+  sequence_number = 5
+
+Message sent:
+  {order: order-123, producer_id: producer-1, seq: 5}
+
+Broker stores message AND remembers:
+  "From producer-1, sequence 5 = already stored"
+
+Producer retries (because ack was lost):
+  {order: order-123, producer_id: producer-1, seq: 5}
+
+Broker checks: "Same producer (producer-1) + same sequence (5)?"
+  YES → Skip, already stored
+  
+Result: Only ONE copy in Kafka ✓
 ```
 
-This protects against duplicates caused by producer retries.
+**Configuration:**
 
-**Important limitation:** It does not stop application code from intentionally calling `send()` twice with two separate logical sends.
+```python
+producer = KafkaProducer(
+    enable_idempotence=True,  # Enable idempotency
+    acks='all',                # Wait for all replicas
+    max_in_flight_requests_per_connection=5  # Can have 5 requests in flight
+)
+
+producer.send("orders", key="order-123", value=order_data)
+```
+
+**Important:** Idempotent producer only protects against producer-side retries. It does NOT prevent application code from calling `send()` twice intentionally.
+
+---
+
+### Visual Comparison: WITHOUT vs WITH Idempotent Producer
+
+#### WITHOUT Idempotent Producer (❌ Duplicates)
+
+```text
+Timeline:
+t=0ms:   Producer sends: "Store order-123"
+         ├─ Broker receives & stores
+         └─ Sends "ACK"
+         
+t=1ms:   Network glitch
+         └─ ACK is lost, producer doesn't receive it
+         
+t=2ms:   Producer timeout
+         └─ "No ACK received, retry!"
+         └─ Sends "Store order-123" again
+         
+t=3ms:   Broker receives retry
+         ├─ No dedup logic
+         ├─ Stores as separate message
+         └─ Now has TWO order-123s
+         
+t=4ms:   Consumer reads Kafka
+         ├─ Offset 0: order-123
+         ├─ Offset 1: order-123 (DUPLICATE ❌)
+         └─ Kitchen makes pizza twice!
+
+Result: Kitchen makes 2 pizzas, customer charged twice ❌
+```
+
+#### WITH Idempotent Producer (✓ Deduplicated)
+
+```text
+Timeline:
+t=0ms:   Producer sends: "Store order-123"
+         ├─ Adds producer_id="P1" + sequence=10
+         └─ Message: {order-123, P1, seq=10}
+         
+t=1ms:   Broker receives
+         ├─ Stores message
+         ├─ Remembers: "P1 seq=10 stored"
+         └─ Sends "ACK"
+         
+t=2ms:   Network glitch
+         └─ ACK is lost
+         
+t=3ms:   Producer timeout
+         └─ "No ACK received, retry!"
+         └─ Sends same: {order-123, P1, seq=10}
+         
+t=4ms:   Broker receives retry
+         ├─ Checks: "P1 seq=10?"
+         ├─ Found in memory: "Already stored!"
+         ├─ Rejects duplicate
+         └─ Does NOT store again
+         
+t=5ms:   Consumer reads Kafka
+         ├─ Offset 0: order-123 (only one copy ✓)
+         └─ Kitchen makes pizza once!
+
+Result: Kitchen makes 1 pizza, customer charged once ✓
+```
+
+---
+
+### 🍕 Pizza Store: Idempotent Producer in Action
+
+#### Scenario: Order-123 with Network Glitch
+
+**WITHOUT idempotent producer:**
+
+```python
+producer = KafkaProducer(
+    # enable_idempotence=False (default)
+)
+
+order = {"order_id": "order-123", "size": "large", "amount": 25}
+producer.send("pizza-orders", value=order)
+
+# Network glitch: broker ACK is lost
+# Producer retries...
+# Broker stores DUPLICATE
+```
+
+**What happens:**
+
+```text
+Kitchen receives from Kafka:
+  Offset 0: OrderPlaced(order-123, large pizza, $25)
+  Offset 1: OrderPlaced(order-123, large pizza, $25) ← DUPLICATE
+  
+Kitchen reads both:
+  "Make large pizza for order-123"
+  "Make large pizza for order-123"
+  
+Result: Makes TWO pizzas for same order ❌
+         Customer charged $50 instead of $25 ❌
+```
+
+**WITH idempotent producer:**
+
+```python
+producer = KafkaProducer(
+    enable_idempotence=True,  # Magic!
+    acks='all'
+)
+
+order = {"order_id": "order-123", "size": "large", "amount": 25}
+producer.send("pizza-orders", value=order)
+
+# Network glitch: broker ACK is lost
+# Producer retries...
+# Broker DEDUPLICATES automatically
+```
+
+**What happens:**
+
+```text
+Kafka automatically:
+  1. Assigns producer_id = "order-service-1"
+  2. Assigns sequence_number = 42
+  3. Stores message with metadata
+  4. On retry with same sequence, rejects duplicate
+
+Kitchen receives from Kafka:
+  Offset 0: OrderPlaced(order-123, large pizza, $25) ← ONLY ONE
+  
+Kitchen reads once:
+  "Make large pizza for order-123"
+  
+Result: Makes ONE pizza ✓
+         Customer charged $25 ✓
+```
+
+---
+
+### 💾 DCP: Why Idempotent Producer Alone is NOT Enough
+
+#### Scenario: Document Extraction with Consumer Crash
+
+**Setup:**
+
+```text
+Sourcing Service (producer)
+  ↓ (writes document-sourced)
+Kafka
+  ↓ (reads document-sourced)
+Extraction Service (consumer)
+  ↓ (writes to MongoDB)
+MongoDB
+```
+
+#### Part 1: Producer Idempotent Works Fine
+
+```text
+Sourcing produces: DocumentSourced(doc-789, invoice, amount=$10,000)
+
+With idempotent producer:
+  ✓ Only one copy in Kafka (if there's a retry)
+  ✓ Broker deduplicates automatically
+  ✓ Good!
+```
+
+#### Part 2: But Consumer Can Still Crash!
+
+```text
+Timeline:
+t=0:   Extraction Service reads from Kafka
+       Gets: DocumentSourced(doc-789, amount=$10,000)
+       
+t=1:   Extracts the data
+       Calls SparkAir ML: "Extract fields from document"
+       Gets back: {vendor: "Acme Corp", amount: 10000}
+       
+t=2:   Writes to MongoDB
+       INSERT INTO extracted_documents VALUES (doc-789, 10000, ...)
+       SUCCESS ✓
+       
+t=3:   About to ACK to Kafka
+       ← CRASH! ❌ Service crashes before ACKing
+       
+Kafka: "Extraction service didn't ACK for doc-789!"
+       "I'll resend the message when service restarts"
+       
+t=4:   Extraction Service restarts
+       
+t=5:   Kafka resends: DocumentSourced(doc-789, amount=$10,000)
+       Extraction service reads it again
+       
+t=6:   Extracts the data (again)
+       Calls SparkAir: "Extract fields from document"
+       Gets back: {vendor: "Acme Corp", amount: 10000}
+       
+t=7:   Writes to MongoDB (AGAIN)
+       INSERT INTO extracted_documents VALUES (doc-789, 10000, ...)
+       SUCCESS ✓ But now we have 2 rows!
+       
+MongoDB: Now has TWO entries for doc-789! ❌
+         Ledger shows $20,000 instead of $10,000
+```
+
+**The problem:**
+- Idempotent producer prevented duplicates AT Kafka
+- But Kafka resent message because consumer crashed before ACKing
+- MongoDB has no protection against duplicates
+- Result: Duplicate extraction ❌
+
+---
+
+### The Solution: Consumer Idempotency Required for DCP
+
+**Extraction Service with consumer dedup:**
+
+```python
+def extract_and_save(message):
+    doc_id = message['document_id']
+    amount = message['amount']
+    
+    # Use single database transaction for EVERYTHING
+    with db.transaction():
+        # STEP 1: Check if already processed
+        if db.exists(f"SELECT * FROM extracted WHERE doc_id = {doc_id}"):
+            logger.info(f"Already extracted {doc_id}, skipping")
+            return  # Skip duplicate
+        
+        # STEP 2: Do the work
+        extracted_data = sparkair.extract(message)
+        
+        # STEP 3: Save the extraction
+        db.insert("extracted_documents", {
+            "doc_id": doc_id,
+            "amount": extracted_data["amount"],
+            "vendor": extracted_data["vendor"]
+        })
+        
+        # STEP 4: Mark as processed (ATOMIC with save!)
+        db.insert("processed_messages", {
+            "message_id": message['kafka_message_id'],
+            "doc_id": doc_id,
+            "processed_at": now()
+        })
+        
+        # COMMIT happens here - both inserts succeed or both fail
+    
+    # STEP 5: ACK to Kafka only after everything is saved
+    consumer.commit()
+```
+
+**Why atomic transaction?**
+
+```text
+If we DON'T use atomic transaction:
+
+1. Insert extraction SUCCESS
+2. Mark as processed FAILS
+3. Service crashes
+4. Restart: "Haven't processed doc-789 yet?" → YES
+5. Process again → DUPLICATE!
+
+If we DO use atomic transaction:
+
+1. Both insert extraction AND mark as processed
+2. Either BOTH succeed or BOTH fail
+3. Service crashes after commit → OK, data is saved
+4. Restart: "Haven't processed doc-789 yet?" → NO, skip
+5. No duplicate ✓
+```
+
+**Timeline with Consumer Idempotency:**
+
+```text
+t=0:   Extraction gets: DocumentSourced(doc-789, amount=$10,000)
+       
+t=1:   In transaction:
+       ├─ Check processed table: "doc-789 processed?" NO
+       ├─ Extract data from document
+       ├─ Save extraction to MongoDB
+       ├─ Save "processed doc-789" to processed table
+       └─ COMMIT (both operations atomic)
+       
+t=2:   ACK to Kafka
+       
+t=3:   CRASH before reading next message
+       
+t=4:   Service restarts, Kafka resends: DocumentSourced(doc-789, amount=$10,000)
+       
+t=5:   In transaction:
+       ├─ Check processed table: "doc-789 processed?" YES ✓
+       └─ Return early, skip
+       
+Result: MongoDB still has only ONE entry for doc-789 ✓
+        No duplicate extraction ✓
+        Ledger correct ✓
+```
+
+---
+
+### Comparison: Producer vs Consumer Idempotency
 
 ---
 
