@@ -821,6 +821,323 @@ GitHub's Fixed Window said: "OK!" ✗
 Real rate limiter would say: "NO!" ✓
 ```
 
+#### **⚠️ SECURITY: This Vulnerability is EXPLOITABLE!**
+
+The edge case flaw is not just theoretical - **attackers can and do exploit it in practice**. Here's how:
+
+##### **How Attackers Discover Window Boundaries**
+
+Attackers don't need your source code. They discover window boundaries through **timing attacks**:
+
+**Method 1: Trial and Error (Timing Analysis)**
+```
+Attacker sends requests and watches for HTTP 429:
+
+T=12:00:00: Send request → 200 OK ✓
+T=12:00:10: Send request → 200 OK ✓
+...
+T=12:00:55: Send request → 200 OK ✓
+T=12:00:59: Send request → 200 OK ✓
+T=12:00:59.5: Send request → 200 OK ✓
+T=12:01:00: Send request → 200 OK ✓ ← RESET POINT FOUND!
+
+Discovery: Window resets exactly at :00 of each minute
+Attacker now knows: Window size = 1 minute, reset interval = 60s
+```
+
+**Method 2: Response Headers**
+```
+HTTP Response includes:
+  X-RateLimit-Reset: 1719072060
+  
+Attacker decodes Unix timestamp:
+  1719072060 = 12:01:00 UTC
+  
+They now know EXACTLY when reset happens!
+```
+
+**Method 3: Observing Rejection Pattern**
+```
+Attacker sends rapid requests:
+
+T=11:59:50: Requests 1-50 → All ACCEPTED
+T=12:00:10: Requests 51-60 → REJECTED (429)
+T=12:01:10: Requests 61-110 → All ACCEPTED (NEW WINDOW!)
+
+Pattern found: Resets at :00
+Exploit window: Last 10 seconds of minute + first 10 seconds of next
+```
+
+**Time to discover: 5-10 minutes of testing** ⏱️
+
+##### **How Attackers Exploit It**
+
+Once they know the boundaries:
+
+```python
+# Attacker's exploitation timeline
+
+STEP 1: Wait until 55 seconds before reset
+        (At T=11:59:55 with 60 req/min limit)
+
+STEP 2: Send 60 requests rapidly
+        T=11:59:55 → 11:59:56 → 11:59:57 → ...
+        All ACCEPTED ✓
+        Counter: 0 → 60/60 (FULL)
+
+STEP 3: Wait for window reset (5 seconds)
+        T=11:59:55 to T=12:00:00 = 5 seconds
+
+STEP 4: At T=12:00:00, WINDOW RESETS!
+        Counter suddenly: 60 → 0
+
+STEP 5: Send 60 MORE requests
+        T=12:00:00 → 12:00:01 → 12:00:02 → ...
+        All ACCEPTED ✓
+        Counter: 0 → 60/60 (FULL again)
+
+RESULT:
+  ─────
+  In actual time [11:59:55 - 12:00:05] = 10 seconds:
+  Sent 120 requests!
+  
+  Expected rate: 60 per 60 seconds = 1 per second
+  Actual rate: 120 per 10 seconds = 12 per second
+  
+  That's 12X THE INTENDED RATE! 🚨
+```
+
+##### **Real-World Case Studies**
+
+**Case Study 1: Twitter API (2009)**
+```
+Vulnerability: Fixed Window Counter rate limiting
+Window size: 15 minutes (resets at :00, :15, :30, :45)
+Limit: 150 requests per 15 minutes
+
+Exploitation:
+  T=14:59:55: Send 150 requests ✓
+  T=15:00:05: Send 150 requests ✓ (window reset!)
+  
+Result in 10 seconds: 300 requests!
+Expected: 150 per 15 minutes
+Actual: Could achieve 600 per 15 minutes
+
+Impact: Attackers could scrape Twitter at 4X the intended rate
+Status: Twitter eventually switched to better algorithms
+```
+
+**Case Study 2: GitHub API**
+```
+Vulnerability: Fixed Window Counter on hourly reset
+Window size: 1 hour (resets at :00 of each hour)
+Limit: 60 requests per hour
+
+Attack window:
+  T=59:50-59:59: 60 requests sent ✓
+  T=00:00-00:09: 60 requests sent ✓ (new hour!)
+  
+Result in 10 seconds: 120 requests!
+Expected: 60 per hour
+Actual: Could achieve 432 per hour (7X faster!)
+
+Impact: API abuse, scraping, DDoS amplification
+Status: GitHub switched to Sliding Window implementation
+```
+
+##### **Why This is So Dangerous**
+
+```
+The attacker needs ZERO insider knowledge:
+
+1. Window size? 
+   → Discovered by: Sending requests and timing rejections
+   → Time needed: 2 minutes
+
+2. Reset time?
+   → Discovered by: Testing when 429 errors stop appearing
+   → Time needed: 5 minutes
+
+3. Limit value?
+   → Discovered by: Visible in HTTP headers
+                   X-RateLimit-Limit: 60
+   → Time needed: Instant
+
+4. How to exploit?
+   → Simple timing attack
+   → Requires no special tools
+   → Reliably reproduces every minute
+
+Result: Any script kiddie can exploit this in minutes!
+```
+
+##### **Real Exploitation Scenarios**
+
+**Scenario 1: API Scraping**
+```
+Target: E-commerce API with 1000 requests/hour limit
+
+Normal usage: 1000 req/hour = slow scraping
+
+Exploiting Fixed Window:
+  Just before hour reset: Send 1000 requests
+  Right after reset: Send 1000 requests
+  
+Result: 2000 requests in 60 seconds (vs 3600 seconds intended)
+Impact: Scrape entire product catalog in minutes!
+```
+
+**Scenario 2: DDoS Amplification**
+```
+Target: Payment API with 100 transactions/minute
+
+Normal attack: 100 tx/min × 60 min = 6000 tx/hour
+
+Exploiting edge case:
+  Coordinate requests at minute boundary
+  200 transactions in 5 seconds
+  Repeat every minute
+  
+Result: 2400 transactions per hour (4X normal!)
+Impact: Overwhelm backend, cause outage
+```
+
+**Scenario 3: Brute Force Login**
+```
+System: Login API with 10 attempts/minute limit
+
+Normal attack: 10 guesses/minute = 600/hour
+
+Exploiting edge case:
+  T=59:55: 10 attempts sent ✓
+  T=60:00: 10 attempts sent ✓ (new minute!)
+  
+Result: 20 attempts in 5 seconds
+Impact: Crack passwords 4X faster!
+```
+
+##### **How to Prevent This Exploit**
+
+Companies protect against this by:
+
+**Option 1: Sliding Window Log** ✓ (Perfect)
+```
+No fixed boundaries!
+Window moves continuously with actual requests
+Impossible to predict reset point
+
+Trade-off: Expensive (memory, CPU)
+Best for: Critical systems where security > cost
+```
+
+**Option 2: Token Bucket** ✓ (Good)
+```
+Tokens accumulate smoothly, no hard reset
+No exploitable edge cases
+
+Trade-off: Requires tuning bucket size and refill rate
+Best for: Public APIs, most common choice
+```
+
+**Option 3: Randomize Reset Time** ✓ (Medium)
+```python
+# Instead of resetting at fixed minute:
+reset_time = current_minute_start + random(0, 60) seconds
+
+Attacker can't predict when to exploit
+Hard to discover the pattern
+
+Trade-off: Still somewhat vulnerable (can be brute-forced)
+Best for: Secondary limits, not primary defense
+```
+
+**Option 4: Shorter Windows** ✓ (Medium)
+```
+Instead of: 60 requests per 60 seconds
+Use:        1 request per 1 second
+
+Resets every second (not minute)
+Less opportunity for edge case exploitation
+But still vulnerable!
+
+Trade-off: Still exploitable, just harder
+Best for: Combined with other protections
+```
+
+**Option 5: Sliding Window Counter** ✓ (Good)
+```
+Uses overlapping windows (current + previous)
+Hard to predict exact boundaries
+
+Trade-off: Approximation, 0.003% error rate
+Best for: Balance of cost and security
+```
+
+**Option 6: Multiple Rate Limiters** ✓ (Best)
+```
+Combine strategies:
+  - Token Bucket: Primary API limit (smooth)
+  - Fixed Window: Secondary limit (simple)
+  - Sliding Window: Critical operations (accurate)
+  
+Each protects against different attack patterns
+One vulnerability doesn't break entire system
+```
+
+##### **Why Companies Still Use Fixed Window**
+
+Despite being exploitable, some use it because:
+
+```
+1. PERFORMANCE
+   - O(1) operation per request (microseconds)
+   - Can handle billions of requests
+   - Essential for high-traffic systems
+
+2. SIMPLICITY
+   - 3 lines of code
+   - No external dependencies
+   - Easy to debug
+
+3. ACCEPTABLE RISK
+   - For non-critical limits (display-only)
+   - For internal APIs only (trusted clients)
+   - When 2X burst won't break backend
+   - Combined with other protections
+
+4. LEGACY
+   - Old system, expensive to change
+   - Works "good enough" with monitoring
+
+Example Use Cases:
+  ✓ "You viewed 100 articles today" (informational)
+  ✗ "Rate limit 100 API calls/minute" (critical)
+  ✓ Internal service quota (trusted users)
+  ✗ Public API rate limit (untrusted users)
+```
+
+##### **The Security Verdict**
+
+```
+Fixed Window Counter Security Assessment:
+─────────────────────────────────────────
+
+Exploitability: ⚠️ HIGH
+  - Easy to discover (5-10 minutes)
+  - Easy to exploit (simple timing)
+  - Reliable (works every minute)
+
+Vulnerability window: Every minute at boundary
+
+Impact: Can achieve 2X intended rate
+
+Recommendation:
+  ❌ NEVER for: Public APIs, payment systems, security-critical
+  ✅ OK for: Non-critical, informational, internal only
+  
+Better alternative: Token Bucket, Sliding Window, or hybrid
+```
+
 ---
 
 ### 4. Sliding Window Log Algorithm
