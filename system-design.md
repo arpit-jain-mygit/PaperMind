@@ -1300,31 +1300,126 @@ ZERO edge cases! NO exploitation possible!
 
 #### **How Cleanup Works (Critical)**
 
+**IMPORTANT:** Quota becomes available as requests **expire from the rolling window**, NOT at fixed minute boundaries!
+
 ```
-As time passes, old timestamps get cleaned up:
+Unlike Fixed Window (which resets at minute boundaries),
+Sliding Window Log has NO "fresh quota" at fixed times.
+Instead, quota gradually becomes available as old requests expire.
 
-T=12:00:30: Request arrives
-  Window: [11:59:30 - 12:00:30]
-  Log before cleanup: [12:00:00, 12:00:02, 12:00:05, ...]
-  
-  Remove timestamps < 11:59:30:
-    Nothing to remove (all are recent)
-  
-  Log after cleanup: [12:00:00, 12:00:02, 12:00:05, ...]
-  Count: still 10
+Example: 5 requests per minute
 
-T=12:01:30: Request arrives
-  Window: [12:00:30 - 12:01:30]
-  Log before cleanup: [12:00:00, 12:00:02, 12:00:05, 12:00:09, ...]
-  
-  Remove timestamps < 12:00:30:
-    [12:00:00, 12:00:02, 12:00:05, 12:00:09] ← REMOVED! ✗
-  
-  Log after cleanup: [12:00:35, 12:00:40, 12:00:45, ...]
-  These are the 6 "fresh" requests from burst
-  Count: 6 < 10 ✓ ACCEPT new request
+Request #1 arrives at T=12:00:10
+  Expires from window at: T=12:01:10 (60 seconds later)
+  NOT at T=12:01:00!
 
-Result: Old requests expire naturally!
+Request #2 arrives at T=12:00:20
+  Expires from window at: T=12:01:20
+
+Request #3 arrives at T=12:00:30
+  Expires from window at: T=12:01:30
+
+Request #4 arrives at T=12:00:40
+  Expires from window at: T=12:01:40
+
+Request #5 arrives at T=12:00:50
+  Expires from window at: T=12:01:50
+  
+At T=12:00:55: All 5 requests in log, REJECT new requests ✗
+
+At T=12:01:00: 
+  Window: [12:00:00 - 12:01:00]
+  Log: [12:00:10, 12:00:20, 12:00:30, 12:00:40, 12:00:50]
+  Count: 5 (all still in window!)
+  REJECT new requests ✗
+  
+  ← NO "fresh quota" here! Minute changed but requests haven't expired yet!
+
+At T=12:01:10:
+  Window: [12:00:10 - 12:01:10]
+  Request at 12:00:10 is at EXACT boundary
+  
+  If using (start, end] boundary: 12:00:10 excluded → Count = 4 ✓ ACCEPT
+  If using [start, end] boundary: 12:00:10 included → Count = 5 ✗ REJECT
+
+At T=12:01:10.1:
+  Window: [12:00:10.1 - 12:01:10.1]
+  Request at 12:00:10 is NOW OUTSIDE the window
+  Count: 4 (only [12:00:20, 12:00:30, 12:00:40, 12:00:50])
+  ✓ ACCEPT new request
+  
+  ← This is when quota becomes available!
+     Not because of "fresh minute", but because old request expired!
+```
+
+**The Key Difference from Fixed Window:**
+
+```
+FIXED WINDOW (WRONG for this context):
+  ✗ Hard reset at minute boundaries (12:00 → 12:01)
+  ✗ Allows 2X limit at edge cases
+  ✗ Exploitable
+
+SLIDING WINDOW LOG (CORRECT):
+  ✓ Soft expiration as time passes
+  ✓ Quota available when requests fall OUT of rolling window
+  ✓ Not at arbitrary minute boundaries
+  ✓ Impossible to exploit
+```
+
+**Detailed Expiration Timeline:**
+
+```
+Scenario: 10 requests per minute
+
+T=12:00:00: Request #1
+  Window: [11:59:00 - 12:00:00]
+  Log: [12:00:00]
+  Count: 1 < 10 ✓ ACCEPT
+
+T=12:00:05: Request #2-10 (9 more requests)
+  Log now: [12:00:00, 12:00:05, 12:00:05, ..., 12:00:05] (10 total)
+  Count: 10 = 10 (at limit)
+
+T=12:00:50: Request #11
+  Window: [11:59:50 - 12:00:50]
+  Log: [12:00:00, 12:00:05, 12:00:05, ..., 12:00:05] (all still recent)
+  Count: 10 = 10 ✗ REJECT (no quota)
+
+T=12:01:00: Request #12 (minute changed!)
+  Window: [12:00:00 - 12:01:00]
+  Log: [12:00:00, 12:00:05, 12:00:05, ..., 12:00:05]
+  Count: 10 = 10 ✗ REJECT (STILL no quota!)
+  
+  Why? Because 12:00:00 is still in [12:00:00 - 12:01:00]!
+  It hasn't expired yet!
+
+T=12:01:00.1: Request #13
+  Window: [12:00:00.1 - 12:01:00.1]
+  Log: [12:00:00, 12:00:05, ..., 12:00:05]
+  Remove timestamps < 12:00:00.1: [12:00:00] ← REMOVED
+  Remaining: [12:00:05, 12:00:05, ..., 12:00:05] (9 total)
+  Count: 9 < 10 ✓ ACCEPT
+  
+  ← Quota finally available!
+     Not because minute changed, but because oldest request expired!
+```
+
+**Why This Makes Sliding Window Log Perfect:**
+
+```
+Request #1 at 12:00:00 can block quota until 12:01:00
+  (Its entire 60-second lifetime)
+
+You CANNOT exploit this by timing at minute boundaries!
+  - At 12:00:59: Request #1 still active, blocks quota
+  - At 12:01:00: Request #1 STILL active (hasn't been 60 seconds)
+  - At 12:01:00.1: Now it's finally out, quota available
+
+The expiration is based on ACTUAL TIME ELAPSED (60 seconds),
+NOT on arbitrary minute boundaries!
+
+This is why Fixed Window has edge cases but Sliding Window Log doesn't.
 ```
 
 #### **Perfect Accuracy: Why It Works**
