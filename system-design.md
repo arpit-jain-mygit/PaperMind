@@ -101,32 +101,440 @@ Request arrives:
 - ❌ Challenging to tune bucket size and refill rate properly
 - ❌ Two parameters to optimize
 
+#### **Detailed Example: Handling Burst Traffic**
+
+**Configuration:**
+```
+Bucket Capacity: 10 tokens
+Refill Rate: 1 token per second
+Scenario: [3 requests] → 6 seconds quiet → [9 requests burst]
+```
+
+**Phase 1: Initial Requests (T=0s)**
+```
+Bucket state: 10/10 tokens (full)
+
+3 requests arrive at T=0s:
+  Request #1: Takes 1 token (9 remain) ✓
+  Request #2: Takes 1 token (8 remain) ✓
+  Request #3: Takes 1 token (7 remain) ✓
+
+Result: 100% success (3/3 accepted)
+After: 7 tokens remain
+```
+
+**Phase 2: Quiet Period (T=0s to T=9s) - THE GENIUS PART!**
+```
+No new requests, but tokens keep refilling:
+
+T=1s:  Tokens: 7 → 8   (+1 per second)
+T=2s:  Tokens: 8 → 9
+T=3s:  Tokens: 9 → 10 (FULL! Capacity reached)
+T=4-9s: Tokens: 10 → 10 (cannot exceed capacity)
+
+KEY INSIGHT: During quiet period, tokens ACCUMULATE
+This builds a RESERVE for upcoming burst!
+```
+
+**Phase 3: BURST Handling (T=9s)**
+```
+9 requests arrive suddenly!
+
+Bucket state: 10/10 tokens (fully charged from quiet period)
+
+Processing:
+  Request #1: Takes 1 token (9 remain) ✓
+  Request #2: Takes 1 token (8 remain) ✓
+  Request #3: Takes 1 token (7 remain) ✓
+  Request #4: Takes 1 token (6 remain) ✓
+  Request #5: Takes 1 token (5 remain) ✓
+  Request #6: Takes 1 token (4 remain) ✓
+  Request #7: Takes 1 token (3 remain) ✓
+  Request #8: Takes 1 token (2 remain) ✓
+  Request #9: NO TOKEN! ✗ REJECTED
+
+Result: 8/9 accepted (89% success rate!)
+After: 2 tokens remain
+```
+
+#### **Why Token Bucket Excels at Bursts:**
+
+```
+┌─────────────────────────────────────┐
+│  The Token Bucket Strategy:          │
+├─────────────────────────────────────┤
+│ 1. During quiet times → Save tokens  │
+│ 2. During busy times → Spend tokens  │
+│                                      │
+│ Like a SAVINGS ACCOUNT:              │
+│ - Deposit during good times          │
+│ - Withdraw during emergency          │
+└─────────────────────────────────────┘
+```
+
+**Key Advantages:**
+- ✅ **Burst Absorption** - Can handle 10 requests at once if capacity=10
+- ✅ **Low Latency** - Responses near-instant (not queued)
+- ✅ **Rewards Fast Users** - No waiting in queue
+- ✅ **Reserve Building** - Accumulates during quiet periods
+- ✅ **Natural Traffic Fit** - Web traffic IS naturally bursty!
+
+**Companies Using Token Bucket:**
+- Amazon (AWS API Gateway)
+- Google (Google APIs, Docs)
+- Stripe (Payment APIs)
+- GitHub (GitHub API)
+
 ---
 
 ### 2. Leaking Bucket Algorithm
 
-**How It Works:**
-- Processes requests at a fixed rate (FIFO queue)
-- New requests added to queue if not full
-- Otherwise, request is dropped
-- Queue is drained at regular intervals
+#### **Core Concept**
 
-**Parameters:**
-- **Bucket size**: Queue size holding requests
-- **Outflow rate**: How many requests processed per second
+Leaking Bucket is like a **water tank with a small hole at the bottom**:
 
-**Real-World Usage:**
-- Shopify uses this for rate-limiting
+```
+┌─────────────────┐
+│ Incoming Water  │ ← Water flowing in (requests arriving)
+│ (requests)      │
+├─────────────────┤
+│                 │
+│   QUEUE OF      │ ← Water stored in tank (requests waiting)
+│   REQUESTS      │
+│                 │
+├─────────────────┤
+│        ~        │ ← Small hole at bottom (leak)
+└─────────────────┘
+        ↓
+   PROCESSED      ← Water flowing out at FIXED RATE
+   REQUESTS         (constant, predictable)
+```
 
-**Pros:**
-- ✅ Memory efficient with limited queue size
-- ✅ Requests processed at stable rate
-- ✅ Suitable for stable outflow requirements
+**Key Characteristic:** Requests leak out at a **constant, predictable rate**, no matter how many requests flow in!
+
+#### **How It Works:**
+
+1. When a request arrives, the system checks if the queue is full
+2. If queue is NOT full, the request is added to queue (FIFO order)
+3. If queue IS full, the request is **dropped/rejected**
+4. A background process removes requests from the queue at a **fixed rate**
+5. Requests are processed in order (First-In-First-Out)
+
+#### **Parameters:**
+
+1. **Queue Size (Bucket Capacity)** - How many requests can wait?
+   - Example: Maximum 10 requests in queue
+
+2. **Outflow Rate (Leak Rate)** - How fast are requests processed?
+   - Example: 1 request per 6 seconds (or 10 requests per minute)
+
+3. **FIFO (First In, First Out)** - Processing order
+   - First request added to queue is processed first
+   - Fair to all requests
+
+#### **Real-World Usage:**
+- **Shopify** uses this for rate-limiting
+- Email systems, job queues, database protection
+
+#### **Phase-by-Phase Example**
+
+**Configuration:**
+```
+Queue Capacity: 10 requests
+Outflow Rate: 1 request per 6 seconds
+Scenario: [3 requests] → 6 seconds quiet → [9 requests arrive]
+```
+
+**Phase 1: Initial Requests (T=0s)**
+```
+3 requests arrive at T=0s
+
+Queue state: Empty (0/10)
+
+Action:
+  Request #1 enters → Queue: [R1]          (1/10) ✓
+  Request #2 enters → Queue: [R1, R2]      (2/10) ✓
+  Request #3 enters → Queue: [R1, R2, R3]  (3/10) ✓
+
+Result: All 3 ACCEPTED and added to queue
+Status: PROCESSING at fixed rate
+
+Timeline:
+  T=0s:  R1 at front, will exit at T=6s
+  T=6s:  R1 exits ✓, R2 moves to front, will exit at T=12s
+  T=12s: R2 exits ✓, R3 moves to front, will exit at T=18s
+  T=18s: R3 exits ✓
+```
+
+**Phase 2: Quiet Period (T=0s to T=9s)**
+```
+No new requests, but processing continues at FIXED RATE
+
+T=0s:  Queue: [R1, R2, R3]  (3 items, processing)
+T=3s:  Queue: [R1, R2, R3]  (processing R1, will exit at T=6s)
+T=6s:  Queue: [R2, R3]      (R1 exits! ✓ Done)
+T=9s:  Queue: [R2, R3]      (R2 still processing, will exit at T=12s)
+
+Key insight: Queue DRAINS steadily to 2 items
+No "accumulation" like Token Bucket - constant leak!
+```
+
+**Phase 3: THE BURST (T=9s)**
+```
+9 requests arrive suddenly!
+
+Queue state BEFORE: [R2, R3]  (2 items, can hold 10 max)
+
+Processing incoming burst:
+  R4 arrives  → Queue: [R2, R3, R4]        (3/10) ✓
+  R5 arrives  → Queue: [R2, R3, R4, R5]    (4/10) ✓
+  R6 arrives  → Queue: [..., R4, R5, R6]   (5/10) ✓
+  R7 arrives  → Queue: [..., R5, R6, R7]   (6/10) ✓
+  R8 arrives  → Queue: [..., R6, R7, R8]   (7/10) ✓
+  R9 arrives  → Queue: [..., R7, R8, R9]   (8/10) ✓
+  R10 arrives → Queue: [..., R8, R9, R10]  (9/10) ✓
+  R11 arrives → Queue: [..., R9, R10, R11] (10/10) ✓ FULL!
+  R12 arrives → ✗ REJECTED (queue full)
+
+Result: 8 requests ACCEPTED
+        1 request REJECTED (dropped)
+```
+
+**The Critical Difference: Wait Times!**
+
+```
+Token Bucket: R4 processed FAST (near-instant)
+
+Leaking Bucket: R4 has to WAIT!
+  R2: Exits at T=12s (wait: 3 seconds remaining)
+  R3: Exits at T=18s (wait: 9 seconds from arrival at T=9s)
+  R4: Exits at T=24s (wait: 15 seconds!)
+  R5: Exits at T=30s (wait: 21 seconds!)
+  ...
+  R11: Exits at T=66s (wait: 57 seconds!) 😱
+  R12: DROPPED immediately (no wait, just rejected)
+```
+
+#### **Comparison: Token Bucket vs Leaking Bucket**
+
+| Scenario | Token Bucket | Leaking Bucket |
+|----------|--------------|----------------|
+| **3 initial requests** | Accepted immediately, fast response | Accepted, but wait in queue |
+| **Quiet 6 seconds** | Tokens accumulate (recover capacity) | Queue drains at fixed rate |
+| **9 requests at T=9s** | 8 accepted immediately (low latency) | 8 queued (high latency), 1 dropped |
+| **Last request wait** | Near-instant | 57 seconds! |
+| **User experience** | Fast, responsive | Slow, but predictable |
+
+#### **Wait Time Formula**
+
+```
+For a request at position N in queue:
+  wait_time = (N × time_per_request)
+  
+Example with 1 req/6sec:
+  Position 1: Wait = 1 × 6 = 6 seconds
+  Position 5: Wait = 5 × 6 = 30 seconds
+  Position 10: Wait = 10 × 6 = 60 seconds
+```
+
+#### **Pros:**
+- ✅ **Predictable output rate** - Always processes at fixed speed
+- ✅ **Fair processing** - FIFO order (first request gets processed first)
+- ✅ **Memory efficient** - Limited queue size
+- ✅ **Protects backend** - Steady load on DB/workers
+- ✅ **No token tuning** - Just set queue size and processing rate
 
 **Cons:**
-- ❌ Burst of traffic fills queue with old requests
-- ❌ Recent requests get rate limited
-- ❌ Difficult to tune two parameters
+- ❌ **High latency** - Requests wait in queue (not ideal for APIs)
+- ❌ **Burst handling poor** - Recent requests queued behind old ones
+- ❌ **Not suitable for user-facing APIs** - Users hate waiting
+- ❌ **Queue fills during bursts** - Excess requests dropped
+
+#### **When to Use Leaking Bucket:**
+
+✅ **Job Queue Processing**
+```
+Example: Background task processor
+  - Limit: 10 tasks queued at a time
+  - Rate: Process 1 task per second
+  - Use: Protects database from overload
+```
+
+✅ **Email Sending System**
+```
+Example: Send marketing emails
+  - Limit: Queue 1000 emails
+  - Rate: Send 100 emails per minute
+  - Use: Email server can handle steady load
+```
+
+✅ **Database Write Protection**
+```
+Example: Protect database from write spikes
+  - Limit: 50 write operations in queue
+  - Rate: 5 writes per second
+  - Use: DB can process writes steadily
+```
+
+✅ **Resource-Constrained Systems**
+```
+Example: Limited worker pool, print queue, video encoding
+  - When backend has limited processing capacity
+  - Need predictable, steady output
+  - Can tolerate wait times
+```
+
+#### **When NOT to Use Leaking Bucket:**
+
+❌ **Public REST APIs**
+- Users expect instant responses
+- High latency is unacceptable
+
+❌ **Real-time Systems**
+- Need low latency responses
+- Can't queue requests
+
+❌ **Bursty Traffic**
+- Natural traffic spikes (peak hours)
+- Users will experience long waits
+
+---
+
+#### **Deep Comparison: Token Bucket vs Leaking Bucket**
+
+**Same Scenario Applied to Both:**
+```
+Limit: 60 requests per minute (1 per second or 10 per 10 seconds)
+Traffic: [3 requests at T=0s] → quiet 6 seconds → [9 requests at T=9s]
+```
+
+**TOKEN BUCKET TIMELINE:**
+```
+T=0s:   3 requests arrive
+        Bucket: 10/10 tokens
+        ✓ Accept 3, take 3 tokens
+        Bucket now: 7/10
+
+T=1-3s: Quiet, tokens refill
+        +1 token per second
+        Bucket: 8/10 → 9/10 → 10/10 (full!)
+
+T=4-8s: Quiet continues
+        Bucket: 10/10 (capped, cannot exceed)
+        
+T=9s:   9 requests arrive
+        Bucket: 10/10 tokens ready!
+        ✓ Accept 8, take 8 tokens
+        ✗ Reject 1 (no tokens)
+        Bucket now: 2/10
+
+Result: 8/9 requests processed IMMEDIATELY
+        Latency: ~0ms (instant)
+        Success rate: 89%
+        User experience: Fast, responsive!
+```
+
+**LEAKING BUCKET TIMELINE:**
+```
+T=0s:   3 requests arrive
+        Queue: [R1, R2, R3] (3/10)
+        ✓ Accept all 3
+        Outflow begins: 1 request every 6 seconds
+
+T=6s:   R1 processed and exits
+        R2 at front of queue, will exit at T=12s
+        Queue: [R2, R3] (2/10)
+
+T=9s:   9 new requests arrive
+        Queue before: [R2, R3] (2/10)
+        Queue after burst:
+          ✓ R4-R11 added (8 requests fit)
+          ✗ R12 rejected (queue full at 10)
+        Queue: [R2, R3, R4, R5, R6, R7, R8, R9, R10, R11]
+        (all 10 slots filled)
+
+T=12s:  R2 processed and exits
+        Queue: [R3, R4, ..., R11] (9 items)
+        Next exit at T=18s
+
+T=18s:  R3 exits
+        Queue: [R4, R5, ..., R11] (8 items)
+        
+...continuing at 1 per 6 seconds...
+
+T=24s:  R4 exits (waited 15 seconds after arriving at T=9s!)
+T=30s:  R5 exits (waited 21 seconds!)
+T=36s:  R6 exits (waited 27 seconds!)
+...
+T=66s:  R11 exits (waited 57 SECONDS!)
+
+Result: 8/9 requests processed, but with LONG WAITS
+        Latency: R4 = 15s, R5 = 21s, R11 = 57s!
+        Success rate: 89% (same as Token Bucket)
+        User experience: Slow, frustrating!
+```
+
+**Head-to-Head Comparison:**
+
+| Metric | Token Bucket | Leaking Bucket |
+|--------|--------------|----------------|
+| **Requests Accepted** | 8/9 (89%) | 8/9 (89%) |
+| **Requests Rejected** | 1 | 1 |
+| **Processing Speed** | FAST (instant) | SLOW (queue delays) |
+| **Latency** | ~0-10ms | 15-57 seconds |
+| **User Experience** | Excellent | Poor |
+| **Burst Handling** | Great | Terrible |
+| **Predictability** | Variable | Constant |
+| **Best Use Case** | Web APIs | Job queues |
+
+---
+
+### **Decision Framework: Which to Use?**
+
+```
+┌─────────────────────────────────────────────────────┐
+│ Ask These Questions:                                │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│ 1. Is this for a USER-FACING API?                  │
+│    YES → Token Bucket ✓ (need fast response)        │
+│    NO  → Leaking Bucket ✓ (background processing)  │
+│                                                     │
+│ 2. Do users expect FAST responses?                 │
+│    YES → Token Bucket ✓ (milliseconds matter)       │
+│    NO  → Leaking Bucket ✓ (seconds fine)            │
+│                                                     │
+│ 3. Is traffic naturally BURSTY?                    │
+│    YES → Token Bucket ✓ (handles spikes)            │
+│    NO  → Leaking Bucket ✓ (steady flow)             │
+│                                                     │
+│ 4. Is backend resource-constrained?                │
+│    YES → Leaking Bucket ✓ (steady load)             │
+│    NO  → Token Bucket ✓ (more flexible)             │
+│                                                     │
+│ 5. Need to process JOBS in queue?                  │
+│    YES → Leaking Bucket ✓ (FIFO processing)         │
+│    NO  → Token Bucket ✓ (immediate processing)      │
+│                                                     │
+│ DEFAULT: Token Bucket (widely used, more flexible) │
+└─────────────────────────────────────────────────────┘
+```
+
+**Real-World Analogy:**
+
+```
+TOKEN BUCKET = Restaurant Reservation System
+├─ You book a table in advance (accumulate slots during quiet hours)
+├─ When party arrives, they sit immediately (tokens ready)
+├─ Everyone gets good service without waiting
+└─ Handles dinner rush gracefully
+
+LEAKING BUCKET = Bank Teller Queue
+├─ Customers join a line (queue up)
+├─ Teller serves one customer at fixed rate (1 every 6 minutes)
+├─ Last customer might wait hours
+└─ Steady, predictable processing but terrible customer experience
+```
 
 ---
 
@@ -388,13 +796,64 @@ Not just application level (HTTP):
 
 ## Summary
 
+### **Algorithm Selection Guide**
+
 | Aspect | Key Takeaway |
 |--------|--------------|
-| **Best Algorithm** | Token Bucket (most flexible, widely used) |
+| **Best for APIs** | Token Bucket (low latency, burst handling) |
+| **Best for Jobs** | Leaking Bucket (steady rate, predictable) |
+| **Most Popular** | Token Bucket (Amazon, Google, Stripe, GitHub) |
+| **Most Fair** | Leaking Bucket (FIFO queue, first-come-first-served) |
 | **Best Placement** | API Gateway/Middleware (decoupled, flexible) |
 | **Best Storage** | Redis (fast, TTL support) |
 | **Distributed Challenge** | Use Redis for centralized counters + Lua scripts for atomicity |
 | **Optimization** | Multi-data center setup + eventual consistency |
+
+### **When to Use Each Algorithm**
+
+**Token Bucket - Use When:** ⭐ (Most Common)
+- Building public REST APIs
+- Need low latency responses (< 100ms)
+- Traffic is naturally bursty
+- Want to handle traffic spikes gracefully
+- User experience matters
+- Examples: Twitter, GitHub, Google APIs
+
+**Leaking Bucket - Use When:**
+- Processing background jobs
+- Need predictable, constant output rate
+- Backend resources are limited
+- Processing database operations
+- Email sending, batch processing
+- Users can tolerate wait times
+- Examples: Shopify, email systems, job queues
+
+**Fixed Window - Use When:**
+- Simple implementation needed
+- Quota resets at specific times
+- Edge case handling acceptable
+- Not for strict rate limiting
+
+**Sliding Window Log - Use When:**
+- Need perfectly accurate rate limiting
+- Memory cost acceptable
+- No missed requests allowed
+- Examples: Strict financial limits
+
+**Sliding Window Counter - Use When:**
+- Need good accuracy without huge memory cost
+- Want balanced approach
+- 0.003% error rate acceptable
+
+### **Quick Comparison Table**
+
+| Algorithm | Speed | Fairness | Memory | Complexity | Best For |
+|-----------|-------|----------|--------|-----------|----------|
+| **Token Bucket** | 🚀 Very Fast | By speed | ⭐⭐⭐⭐⭐ | Easy | APIs |
+| **Leaking Bucket** | 🐢 Slow | By order | ⭐⭐⭐⭐⭐ | Medium | Jobs |
+| **Fixed Window** | 🚀 Very Fast | By time | ⭐⭐⭐⭐⭐ | Very Easy | Simple |
+| **Sliding Window Log** | ⚡ Medium | Perfect | ⭐⭐ | Complex | Strict |
+| **Sliding Window Counter** | ⚡ Medium | Good | ⭐⭐⭐⭐ | Medium | Balanced |
 
 ---
 
