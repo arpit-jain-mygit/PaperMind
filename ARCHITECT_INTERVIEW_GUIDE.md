@@ -670,6 +670,228 @@ Moved conversation from "my preference vs your preference" to "what do we need?"
 
 ---
 
+### Challenge 4: "No One Wanted Prod Support - It Wasn't 'Real Development'"
+
+**Situation:**
+DCP was live in production. Incidents happened. But the team had a culture problem:
+- **Perception:** "Prod support = firefighting, not engineering"
+- **Reality:** Nobody wanted the rotation: "I won't learn anything from debugging"
+- **Junior engineers:** "I want to build new features, not fix problems"
+- **Senior engineers:** "I'm too valuable for support, I should work on architecture"
+- **Result:** 3-4 engineers ended up doing prod support out of obligation, burned out
+- **Cycle:** Good people quit the team because prod support felt like punishment
+
+The team saw **RCA (Root Cause Analysis)** as a burden, not an opportunity.
+
+**What I Did (Lead By Example):**
+
+Instead of forcing people into rotation, I changed their mindset by doing it myself first.
+
+**Month 1: I Joined Prod Support**
+
+I volunteered to be on-call and handle incidents:
+
+```
+My approach:
+- Monday: Incident hits, I'm first responder
+- I don't fix quickly and move on
+- Instead, I investigate deeply:
+  "What system design allowed this bug?"
+  "What monitoring should have caught this?"
+  "How do we prevent it next time?"
+
+Incident Example:
+  Extraction service OOM (Out of Memory)
+  
+  Quick fix: Restart the pod
+  
+  My approach:
+  - Why did memory grow? (Memory leak in extraction code)
+  - Why didn't we catch it? (No memory alerts)
+  - Why the code bug? (Kafka consumer buffering)
+  - How to fix forever? (Add memory limit, add alerts, refactor consumer)
+  
+  RCA published:
+  "Memory leak in consumer was buffering 10K messages. Fixed with watermark + alerting."
+  
+  Result: Same bug never happens again
+```
+
+**Month 2: I Shared What I Learned**
+
+Every RCA, I presented to the team:
+
+```
+Team meeting (30 minutes):
+
+I showed:
+1. What happened (timeline with trace IDs)
+2. Root cause (why the system design allowed it)
+3. My debugging process (how I diagnosed it)
+4. The fix (code change + monitoring)
+5. Prevention (what stops it next time)
+
+Key insight I shared:
+"When I was a junior engineer, I thought prod support was boring.
+But I learned more in 2 weeks of on-call than 2 months of feature work.
+Here's why..."
+
+Then I explained:
+- Why distributed tracing matters (helped me debug this)
+- Why idempotency matters (prevented data loss)
+- Why monitoring matters (alerts would have caught it)
+- Why circuit breakers matter (would have graceful failure)
+```
+
+**Why This Changed Things:**
+
+Engineers realized: **RCA is where you learn system design**
+
+```
+Building a feature:
+  Write code → pass tests → deploy → ship
+  You learn: How to code
+
+Debugging production:
+  Something breaks → trace it through 5 services
+  → understand why each service failed
+  → fix the system design
+  → prevent it forever
+  → You learn: System architecture, distributed systems, resilience
+```
+
+**Month 3: I Made It Rewarding**
+
+I changed what "doing well in prod support" meant:
+
+BEFORE:
+- "Fix it quick and move on" → Undervalued
+- Burnout, no learning
+
+AFTER:
+- "Deep investigation + thorough RCA + team learning" → Valued
+- I made RCAs a "learning artifact" that everyone sees
+
+**System I Built:**
+
+1. **Weekly RCA Reviews:**
+   ```
+   Every Friday: Team reviews 2-3 RCAs from the week
+   
+   Presenters: The engineer who debugged it (not me)
+   
+   How I framed it:
+   "This person discovered a bug that could have lost customer data.
+    Here's how they found it, and here's what we all learned."
+   
+   Recognition: Public acknowledgment of good debugging
+   ```
+
+2. **RCA Template (simple):**
+   ```
+   Timeline: What happened when?
+   Root Cause: Why did the system allow it?
+   Fix: What code changed?
+   Monitoring: What alerts prevent it?
+   Learning: What did we learn about our system?
+   ```
+
+3. **Incident Rotation (fair):**
+   ```
+   Senior engineers: 1 week/quarter (I did this too)
+   Mid-level engineers: 1 week/quarter (learning opportunity)
+   Junior engineers: 1 week/quarter (mentored by me)
+   
+   Key: Everyone does it, not just junior people
+   (Signals: "This is important work")
+   ```
+
+**Month 4: Engineers Started Volunteering**
+
+**Junior Engineer (first rotation):**
+- Nervous: "I won't know how to fix production bugs"
+- I mentored him: "You don't need to fix it. You need to understand it."
+- After: "I learned more this week than my first month here"
+- He voluntarily joined rotation again 2 months later
+
+**Senior Engineer (first rotation):**
+- Reluctant: "This is beneath me"
+- Incident hits: A race condition he'd overlooked in his own code
+- After: "I thought I understood this system. I didn't."
+- He became most vocal advocate for prod support rotation
+
+**Mid-level Engineer:**
+- "This is interesting. I can apply system design knowledge"
+- Solved 3 incidents during rotation
+- Promoted 6 months later (partly because of demonstrated system thinking)
+
+**The Culture Shift:**
+
+```
+BEFORE:
+- "Prod support is punishment"
+- People hide when on-call (ignore Slack)
+- RCAs are perfunctory: "Restarted the service"
+- High turnover on support team
+
+AFTER (3 months later):
+- "Prod support is where I learn"
+- People eager for their rotation
+- RCAs are deep investigations: "Here's the system design fix"
+- Engineers requesting more rotations: "Can I do it again?"
+- Zero turnover, actually competitive to get on rotation
+```
+
+**Results:**
+
+1. **Team Health:**
+   - Nobody burnt out
+   - Everyone understood the system
+   - Rotation was seen as growth opportunity, not punishment
+
+2. **System Quality:**
+   - Fewer repeat incidents (good RCAs prevented them)
+   - Better monitoring (each RCA added alerts)
+   - Better code (each RCA suggested improvements)
+
+3. **Career Growth:**
+   - Junior engineers learned system thinking
+   - Senior engineers gained humility
+   - Mid-level engineers got recognition
+
+4. **Incidents Themselves:**
+   - MTTR (mean time to recovery): Stayed the same
+   - But MTTA (mean time to analysis): Improved
+   - Prevention: Repeat incidents dropped 60%
+
+**The Lesson I Taught:**
+
+I said to the team:
+> "You think prod support is boring. But it's actually where the most important learning happens.
+> 
+> Building features is about adding value. Good.
+> 
+> Preventing incidents is about **protecting that value**. Better.
+> 
+> And understanding why incidents happen is about **understanding your system design**.
+> That's the skill that makes you a senior engineer.
+> 
+> I'm not asking you to join rotation because we're short-staffed.
+> I'm asking you because I want you to become great system architects.
+> And you can't do that without understanding what breaks."
+
+**Why It Worked:**
+
+1. **Lead by example:** I was on-call first (no "do as I say, not as I do")
+2. **Made it valuable:** Reframed from "firefighting" to "system learning"
+3. **Made it fair:** Everyone rotates, including senior people
+4. **Made it visible:** RCA reviews celebrated good debugging
+5. **Made it rewarding:** People got recognition and career growth
+
+The team went from avoiding prod support to competing for it.
+
+---
+
 ## Stakeholder Conflicts
 
 ### Conflict 1: "Product Wants Immediate Launch, Engineering Says 6 Weeks"
