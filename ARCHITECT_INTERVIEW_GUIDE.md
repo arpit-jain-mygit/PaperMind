@@ -309,6 +309,193 @@ Showed them the real bottleneck (queue wait, not extraction) and the simple fix 
 
 ---
 
+### Challenge 4: "We Can't Debug Production Issues - No Traceability"
+
+**Situation:**
+DCP was live, but when customers reported issues:
+- Team couldn't follow a document through the system
+- Engineering would log into 5 different services manually
+- Took 30+ minutes to find the problem
+- Multiple teams (Extraction, Quality, Approval, Dissemination) couldn't coordinate
+- P1 incident: "Why is this document stuck?" took 45 minutes to debug
+- Finance said: "Is this a data loss issue or a processing issue?" → Team couldn't tell immediately
+
+Team was debugging blind. No visibility into what was happening where.
+
+**What I Did (Simple Solution):**
+
+I introduced **Distributed Tracing with Trace IDs** - a concept that transformed visibility:
+
+```
+THE PROBLEM (Before Tracing):
+
+Customer uploads document (doc-789)
+    ↓
+Service A writes logs: "Got document doc-789"
+Service B writes logs: "Processing doc-789"
+Service C writes logs: "Doc 789 quality check"
+    
+Team has to manually search 3 services' logs with doc_id
+Then realize quality is stuck and approval is waiting
+30 minutes later: "Oh, quality service crashed 10 minutes ago"
+
+THE SOLUTION (Trace IDs):
+
+Customer uploads document
+    ↓ Generate trace_id = "550e8400-e29b-41d4..."
+API: log "Upload started", trace_id: 550e...
+
+Sourcing Service:
+  log "Stored doc", trace_id: 550e...
+  publish event with trace_id
+
+Extraction Service:
+  receive event with trace_id: 550e...
+  log "Extraction started", trace_id: 550e...
+  log "Extraction done", trace_id: 550e...
+  publish event with trace_id
+
+Quality Service:
+  receive event with trace_id: 550e...
+  log "Quality check started", trace_id: 550e...
+  log "Quality check FAILED - confidence too low", trace_id: 550e...
+
+NOW: Engineer searches: trace_id="550e8400-e29b-41d4..."
+
+Results (in order):
+  t=0:00    [API] Upload started
+  t=0.1:    [Sourcing] Stored doc
+  t=0.2:    [Extraction] Extraction started
+  t=3.5:    [Extraction] Extraction done
+  t=3.6:    [Quality] Quality check started
+  t=3.7:    [Quality] Quality check FAILED - confidence 0.62 < 0.75
+
+Entire journey in 1 click! 30 seconds to debug instead of 30 minutes!
+```
+
+**How I Implemented It:**
+
+I taught the team to:
+
+1. **Generate trace ID at entry point:**
+```python
+@app.post("/upload")
+def upload(file):
+    trace_id = str(uuid.uuid4())  # Generate once
+    logger.info("Upload started", extra={"trace_id": trace_id})
+    
+    # Pass through Kafka event
+    producer.send("documents", {
+        "doc_id": doc_id,
+        "trace_id": trace_id,  # Never lose it!
+        "content": file
+    })
+```
+
+2. **Continue trace ID through all services:**
+```python
+def on_document_sourced(event):
+    trace_id = event["trace_id"]  # Extract from event
+    logger.info("Processing doc", extra={"trace_id": trace_id})
+    
+    # Do work...
+    
+    # Pass to next service
+    producer.send("next-topic", {
+        "doc_id": event["doc_id"],
+        "trace_id": trace_id,  # Continue trace!
+        "result": extracted
+    })
+```
+
+3. **Build centralized dashboard:**
+```
+ELK Stack (Elasticsearch + Kibana):
+  Search box: Enter trace_id
+  → See complete timeline across all services
+  → See where it's stuck
+  → See error messages in context
+```
+
+**What Changed:**
+
+1. **Trace ID in every log:**
+   - Every service logs with trace_id
+   - Every Kafka event includes trace_id
+
+2. **Kibana Dashboard:**
+   - Search by trace_id → get full journey
+   - See latency at each step
+   - See errors immediately
+
+3. **Team Training:**
+   - "When customer reports issue, search by trace_id first"
+   - No more manual log hunting
+
+**Result:**
+- P1 incidents: 45 min → 5 min to debug
+- P2 incidents: automatic diagnosis in logs
+- Quality/Extraction/Approval teams can coordinate
+- Finance can tell: "Data loss" vs "Still processing" vs "Stuck in approval"
+- Engineer job satisfaction improved (not frustrating anymore)
+- 10x faster incident response
+
+**Why It Worked:**
+
+The trace ID is like a **patient tracking number in a hospital**:
+
+```
+Without trace ID:
+  "Patient had surgery, but we don't know who"
+  "Lab results came back, but for which patient?"
+  Chaos.
+
+With trace ID:
+  "Patient 550e8400 had surgery in OR-1"
+  "Patient 550e8400 lab results: normal"
+  "Patient 550e8400 is in recovery"
+  Complete journey.
+```
+
+Same concept: trace ID follows document through entire DCP system. Every team can see where it is and why it's stuck.
+
+**Additional Impact:**
+
+Once trace IDs were in place, I added:
+
+1. **Alerting on anomalies:**
+```yaml
+alerts:
+  - name: SlowExtraction
+    condition: "p99(extraction_latency) > 5s per trace_id"
+    action: "Slack alert with trace_id link"
+  
+  - name: QualityFailureRate
+    condition: "trace_id fails quality > 10% in last 10 min"
+    action: "Page on-call"
+```
+
+2. **Performance optimization:**
+```
+Before: "Extraction is slow overall"
+After: "Extraction is slow for PDFs > 10MB (see trace_id X, Y, Z)"
+
+Now we can:
+- Find exact slow documents
+- Prioritize optimization
+- Measure improvement
+```
+
+3. **Compliance & Audit:**
+```
+Customer asks: "What happened to my document?"
+Engineer: "Here's the complete trace"
+Shows: When sourced, who extracted, confidence score, why approved/rejected
+Perfect for legal/compliance.
+```
+
+---
+
 ## People Leader Challenges
 
 ### Challenge 1: "Senior Engineer Resisted Event-Driven Architecture"
