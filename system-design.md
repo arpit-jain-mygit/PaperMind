@@ -358,30 +358,35 @@ Process: Request added to queue if not full
 #### Using Scenario C (Email Service)
 
 ```
-Configuration: Queue capacity = 100 emails, Outflow = 10/sec (1 every 0.1 sec)
+Configuration: 
+  Limit: 1000 emails/hour = 0.28 emails/sec (1 every 3.6 seconds)
+  Queue capacity: 100 emails
+  Outflow rate: 0.28/sec
 
-T=0s:    500 emails arrive
+T=0s:    500 emails arrive suddenly
          Queue capacity: 100 max
-         Accepted: 100 (fill the queue)
-         Rejected: 400 ✗
+         Accepted: 100 (fill queue)
+         Rejected: 400 ✗ (LOST - client must retry elsewhere)
          Queue: [E1, E2, ..., E100]
-         Status: Processing at 10/sec
 
-T=10s:   All 100 emails processed (100 ÷ 10/sec = 10 sec)
-         Queue now empty
+T=360s:  First email processed (1 ÷ 0.28/sec = 3.6 seconds)
+         Queue: [E2, E3, ..., E100, E101] (if more arrived)
+         But NOTHING new arrived (quiet period)
+         Queue: [E2, E3, ..., E100]
 
-T=120s:  Burst of 800 emails arrives
-         Queue size = 0 (was drained)
-         Capacity available: 100
-         Accepted: 100 (fill the queue)
-         Rejected: 700 ✗
-         Queue: [E1, E2, ..., E100]
-         
-T=130s:  All 100 queued emails processed
-         
-Result: Total accepted = 100 + 100 = 200 out of 1400
-        Success rate: 14.3%
-Wait time: Up to 10 seconds (100 emails × 0.1sec each)
+T=720s:  Second email processed
+         Queue: [E3, E4, ..., E100]
+
+T=36,000s: All 100 emails finally processed!
+           (100 emails ÷ 0.28/sec ≈ 357 minutes = 6 hours!)
+
+T=36,100s: Burst of 800 emails arrives
+           Queue is now empty
+           Accepted: 100 (fill queue)
+           Rejected: 700 ✗
+           
+Wait time: Up to 6 HOURS for last email in queue! 😱
+Result: Leaking Bucket is TERRIBLE for email!
 Memory: O(1) - just queue size
 ```
 
