@@ -2406,6 +2406,361 @@ With headers:
   Better UX, efficient API usage
 ```
 
+---
+
+### Server-Side vs API Gateway: Where to Place Rate Limiter?
+
+#### Option 1: Server-Side (In Application Code)
+
+```
+Architecture:
+  Client → Network → Server (with rate limiter inside code)
+                     ↑
+                  Application code
+                  checks rate limit
+```
+
+**Pros:**
+
+```
+✅ GRANULAR CONTROL
+   Can rate limit per:
+   - Specific endpoint
+   - User tier (free vs paid)
+   - User type (admin vs regular)
+   - Request content (batch vs single)
+   
+   Example: GitHub API
+     GET /user → 5000 req/hour
+     GET /search → 30 req/minute (more expensive!)
+     POST /repos/{owner}/{repo}/issues → 10 req/minute
+
+✅ ACCESS TO BUSINESS LOGIC
+   Can make smart decisions:
+   - Premium users get higher limits
+   - During off-peak: allow more traffic
+   - Based on user reputation/history
+   - Based on content/request type
+
+✅ NO EXTRA NETWORK HOP
+   Request reaches server immediately
+   Slight latency advantage
+
+✅ FINE-TUNED LIMITS
+   Can adjust per endpoint without redeploying gateway
+```
+
+**Cons:**
+
+```
+❌ MUST IMPLEMENT IN EVERY SERVICE
+   If you have 10 microservices:
+   - Implement rate limiter 10 times
+   - Update limit logic 10 times
+   - Each service must have Redis connection
+   - Hard to keep consistent across services
+   
+   Code duplication:
+     Service 1: Sliding Window Counter implementation
+     Service 2: Sliding Window Counter implementation (copy-paste!)
+     Service 3: Sliding Window Counter implementation (copy-paste!)
+     
+   Nightmare to maintain!
+
+❌ DOESN'T PROTECT BEFORE EXPENSIVE OPERATIONS
+   Bad request still hits your database:
+   - Malicious user sends 10K requests
+   - All 10K reach your server
+   - All 10K hit your database
+   - Rate limit rejects after checking DB
+   - DB hammered! 💥
+   
+   Example: Search endpoint without gateway protection
+     Each search query hits Elasticsearch
+     Rate limiter only checks AFTER Elasticsearch query
+     Resource wasted!
+
+❌ HARD TO UPDATE LIMITS
+   To change rate limit:
+   - Modify code
+   - Rebuild image
+   - Deploy to all services
+   - Takes 10+ minutes
+   
+   Can't react quickly to traffic spikes!
+
+❌ DOESN'T PROTECT AGAINST DDoS
+   Millions of requests arrive:
+   - All hit your servers
+   - All consume resources
+   - Rate limiter only helps after resources spent
+   - Cascading failure!
+
+❌ VULNERABLE TO INTERNAL BAD ACTORS
+   Microservice calling another internally:
+   - No rate limit between services
+   - Buggy code sends 1M internal requests
+   - Brings down other services
+   - Internal DDoS!
+```
+
+---
+
+#### Option 2: API Gateway (Separate Layer)
+
+```
+Architecture:
+  Client → Network → API Gateway (rate limiter) → Server
+                     ↑
+                  Dedicated layer
+                  blocks bad traffic
+```
+
+**Pros:**
+
+```
+✅ SINGLE POINT OF CONTROL
+   One place to enforce all limits:
+   - Update limit → Immediately takes effect
+   - No redeployment needed
+   - No code duplication
+   - Consistent across all services
+   
+   Example: Kong, AWS API Gateway, Nginx
+     Update limit in config
+     Live in seconds!
+
+✅ PROTECTS BEFORE EXPENSIVE OPERATIONS
+   Bad requests stopped before reaching database:
+   - Malicious user sends 10K requests
+   - API Gateway rejects after 100 (your limit)
+   - Only 100 reach your server
+   - Database protected! ✓
+   
+   Resource savings:
+     Without gateway: 10K requests hit DB
+     With gateway: 100 requests hit DB
+     100X savings in DB load!
+
+✅ DDoS PROTECTION
+   Handles traffic spikes:
+   - 1M requests arrive
+   - Gateway limits to 1K per second
+   - Your server stays stable
+   - Network bandwidth used efficiently
+   
+   Protects entire infrastructure!
+
+✅ EASY TO UPDATE
+   Change limit in gateway config:
+   - No code deployment
+   - Takes 1-2 seconds
+   - Affects all services immediately
+   - React to traffic spikes in real-time
+
+✅ PROTECTS AGAINST INTERNAL BAD ACTORS
+   Limits between services:
+   - Service A calls Service B 1M times (buggy code)
+   - Gateway limits to 1K/sec
+   - Service B stays healthy
+   - Bug doesn't cause cascade failure
+
+✅ CENTRALIZED MONITORING/LOGGING
+   All rate limit events in one place:
+   - Easy to detect attacks
+   - Easy to analyze traffic patterns
+   - Unified alerting
+```
+
+**Cons:**
+
+```
+❌ LESS GRANULAR CONTROL
+   Gateway doesn't know business logic:
+   - Can't distinguish endpoint types
+   - Can't know user tier/reputation
+   - Harder to implement smart limits
+   
+   Limited to:
+   - IP-based limits
+   - User ID limits
+   - Simple rules
+   
+   Can't do:
+   - Different limits per endpoint
+   - Dynamic limits based on load
+   - Request content-based limits
+
+❌ EXTRA NETWORK HOP
+   One more network round-trip:
+   Client → Gateway (extra hop!) → Server
+   
+   Latency impact:
+   - Without gateway: 50ms
+   - With gateway: 50ms + gateway latency (5-10ms)
+   - 10-20% slower
+
+❌ ANOTHER SYSTEM TO MAINTAIN
+   Gateway is another component:
+   - Must keep it updated
+   - Must monitor its health
+   - Must handle its failures
+   - More operational complexity
+
+❌ SINGLE POINT OF FAILURE
+   If gateway goes down:
+   - All traffic blocked
+   - ALL services unavailable
+   - No bypass option
+   - Entire API down!
+   
+   Example: AWS outage in 2015
+     API Gateway in one region failed
+     All services in that region unreachable
+     3-hour outage
+     Millions in lost revenue
+
+❌ GATEWAY DOESN'T KNOW ENDPOINT DETAILS
+   Example: GitHub API
+     Gateway: "100 requests per hour"
+     But reality:
+       - Simple reads: can handle 5000/hour
+       - Complex searches: only 30/hour
+       - Batch operations: only 10/hour
+   
+   Gateway can only do average limit!
+```
+
+---
+
+#### Comparison Table
+
+```
+┌─────────────────────┬──────────────────┬─────────────────────┐
+│ Aspect              │ Server-Side      │ API Gateway         │
+├─────────────────────┼──────────────────┼─────────────────────┤
+│ Granular control    │ ⭐⭐⭐ Excellent │ ⭐ Limited          │
+│ Implementation      │ ❌ Duplicated    │ ✅ Single point     │
+│ Updates            │ ❌ Slow (deploy) │ ✅ Fast (seconds)   │
+│ DDoS protection    │ ❌ No            │ ✅ Yes              │
+│ Resource protection │ ❌ No            │ ✅ Yes              │
+│ Latency            │ ✅ Lower         │ ❌ Higher           │
+│ Operational burden │ ✅ Lower         │ ❌ Higher           │
+│ Single point of    │ ❌ No            │ ✅ Yes              │
+│ failure            │                  │                     │
+│ Internal protection│ ❌ No            │ ✅ Yes              │
+└─────────────────────┴──────────────────┴─────────────────────┘
+```
+
+---
+
+#### Best Practice: HYBRID Approach ⭐
+
+```
+USE BOTH!
+
+Level 1: API Gateway (Coarse-grained)
+  ├─ Block obvious DDoS attacks
+  ├─ Simple IP/user rate limits
+  ├─ Protect infrastructure
+  └─ 1000 req/sec per user (generous)
+
+Level 2: Server-Side (Fine-grained)
+  ├─ Business logic based limits
+  ├─ Per-endpoint limits
+  ├─ User tier based limits
+  └─ 100 req/sec for search, 5000 for reads
+
+Architecture:
+  Client
+    ↓
+  API Gateway
+    ├─ Is this a DDoS attack? Block at gateway
+    ├─ Malicious IP? Block at gateway
+    └─ Otherwise: Forward to server
+    ↓
+  Server-Side Rate Limiter
+    ├─ What endpoint? Check specific limit
+    ├─ What user tier? Apply that limit
+    └─ What time of day? Adjust limits dynamically
+
+Benefits:
+  ✅ DDoS protection (gateway)
+  ✅ Granular control (server)
+  ✅ Resource efficiency (gateway blocks bad traffic)
+  ✅ Smart limits (server knows business logic)
+  ✅ Defense in depth (two layers)
+```
+
+---
+
+#### Real-World Examples
+
+**Twitter (Likely Hybrid):**
+```
+Gateway Level: Blocks obvious attacks, 10K req/sec per IP
+Server Level: 300 tweets/3 hours per user (sliding window counter)
+
+Why both?
+  - Gateway: Stops botnets, DDoS
+  - Server: Enforces actual business limit
+```
+
+**GitHub (Likely Hybrid):**
+```
+Gateway Level: IP-based DDoS protection
+Server Level: 
+  - 60 requests/hour (public)
+  - 5000 requests/hour (authenticated)
+  - Different per endpoint
+
+Why both?
+  - Gateway: Infrastructure protection
+  - Server: Fine-grained business rules
+```
+
+**Stripe (Likely Hybrid):**
+```
+Gateway Level: DDoS protection, malicious IP blocking
+Server Level:
+  - Per-merchant rate limits
+  - Per-endpoint limits (different for payments vs queries)
+  - Premium vs standard merchant different limits
+
+Why both?
+  - Gateway: Protects payment infrastructure
+  - Server: Ensures fair usage per customer
+```
+
+---
+
+#### Decision Guide: Where to Place Rate Limiter?
+
+```
+ONLY SERVER-SIDE if:
+  ✓ Single monolithic application
+  ✓ Low traffic (< 100 req/sec)
+  ✓ Internal API (no DDoS risk)
+  ✓ All endpoints have same limit
+  ✓ No security concerns
+
+ONLY API GATEWAY if:
+  ✓ Simple limits (IP-based, generic)
+  ✓ Multiple backend services
+  ✓ High traffic (> 10K req/sec)
+  ✓ DDoS protection critical
+  ✓ Easy deployment needed
+
+BOTH (HYBRID) if:
+  ✓ Multiple services ← YES for most companies
+  ✓ Complex business rules ← YES for most companies
+  ✓ High traffic ← YES for most companies
+  ✓ DDoS concerns ← YES for most companies
+  ✓ Different limits per endpoint ← YES for most companies
+  
+  → Use BOTH! It's the best practice!
+```
+
 ### Client Retry Strategy
 
 ```
