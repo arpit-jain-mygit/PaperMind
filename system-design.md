@@ -555,14 +555,84 @@ When window ends: Counter resets to 0
 ```
 
 #### Problems It Solves
-❌ Token Bucket: Parameters hard to tune
-✅ Fixed Window: **Simple - just set window size and limit**
 
-❌ Leaking Bucket: High latency issues
-✅ Fixed Window: **O(1) response time, no queueing**
+**From Token Bucket:**
+```
+❌ Token Bucket: Hard to tune (bucket size vs refill rate)
+✅ Fixed Window: Simple - just set window size and limit
+   Example: "100 requests per minute" is clear and simple
+            No complex parameter tuning needed
+```
+
+**From Leaking Bucket:**
+```
+❌ Leaking Bucket: High latency (requests wait in queue)
+   - Email example: 6 hours waiting for email to send!
+   - Chat example: Message delayed 5 seconds
+   - Trading example: Order delayed = wrong price
+   
+✅ Fixed Window: O(1) Response Time, NO Queueing
+
+   HOW IT WORKS (No Queue):
+   ─────────────────────────
+   Request arrives → Check counter
+     ├─ If counter < limit → ACCEPT (instant) ✓
+     └─ If counter >= limit → REJECT (instant) ✗
+   
+   NO WAITING. Either accepted or rejected immediately.
+   
+   COMPARISON: Leaking vs Fixed Window
+   ────────────────────────────────────
+   Leaking Bucket (Email Service):
+     Request 1: T=0s → Queued, wait 3.6s → Response at T=3.6s
+     Request 2: T=0s → Queued, wait 7.2s → Response at T=7.2s
+     Request 100: T=0s → Queued, wait 360s → Response at T=360s
+     
+     User experience: "Why is email taking 6 minutes?"
+     Reality: Queue is processing at fixed rate, not instant
+   
+   Fixed Window Counter (Same Email Service):
+     Request 1: T=0s → Check counter (O(1)) → Response at T=0.001s ✓
+     Request 2: T=0s → Check counter (O(1)) → Response at T=0.001s ✓
+     Request 100: T=0s → Check counter (O(1)) → Response at T=0.001s ✓
+     Request 101: T=0s → Check counter (O(1)) → Response at T=0.001s (REJECTED) ✗
+     
+     User experience: "Instant feedback - email accepted or rejected"
+     Reality: Microsecond-level latency, no queue
+   
+   IMPACT:
+   - Leaking: Users think service is slow/broken
+   - Fixed Window: Users get instant feedback on accept/reject
+```
+
+**Why This Solves Leaking Bucket's Problems:**
+
+```
+Leaking Bucket pain points:
+
+1. LONG WAITS in queue
+   Fixed Window: No queue → No waits! ✓
+
+2. BAD FOR REAL-TIME (chat, trading)
+   Fixed Window: Instant decision → Works for real-time ✓
+
+3. CAN'T PRIORITIZE
+   Fixed Window: Different limits per endpoint → Can prioritize ✓
+   
+4. UNPREDICTABLE LATENCY
+   Fixed Window: Always O(1) → Predictable latency ✓
+```
 
 #### Problems It Creates
 ⚠️ **CRITICAL FLAW: Exploitable edge cases!**
+
+But here's the trade-off: This speed comes at a cost...
+```
+Fixed Window gains: Speed & simplicity
+Fixed Window loses: Security at boundary edges (exploitable!)
+
+The edge case vulnerability is the price for O(1) response time.
+```
 
 #### Using Scenario A (Web API)
 
