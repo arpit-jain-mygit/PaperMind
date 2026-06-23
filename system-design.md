@@ -27,6 +27,50 @@ A **rate limiter** controls the rate of traffic by limiting the number of reques
 3. **Ensure Fair Usage** - Protect from resource starvation by individual users
 4. **Maintain System Stability** - Prevent cascading failures during traffic spikes
 
+### Rate Limiting for BOTH Free AND Paid APIs
+
+**Counterintuitive Truth:** Rate limiting is required even for paid APIs, not just free ones.
+
+**Why restrict paid APIs when more requests = more revenue?**
+
+```
+Infrastructure costs are NON-LINEAR:
+
+Payment Gateway Example:
+  Free tier:     10 req/min, cost = $0.01 per request
+  Paid tier:     "Unlimited" (no limits), customer sends 1M req/month
+  
+  Revenue: Customer pays $99/month
+  Cost: 1M × $0.01 = $10,000/month infrastructure
+  
+  Result: Company LOSES $9,901/month on one customer! 🚨
+
+Without rate limits: Company goes bankrupt
+With rate limits: Each customer costs predictable amount
+```
+
+**Real-World Example: Stripe**
+```
+Stripe charges $0.01-0.05 per request for payment processing.
+One customer sending unlimited requests would cost Stripe 
+$500,000/month to serve, but pays only $99/month subscription.
+
+Solution: Tiered pricing with rate limits
+  Starter:    $25/month  → 1,000 req/min
+  Business:   $100/month → 10,000 req/min
+  Enterprise: Custom     → Custom limits at custom price
+
+Heavy users PAY MORE, protecting the system and profitability.
+```
+
+**The Business Math:**
+- Each API request costs money (processing, storage, bandwidth)
+- One customer can monopolize shared resources
+- Without limits: 1 heavy user breaks SLA for all other customers
+- With limits: All customers get guaranteed uptime (SLA) + profit for company
+
+**Interview Insight:** Rate limiting enables tiered pricing and sustainable profitability. It's not about "preventing users" - it's about "making the service sustainable and profitable."
+
 ---
 
 ## Testing Scenarios
