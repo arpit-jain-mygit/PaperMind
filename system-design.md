@@ -1870,25 +1870,221 @@ end
 
 ### Rate Limit Headers
 
+**YES - Set by SERVICE-SIDE rate limiter, sent in response headers**
+
+#### How It Works
+
 ```
-HTTP Response should include:
+REQUEST FLOW:
+─────────────
 
-X-RateLimit-Limit: 100
-  → Maximum requests allowed in window
+1. Client sends request
+   GET /api/users HTTP/1.1
+   Host: api.twitter.com
+   Authorization: Bearer token123
 
-X-RateLimit-Remaining: 37
-  → How many requests left in window
+2. Server-side rate limiter processes
+   ├─ Get user_id from request
+   ├─ Check rate limit for that user
+   ├─ Calculate remaining quota
+   ├─ Determine reset time
+   └─ Add headers to response
+
+3. Server sends response WITH headers
+   HTTP/1.1 200 OK
+   X-RateLimit-Limit: 300
+   X-RateLimit-Remaining: 287
+   X-RateLimit-Reset: 1719072060
+   
+4. Client reads headers
+   ├─ Knows max allowed: 300
+   ├─ Knows remaining: 287
+   ├─ Knows when resets: 1719072060
+   └─ Can plan next requests
+
+5. Client implements smart retry logic
+   if remaining < 10:
+     wait until reset time
+   else:
+     send next request
+```
+
+#### Headers Set by Rate Limiter
+
+```
+X-RateLimit-Limit: 300
+  Set by: Rate limiter algorithm
+  Calculated from: Configuration (e.g., 300 per hour)
+  Value: Fixed per user tier
+  Example: GitHub free tier = 60, authenticated = 5000
+
+X-RateLimit-Remaining: 287
+  Set by: Rate limiter algorithm
+  Calculated from: Current count vs limit
+  Value: Changes with each request
+  Example: 
+    - After 1st request: 299 remaining
+    - After 2nd request: 298 remaining
+    - After 13th request: 287 remaining
 
 X-RateLimit-Reset: 1719072060
-  → Unix timestamp when limit resets
+  Set by: Rate limiter algorithm
+  Calculated from: Window start/end time
+  Value: Unix timestamp when quota resets
+  Example: "Reset happens at 2024-06-23 15:00:00 UTC"
 
 X-Retry-After: 45
-  → If rate limited: seconds to wait before retry
+  Set by: Rate limiter (when rejecting request)
+  Calculated from: Time until next available slot
+  Value: Seconds to wait before retrying
+  Example: If rate limited, tell client "wait 45 seconds"
+```
 
-Client can use these to:
-- Know when limit resets
-- Implement smart backoff
-- Display remaining quota to users
+#### Per-Algorithm Example
+
+**Token Bucket (100 tokens/minute):**
+```
+State before request:
+  Tokens: 47 (out of 100)
+  Refill rate: 1 per second
+  Last refill: T=0s
+
+T=5s: Request arrives
+  Service-side calculation:
+    ├─ Tokens available: 47 + 5 = 52 (refilled!)
+    ├─ After request: 52 - 1 = 51
+    ├─ Remaining in response: 51
+    ├─ Next refill in: 1 second (at 51, will become 52)
+    └─ Reset at: T=60s (full bucket)
+
+Response headers:
+  X-RateLimit-Limit: 100
+  X-RateLimit-Remaining: 51
+  X-RateLimit-Reset: {unix_timestamp_of_T=60s}
+```
+
+**Fixed Window Counter (100 per minute):**
+```
+State before request:
+  Current count: 87 (out of 100)
+  Window started: T=0:00
+  Window ends: T=1:00
+
+T=0:45: Request arrives
+  Service-side calculation:
+    ├─ Count: 87 + 1 = 88
+    ├─ Remaining: 100 - 88 = 12
+    ├─ Window resets in: 15 seconds (at T=1:00)
+
+Response headers:
+  X-RateLimit-Limit: 100
+  X-RateLimit-Remaining: 12
+  X-RateLimit-Reset: {unix_timestamp_of_T=1:00}
+```
+
+**Sliding Window Counter (100 per minute):**
+```
+State before request:
+  Current window count: 45
+  Previous window count: 0
+  Overlap: 30% (30 seconds into current window)
+  Estimated total: 45 + (0 × 0.3) = 45
+
+T=0:30: Request arrives
+  Service-side calculation:
+    ├─ Estimated: 45 + 1 = 46
+    ├─ Remaining: 100 - 46 = 54
+    ├─ Window resets in: 30 seconds (at T=1:00)
+
+Response headers:
+  X-RateLimit-Limit: 100
+  X-RateLimit-Remaining: 54
+  X-RateLimit-Reset: {unix_timestamp_of_T=1:00}
+```
+
+#### When Request is REJECTED (429 Status)
+
+```
+Request arrives but user exceeds limit
+Service rejects: HTTP 429 Too Many Requests
+
+Response headers:
+  X-RateLimit-Limit: 300
+  X-RateLimit-Remaining: 0  (No more quota!)
+  X-RateLimit-Reset: 1719072060
+  X-Retry-After: 45  (Wait 45 seconds, then retry)
+
+Body:
+  {
+    "error": "rate_limit_exceeded",
+    "message": "You have exceeded the rate limit",
+    "retry_after_seconds": 45
+  }
+```
+
+#### Client Usage (How Client Uses Headers)
+
+```
+Pseudocode: Client reads rate limit headers
+
+response = make_request()
+
+if response.status == 200:
+  remaining = response.headers['X-RateLimit-Remaining']
+  reset_time = response.headers['X-RateLimit-Reset']
+  
+  if remaining < 10:
+    wait_until(reset_time)  # Smart backoff
+  else:
+    schedule_next_request_immediately()
+
+elif response.status == 429:
+  retry_after = response.headers['X-Retry-After']
+  sleep(retry_after)
+  retry_request()  # Retry after waiting
+```
+
+#### Real-World Example: GitHub API
+
+```
+Request to GitHub API:
+GET https://api.github.com/user
+
+Response:
+HTTP/1.1 200 OK
+X-RateLimit-Limit: 60
+X-RateLimit-Remaining: 59
+X-RateLimit-Reset: 1719072060
+X-RateLimit-Used: 1
+X-RateLimit-Resource: core
+
+Client reads these and knows:
+  ✓ Max 60 requests per hour
+  ✓ 59 more requests available
+  ✓ Resets in ~45 minutes
+  ✓ Can safely send 59 more requests
+
+After 60 requests:
+  X-RateLimit-Remaining: 0
+  Response includes: 403 Forbidden
+  Client: "OK, I'll wait until reset time"
+```
+
+#### Why This Matters
+
+```
+Without headers:
+  Client has no idea about rate limit
+  Sends requests blindly
+  Gets surprised by 429 errors
+  Bad UX, inefficient retries
+
+With headers:
+  Client knows remaining quota
+  Knows exactly when quota resets
+  Can plan ahead
+  Implements smart backoff
+  Better UX, efficient API usage
 ```
 
 ### Client Retry Strategy
