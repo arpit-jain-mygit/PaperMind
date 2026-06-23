@@ -1310,7 +1310,255 @@ Made a seemingly impossible deadline possible with a smart approach. Blue-green 
 
 ---
 
-## Summary: Interview Answers
+## Challenge 5: "How to Achieve 99%+ Uptime and <2 Second Latency in DCP"
+
+**Situation:**
+DCP was growing, and product demanded SLAs:
+- **Uptime:** 99.9% (8.6 hours down/month)
+- **Latency:** <2 seconds p99 (document sourced → user sees extraction started)
+
+But the current system had:
+- Single Kafka broker (one failure = all down)
+- No caching (every read hit MongoDB)
+- Extraction taking 3+ seconds (bottleneck)
+
+Leadership asked: "How do we hit these SLAs without doubling the budget?"
+
+**What I Did (The Strategy):**
+
+I broke it into two dimensions: **Uptime** and **Latency**.
+
+### Part 1: Achieve 99.9% Uptime
+
+```
+Root cause: Single points of failure
+
+Solution: Eliminate them systematically
+```
+
+**1. Kafka Replication (Infrastructure):**
+```
+BEFORE (Single broker):
+  Broker-1 → All documents → If crashes: 100% downtime
+
+AFTER (3 brokers with replication):
+  Topic: document-sourced, replication_factor=3
+  
+  Partition-0:
+    ├─ Leader: Broker-1
+    ├─ Replica: Broker-2
+    └─ Replica: Broker-3
+  
+  If Broker-1 crashes:
+    ├─ Broker-2 becomes leader
+    ├─ Documents continue flowing
+    └─ Zero downtime ✓
+```
+
+**Cost:** +$2K/month (2 extra broker instances)
+**Downtime reduced:** 8.6 hours/month → 52 minutes/month ✓
+
+**2. Circuit Breaker (Graceful Degradation):**
+```python
+class ExtractionService:
+    def extract(self, doc):
+        try:
+            # Try primary ML service (SparkAir)
+            return sparkair.extract(doc)
+        except Timeout:
+            circuit_breaker.open()
+            # Fall back to secondary (Cognize)
+            logger.warn("SparkAir down, using Cognize fallback")
+            return cognize.extract(doc)  # Slower but available
+```
+
+**Result:** If SparkAir crashes, Cognize takes over. Service stays up.
+
+**3. Database Replication (Data Layer):**
+```
+MongoDB: Primary + 2 secondaries
+  Read from secondaries (doesn't hit primary)
+  Write to primary (replicated to secondaries)
+  
+  If primary dies:
+    ├─ Automatically elect new primary
+    └─ Zero downtime ✓
+```
+
+**4. Health Checks & Monitoring:**
+```python
+# Every 10 seconds, check if services are healthy
+def health_check():
+    sparkair_healthy = check_sparkair()
+    kafka_healthy = check_kafka()
+    mongodb_healthy = check_mongodb()
+    
+    if not sparkair_healthy:
+        logger.error("SparkAir down!")
+        alert_oncall()  # Page on-call engineer
+        enable_fallback()
+
+schedule.every(10).seconds.do(health_check)
+```
+
+**Uptime achieved:** 99.9% ✓
+
+---
+
+### Part 2: Achieve <2 Second Latency
+
+```
+Root cause: No caching, slow extraction
+
+Solution: Async + caching at every layer
+```
+
+**1. Async Upload (Fast feedback to user):**
+```python
+@app.post("/documents")
+def upload_document(file: UploadFile):
+    doc_id = str(uuid.uuid4())
+    
+    # Step 1: Save quickly (50ms)
+    db.insert("documents", {"doc_id": doc_id, "status": "QUEUED"})
+    
+    # Step 2: Return immediately (<100ms total)
+    return {"doc_id": doc_id, "status": "QUEUED"}
+    
+    # Step 3: Process in background (doesn't block user)
+    # Kafka consumer picks it up, extraction happens later
+```
+
+**Latency:** <100ms (document sourced) ✓
+
+**2. Caching Layer (Redis):**
+```python
+# Cache extraction results for 1 hour
+KEY = f"extraction:{doc_hash}"
+
+cached = redis.get(KEY)
+if cached:
+    return cached  # <10ms hit
+    
+extracted = sparkair.extract(doc)  # 3000ms miss
+redis.set(KEY, extracted, ex=3600)  # Cache for 1 hour
+return extracted
+```
+
+**Result:** Duplicate documents extracted in 10ms instead of 3000ms.
+
+**3. Parallel Processing (Overlap workflows):**
+```
+Sequential (Slow: 3.5s):
+  Document sourced (0s)
+      ↓ extract (3s)
+  Document extracted (3s)
+      ↓ quality check (500ms)
+  Document approved (3.5s)
+
+Parallel (Fast: 3s):
+  Document sourced (0s)
+      ↓ extract starts
+  Quality check starts at (1s)  ← overlaps while extracting
+      ↓
+  Document approved (3s)  ← same as extraction time!
+```
+
+**Implementation:**
+```python
+# Kafka: Multiple consumers in parallel
+class ExtractionService:
+    def on_document_sourced(event):
+        extracted = extract_with_ml(event)
+        producer.send("document-extracted", extracted)
+
+class QualityService:
+    def on_document_extracted(event):
+        # Start quality check immediately
+        quality = check_quality(event)
+        producer.send("document-quality-checked", quality)
+
+# Both run in parallel, not sequentially
+```
+
+**4. Database Read Replicas (Distribute load):**
+```
+Single database gets hammered:
+  1 extraction write + 1000 quality reads = bottleneck
+
+Solution:
+  Primary (write): 1 write per document
+  Read Replica 1: 500 reads
+  Read Replica 2: 500 reads
+  
+  Spread the load across 3 instances
+```
+
+**Latency achieved:** <2 seconds ✓
+
+---
+
+### The Trade-off Conversation
+
+**CFO:** "This costs $5K extra per month. Why?"
+
+**Me:** "Let's calculate ROI:
+```
+Downtime cost: $100K/hour (customers can't upload)
+8.6 hours down/month → $860K lost/month
+
+With redundancy:
+  Cost: +$5K/month
+  Downtime: 52 minutes/month → $87K lost/month
+  
+Savings: $773K/month
+ROI: 15,000x
+```
+
+Fast latency:
+  2 second upload → user sees progress immediately
+  Without this → user thinks system is broken, switches to competitor
+  
+We keep customer."
+
+**Result:** Approved immediately ✓
+
+---
+
+### Key Metrics Mentioned
+
+When answering this question, mention these numbers:
+
+```
+UPTIME:
+  Before: 99.0% (72 hours down/month)
+  After:  99.9% (8.6 hours down/month)
+  Improvement: 8.4x better
+
+LATENCY:
+  Before: 3.5 seconds p99 (upload → user sees extraction progress)
+  After:  1.8 seconds p99
+  Improvement: 1.9x faster
+
+COST:
+  Infrastructure: +$5K/month
+  Estimated customer retention value: +$500K+/month
+  ROI: 100x
+```
+
+---
+
+### Why This Approach Worked
+
+1. **Separated concerns** — Uptime and latency are different problems (replication vs caching)
+2. **Used analogies** — Explained with pizza delivery (fallback services), concert orchestra (parallel processing)
+3. **Showed ROI** — Justified cost with downtime savings
+4. **Incremental approach** — "Harden the failures we can afford to have" (breakers, replicas)
+5. **Monitoring first** — "Can't fix what you can't measure" (health checks)
+
+---
+
+
 
 ### When Asked "Tell me about a technical challenge..."
 
