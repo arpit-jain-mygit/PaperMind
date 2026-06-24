@@ -111,7 +111,7 @@ After going live with DCP, we started seeing duplicate extractions and missing d
 - Sometimes a document disappeared from pipeline
 - Nobody knew why
 
-The issue was complex: idempotency, exactly-once processing, outbox patterns - concepts the team had never implemented before.
+The issue was complex: idempotent consumer patterns, at-least-once delivery, atomic transactions - concepts the team had never implemented before.
 
 **What I Did:**
 
@@ -213,6 +213,36 @@ t=10:  consumer.commit()
 - Customer billing stopped having issues
 
 **Why It Worked:**
+
+The solution uses **at-least-once delivery + idempotent consumer** (not exactly-once Kafka semantics):
+
+```
+Why at-least-once + idempotency is better than exactly-once:
+
+EXACTLY-ONCE KAFKA CONFIG alone won't solve this:
+  - Kafka guarantees offset commits atomically
+  - But the extraction logic can still run twice
+  - If service crashes before committing, it resends
+  - Even with exactly-once, extraction happens again
+  - Result: Still get duplicates ✗
+
+AT-LEAST-ONCE + IDEMPOTENT CONSUMER (what we did):
+  - Kafka delivers at least once (default)
+  - Consumer checks: "Have I processed this before?"
+  - Only processes if not seen before
+  - Atomic transaction ensures both save + mark happen or neither
+  - Result: No duplicates, even if Kafka resends ✓
+
+Why this approach is better:
+  1. Simpler: No special Kafka config needed
+  2. Faster: No transaction overhead
+  3. Correct: Prevents duplicate extraction logic
+  4. Explicit: The check is visible in code
+  5. Industry standard: How to achieve exactly-once effects
+```
+
+**Key insight:** The problem isn't at the Kafka level (offset commits). It's at the APPLICATION level (extraction logic running twice). So we fix it at the application level with idempotency, not with Kafka protocol changes.
+
 Showed the exact timeline of the bug, then showed how checking "have we seen this before?" prevents the problem. Made it concrete and testable.
 
 ---
