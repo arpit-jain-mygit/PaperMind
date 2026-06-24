@@ -10,6 +10,7 @@ A practical guide to discussing your experience as an architect using DCP as the
 2. [People Leader Challenges](#people-leader-challenges)
 3. [Stakeholder Conflicts](#stakeholder-conflicts)
 4. [Unrealistic Demands](#unrealistic-demands)
+5. [Bonus: Technology Decisions](#bonus-technology-decisions)
 
 ---
 
@@ -2076,5 +2077,180 @@ When discussing DCP challenges, weave in these technical concepts:
 6. **Give concrete results** (metrics, outcomes)
 
 Good luck! You've got this. 🚀
+
+---
+
+## Bonus: Technology Decisions
+
+### Docker vs Kubernetes vs Alternatives
+
+**Quick Reference: When to use what**
+
+#### **Docker (Packaging)**
+```
+Purpose: Package application consistently
+Cost: Low
+Learning: Hours
+Scaling: Manual
+
+Use when:
+  ✅ Development environment
+  ✅ CI/CD pipelines
+  ✅ Consistency across environments
+
+Not for:
+  ❌ Managing 50+ containers at scale
+```
+
+#### **Kubernetes (Orchestration)**
+```
+Purpose: Manage containers at scale
+Cost: Medium
+Learning: Weeks
+Scaling: Auto
+
+Use when:
+  ✅ 50+ pods, multiple services
+  ✅ Need auto-scaling, rolling updates
+  ✅ Production at scale
+  ✅ Multi-cloud strategy possible
+
+Not for:
+  ❌ Small teams, < 20 pods
+  ❌ Simple applications
+```
+
+#### **Docker Swarm (Simple Alternative)**
+```
+Purpose: Simple orchestration
+Cost: Low
+Learning: Hours (simpler than K8s)
+Scaling: Manual/limited
+
+When to use:
+  ✅ Small team (< 50 engineers)
+  ✅ < 100 nodes
+  ✅ Want to keep it simple
+  
+Pros: Simple, built-in
+Cons: Less powerful, doesn't scale well
+```
+
+#### **AWS ECS (AWS-Native)**
+```
+Purpose: Container orchestration on AWS
+Cost: Medium
+Learning: Days (simpler than K8s)
+Scaling: Auto with Fargate
+
+When to use:
+  ✅ All-in on AWS
+  ✅ Don't need portability
+  ✅ Want simpler than K8s
+  
+Pros: AWS-native, good integrations
+Cons: Vendor lock-in, smaller ecosystem
+```
+
+#### **Cloud Run / Lambda (Serverless)**
+```
+Purpose: Run containers/functions without servers
+Cost: Pay per invocation
+Learning: Hours
+Scaling: Auto
+
+When to use:
+  ✅ Bursty workloads
+  ✅ Event-driven services
+  ✅ Batch jobs
+  ❌ Continuous services (expensive)
+  
+Pros: Zero ops, very simple
+Cons: Cold starts, expensive at scale, stateless only
+```
+
+#### **Heroku / PaaS (Simplest)**
+```
+Purpose: Deploy without thinking about infrastructure
+Cost: High
+Learning: Minutes
+Scaling: Auto
+
+When to use:
+  ✅ MVP, startup phase
+  ✅ Zero ops tolerance
+  ✅ < 50K requests/day
+  
+Pros: Push code, it deploys, zero ops
+Cons: Most expensive, least control
+```
+
+---
+
+### Decision Framework: Which to Choose?
+
+**Stage 1 - MVP (0-10 engineers, < 1K docs/day):**
+```
+Choose: Heroku or Cloud Run
+Why: Minimize ops burden, maximize velocity
+Cost: $2-10K/month
+Ops: 0 people
+```
+
+**Stage 2 - Growth (10-50 engineers, 1K-100K docs/day):**
+```
+Choose: Docker Swarm or AWS ECS
+Why: Simple scaling, still manageable
+Cost: $10-50K/month
+Ops: 1-2 people
+```
+
+**Stage 3 - Scale (50-200 engineers, 100K-1M docs/day):**
+```
+Choose: Managed Kubernetes (GKE or EKS)
+Why: Auto-scaling, rolling updates, cost control
+Cost: $50-200K/month
+Ops: 3-5 people
+```
+
+**Stage 4 - Enterprise (200+ engineers, 1M+ docs/day, multi-region):**
+```
+Choose: Kubernetes + Nomad (multi-cloud)
+Why: Maximum flexibility, cost optimization
+Cost: $200K-1M+/month
+Ops: Dedicated platform team
+```
+
+---
+
+### Interview Answer Template
+
+When asked "What container orchestration would you choose for [company]?":
+
+> "It depends on three factors: **team size, scale, and cloud strategy**.
+>
+> **For a startup MVP:** I'd use Heroku or Cloud Run to minimize ops burden. We focus on product, not infrastructure.
+>
+> **For a growing company:** Docker Swarm or ECS—simple enough for a 2-person ops team, scales to 100 nodes.
+>
+> **For scale:** Kubernetes (managed like GKE). Auto-scaling, rolling updates, cost control at 1M+ requests/day.
+>
+> **For multi-cloud:** Nomad gives flexibility across AWS, GCP, on-premises without rewriting deployment code.
+>
+> **For DCP specifically:** We started with ECS (AWS-native), moved to EKS (Kubernetes) at 100 pods for better cost control and multi-region strategy.
+>
+> The key: Choose based on **current needs**, not hypothetical future complexity. You can always migrate later."
+
+---
+
+### Key Trade-offs to Know
+
+| Decision | Docker Swarm | ECS | Cloud Run | Kubernetes |
+|----------|--------------|-----|-----------|-----------|
+| **Simplicity** | 🟢 Easy | 🟡 Medium | 🟢 Easy | 🔴 Hard |
+| **Auto-scaling** | 🔴 Limited | 🟢 Good | 🟢 Excellent | 🟢 Excellent |
+| **Cost at 100 pods** | 🟢 Cheap | 🟡 Medium | 🔴 Expensive | 🟡 Medium |
+| **Multi-cloud** | 🟢 Yes | 🔴 AWS only | 🟡 GCP only | 🟢 Yes |
+| **Team size to operate** | 1 person | 1-2 people | 0.5 people | 2-5 people |
 
 ---
