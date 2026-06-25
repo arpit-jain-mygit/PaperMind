@@ -7,6 +7,27 @@
 
 ---
 
+## 📊 Study Progress Tracker
+
+| Phase | Status | Completion |
+|-------|--------|------------|
+| **Week 1: Foundations** | In Progress | 28% |
+| Day 1-2: Beyond the Chatbot | ✅ COMPLETED | 100% |
+| Day 3-4: Foundational Concepts | ⏳ Pending | 0% |
+| Day 5-6: Navigate the Landscape | ⏳ Pending | 0% |
+| **Week 2: Applications** | ⏳ Pending | 0% |
+| Day 7-8: Transform Your Work | ⏳ Pending | 0% |
+| Day 9-10: Transform Your Organization | ⏳ Pending | 0% |
+| **Week 3: Review & Exam** | ⏳ Pending | 0% |
+| Day 11: Fundamentals Review | ⏳ Pending | 0% |
+| Day 12: Applications & Strategy Review | ⏳ Pending | 0% |
+| Day 13: Sample Questions | ⏳ Pending | 0% |
+| Day 14: Final Review & Practice | ⏳ Pending | 0% |
+
+**Overall Progress:** 2 out of 14 days completed | 4 out of 28 hours completed | **14% Complete** ✅
+
+---
+
 ## 🔗 Essential Links
 
 - **[Certification Page](https://cloud.google.com/learn/certification/generative-ai-leader/)** — Official cert details and registration
@@ -183,9 +204,22 @@ Combine a **top-down approach** (leadership setting vision and strategy) with a 
 
 ```
 Week 1: Courses 1-3 (Foundations & Market Understanding)
+├── ✅ Day 1-2: Course 1 - Gen AI: Beyond the Chatbot [COMPLETED]
+├── ⏳ Day 3-4: Course 2 - Unlock Foundational Concepts
+└── ⏳ Day 5-6: Course 3 - Navigate the Landscape
+
 Week 2: Courses 4-5 (Applications & Enterprise Strategy)
+├── ⏳ Day 7-8: Course 4 - Transform Your Work
+└── ⏳ Day 9-10: Course 5 - Transform Your Organization
+
 Week 3: Review, Practice, & Exam Prep
+├── ⏳ Day 11: Deep Dive Review - Fundamentals
+├── ⏳ Day 12: Deep Dive Review - Applications & Strategy
+├── ⏳ Day 13: Sample Questions & Practice
+└── ⏳ Day 14: Final Review & Exam Readiness
 ```
+
+**Next:** Start Day 3-4 with Course 2 - Gen AI: Unlock Foundational Concepts
 
 ---
 
