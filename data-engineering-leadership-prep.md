@@ -683,4 +683,168 @@ Key insight to mention: *"CDC via Debezium keeps PostgreSQL as single source of 
 
 ---
 
+### Scenario 2 — GB + Real-time + ML
+
+**Situation:** 5 GB/day, ~25M events/day. ML prediction needed in milliseconds alongside order processing.
+
+**Example:** Food delivery startup — customer places order → app must simultaneously save the order (OLTP) AND predict delivery time (ML) before confirmation screen loads.
+
+#### The Full Architecture
+
+```
+[Customer places order]
+        ↓
+[App] ──1. WRITE (HTTP)──→ [PostgreSQL]        ← saves order (OLTP)
+  │                               │
+  │                         READ (WAL)
+  │                               │
+  │                        [Debezium CDC]
+  │                               │
+  │                             WRITE
+  │                               │
+  │                           [Kafka] ──────WRITE──────→ [S3]
+  │                               │                  raw Parquet files
+  │                    READ       │       READ              │
+  │              ┌────────────────┼────────────┐          READ
+  │              ↓                ↓            ↓            │
+  │        [Payment]          [Driver]      [Flink]      [Spark]
+  │         Service            Service     state in      reads S3
+  │          OLTP               OLTP        RAM           hourly
+  │                                           │               │
+  │                                         WRITE           WRITE
+  │                                     real-time        historical
+  │                                      features         features
+  │                                           │               │
+  │                                           ↓               ↓
+  │                                    [Redis — Feature Store]
+  │                                               │
+  │                                             READ
+  │                                               │
+  └──2. REQUEST (HTTP)──→ [ML Inference Service]──┘
+                                    │
+                                  runs
+                                    │
+                               [ML Model]
+                                    │
+                   RESPONSE ←───────┘
+                       │
+              returns "28 min" → [App]
+```
+
+#### Two Parallel Calls From App
+
+```
+App makes 2 parallel calls simultaneously:
+
+Call 1: WRITE → PostgreSQL          (saves order, ~20ms)
+Call 2: REQUEST → ML Inference Service  (gets prediction, ~15ms)
+
+App waits for BOTH → shows:
+"Order confirmed! Arrives in 28 minutes"
+```
+
+App never touches Redis directly. ML Inference Service handles that internally.
+
+#### Two Feature Pipelines Feed Redis
+
+**Flink (stream, always running):**
+- READs order events from Kafka continuously
+- Maintains running state in RAM (+1 order placed, -1 order delivered)
+- WRITEs real-time features to Redis every 30 seconds
+- Features: active_orders_per_restaurant, active_drivers_per_zone, traffic_level
+
+**Spark (batch, hourly):**
+- READs raw Parquet files from S3
+- Computes historical features from weeks of data
+- WRITEs historical features to Redis
+- Features: avg_prep_time, user_order_history, restaurant_rating
+
+Both write to same Redis. ML model reads both at inference time — this is **Lambda Architecture**.
+
+#### Why Flink Does Not Slow Down
+
+Flink does NOT recount from scratch on every event. It keeps running state in RAM:
+
+```
+Event: order placed at Pizza Palace
+Flink: state["Pizza Palace"] = current + 1   ← one addition, microseconds
+Writes updated value to Redis every 30 sec
+```
+
+Not a full scan. Pure in-memory increment/decrement.
+
+#### ML Inference Flow
+
+```
+1. App sends REQUEST to ML Inference Service
+2. ML Service READs features from Redis     (1ms)
+   - active_orders at Pizza Palace = 12     (from Flink)
+   - avg_prep_time at Pizza Palace = 18min  (from Spark)
+   - active_drivers in Zone A = 3           (from Flink)
+3. ML Model runs prediction                 (10ms)
+4. RESPONSE: "28 minutes" returned to App   (total ~15ms)
+```
+
+#### Why Not Kafka for ML Inference
+
+```
+Kafka is PUSH based — sends data when events arrive
+ML Inference is PULL based — needs features for a specific user ON DEMAND
+
+1000 concurrent orders → 1000 inference requests → each needs
+specific features for specific user/restaurant/zone right now
+
+Redis serves all 1000 point lookups in parallel in <1ms each
+Kafka cannot answer "give me current state for Pizza Palace" on demand
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| PostgreSQL | Saves orders (OLTP, source of truth) | App WRITEs, Debezium READs WAL |
+| Debezium | Captures WAL changes | READs WAL, WRITEs to Kafka |
+| Kafka | Routes events to all consumers | Consumers READ from it |
+| Payment Service | Charges customer | READs from Kafka |
+| Driver Service | Assigns driver | READs from Kafka |
+| S3 | Raw Parquet storage | Kafka WRITEs, Spark READs |
+| Flink | Real-time feature computation | READs Kafka, WRITEs Redis |
+| Spark | Historical feature computation | READs S3, WRITEs Redis |
+| Redis | Feature Store online layer | Flink/Spark WRITE, ML Service READs |
+| ML Inference Service | Runs model, returns prediction | READs Redis, RESPONDs to App |
+
+#### GB Scale Reality
+
+```
+PostgreSQL          → 1 medium machine   ($50/month)
+Kafka + Debezium    → 1 small machine    ($30/month)
+Flink               → 1 small machine    ($50/month)
+Spark (on-demand)   → runs hourly        ($20/month)
+Redis               → 1 small machine    ($30/month)
+ML Inference Service→ 1 small machine    ($50/month)
+S3                  → GB scale           ($10/month)
+Total: ~$240/month
+```
+
+#### Interview Answer
+
+*"Design real-time ML prediction alongside order processing at GB scale"*
+```
+1. App makes two parallel calls:
+   - WRITE to PostgreSQL (save order)
+   - REQUEST to ML Inference Service (get prediction)
+2. Debezium CDC captures WAL → publishes to Kafka
+3. Kafka routes to: Payment Service, Driver Service, Flink
+4. Kafka also WRITEs raw events to S3
+5. Flink READs Kafka → maintains state in RAM → WRITEs real-time features to Redis
+6. Spark READs S3 hourly → WRITEs historical features to Redis
+7. ML Inference Service READs Redis → runs model → RESPONDs in ~15ms
+8. App shows "Order confirmed! Arrives in 28 minutes"
+```
+
+Key insight: *"Lambda Architecture — Flink handles recency, Spark handles history, both write to Redis. ML model reads both at inference time for complete context. App never touches Redis directly."*
+
 ---
+
+<!-- TODO: After all scenarios complete — add consolidated architecture diagram showing all scenarios in one big tree -->
+
