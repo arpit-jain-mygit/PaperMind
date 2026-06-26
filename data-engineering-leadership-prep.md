@@ -1079,5 +1079,98 @@ Key insight: *"Never use one tool for both dashboards. ClickHouse for real-time 
 
 ---
 
+---
+
+## Reference — Tool Stacks and Counterparts
+
+### The Two Standard Stacks
+
+```
+SPEED STACK                     SCALE STACK
+───────────                     ───────────
+Kafka                           Kafka
+  ↓                               ↓
+Flink                           S3
+  ↓                               ↓
+ClickHouse/Druid/Pinot          Spark
+  ↓                               ↓
+Grafana / Product UI            Snowflake/BigQuery/Redshift
+                                  ↓
+                                Tableau / Looker
+```
+
+Same Kafka feeds both. Everything else is parallel.
+
+### Speed vs Scale Counterparts
+
+| Layer | Speed Counterpart | Scale Counterpart |
+|---|---|---|
+| Processing | Flink | Spark |
+| Storage/Query | ClickHouse / Druid / Pinot | Snowflake / BigQuery / Redshift |
+| Raw Storage | Kafka (temporary buffer, 7 days) | S3 / GCS (permanent, cheap) |
+| Serving Layer | Redis (key lookup, sub-ms) | PostgreSQL / Cassandra (durable) |
+
+### Processing Layer
+
+```
+Flink                           Spark
+─────                           ─────
+Event by event                  Batch (files/micro-batch)
+Millisecond latency             Minutes to hours latency
+Always running                  Runs on schedule
+Stateful (RAM + RocksDB)        Stateless (reads fresh each run)
+Complex to operate              Simpler to operate
+Use: real-time aggregations     Use: historical ETL, ML training
+```
+
+### Storage/Query Layer
+
+```
+ClickHouse / Druid / Pinot      Snowflake / BigQuery / Redshift
+──────────────────────────      ───────────────────────────────
+Last hours of data              Weeks/months of data
+Sub-second queries              Seconds to minutes
+Fixed machine cost              Pay per query/compute
+Dedicated purpose               Shared across teams
+Use: ops dashboards, alerts     Use: analyst queries, reports
+
+Within speed:
+  ClickHouse  →  GB-TB, internal dashboards, simple setup
+  Druid       →  TB-PB, internal dashboards, multi-tenant
+  Pinot       →  TB-PB, user-facing product analytics (LinkedIn, Uber)
+
+Within scale:
+  Snowflake   →  most popular, elastic compute, multi-cloud
+  BigQuery    →  Google ecosystem, serverless, pay per query
+  Redshift    →  AWS ecosystem
+```
+
+### Tool Deep Dive
+
+| Tool | Type | Best For | Latency | Scale |
+|---|---|---|---|---|
+| Flink | Stream processor | Transforming/aggregating events continuously | ms | GB-PB |
+| Spark | Batch processor | Historical ETL, ML training, cleaning | minutes | GB-PB |
+| ClickHouse | Real-time columnar DB | Ops dashboards, recent data, simple setup | <100ms | GB-TB |
+| Druid | Real-time columnar DB | Multi-tenant dashboards at scale | <1 sec | TB-PB |
+| Pinot | Real-time columnar DB | User-facing product analytics | <100ms | TB-PB |
+| Snowflake | Cloud data warehouse | Historical analyst queries, ad-hoc SQL | 3-30 sec | TB-PB |
+| Redis | In-memory key-value | ML inference, session, caching, rate limiting | <1ms | GB |
+| Kafka | Message queue | Event ingestion, decoupling producers/consumers | ms | GB-PB |
+| S3 | Object storage | Raw durable storage, ML training data | N/A | unlimited |
+
+### When to Choose Which Real-time Store
+
+```
+Internal ops dashboard, GB-TB, simple:         Flink + ClickHouse
+Internal ops dashboard, TB-PB, multi-tenant:   Flink + Druid
+User-facing analytics in product:              Flink + Pinot
+Historical analyst queries:                    Spark + Snowflake
+ML inference serving:                          Flink/Spark + Redis
+All of the above (mature platform):            Kafka feeds all
+```
+
+---
+
 <!-- TODO: After all scenarios complete — add consolidated architecture diagram showing all scenarios in one big tree -->
 
