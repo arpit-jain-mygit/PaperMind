@@ -1279,6 +1279,26 @@ ORDER BY (city, created_at)   -- no primary key, just sort order
 
 ---
 
+### Tool Alternatives
+
+| Tool | Category | Alternatives | Key Difference |
+|---|---|---|---|
+| **Kafka** | Message Queue | AWS Kinesis, Google Pub/Sub, Azure Event Hubs, RabbitMQ, Pulsar | Kinesis = AWS native, no ops. Pub/Sub = Google native. Pulsar = multi-tenancy. RabbitMQ = simpler, smaller scale |
+| **Flink** | Stream Processor | Spark Streaming, AWS Kinesis Data Analytics, Google Dataflow, Kafka Streams | Spark Streaming = micro-batch not true streaming. Dataflow = Google managed Flink/Beam. Kafka Streams = lightweight, no cluster needed |
+| **Spark** | Batch Processor | Databricks (managed Spark), AWS Glue, Google Dataproc, Hive | Databricks = best Spark experience. Glue = serverless AWS. Hive = older, slower, Hadoop era |
+| **ClickHouse** | Real-time Columnar DB | Apache Druid, Apache Pinot, TimescaleDB | Druid = multi-tenant TB scale. Pinot = user-facing analytics. TimescaleDB = time-series on PostgreSQL |
+| **Redis** | In-memory Key-Value | Memcached, AWS ElastiCache, DragonflyDB | Memcached = simpler, no persistence. ElastiCache = managed Redis on AWS. DragonflyDB = faster Redis alternative |
+| **Snowflake** | Cloud Data Warehouse | BigQuery, Redshift, Databricks SQL, Synapse, Athena | BigQuery = serverless Google. Redshift = AWS native. Athena = query S3 directly, no warehouse needed |
+| **Redshift** | Cloud Data Warehouse | Snowflake, BigQuery, Synapse | Snowflake = multi-cloud. BigQuery = serverless. Synapse = Azure |
+| **S3** | Object Storage | GCS (Google), Azure Blob, HDFS | GCS = Google ecosystem. Azure Blob = Microsoft. HDFS = on-premise Hadoop (legacy) |
+| **Debezium** | CDC Tool | AWS DMS, Oracle GoldenGate, Attunity, Fivetran | DMS = AWS managed CDC. GoldenGate = Oracle enterprise. Fivetran = SaaS, no-code connectors |
+| **Airflow** | Pipeline Orchestrator | Prefect, Dagster, AWS Step Functions, Google Cloud Composer | Prefect/Dagster = modern Python-native. Step Functions = AWS serverless. Composer = managed Airflow on GCP |
+| **Grafana** | Visualization (ops) | Kibana, Datadog, New Relic | Kibana = Elasticsearch ecosystem. Datadog/New Relic = paid, full observability platforms |
+| **Tableau/Looker** | Visualization (business) | Power BI, Metabase, Superset | Power BI = Microsoft ecosystem. Metabase = simple, open source. Superset = open source Looker alternative |
+| **dbt** | Data Transformation | SQLMesh, Dataform | SQLMesh = dbt alternative with better testing. Dataform = Google native dbt alternative |
+
+---
+
 ### Flink → ClickHouse vs Flink → Redis vs Flink → ClickHouse → Redis
 
 | Pattern | When | Consumer |
