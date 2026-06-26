@@ -984,10 +984,25 @@ Result: analysts can run any SQL without worrying about data quality
 
 #### Why No Redis Between ClickHouse and Grafana
 
+**Primary reason — wrong access pattern:**
+```
+Redis = key-value store. Every operation: GET <key> → one value
+Redis has no concept of time ranges, aggregations, GROUP BY, WHERE
+
+Grafana needs:
+SELECT city, COUNT(*), AVG(delivery_time)
+FROM events
+WHERE timestamp > NOW() - 5 MINUTES
+GROUP BY city
+
+Redis architecturally cannot execute this. Not what it is built for.
+```
+
+**Secondary reason — query volume is low:**
 ```
 Grafana refreshes every 30 sec = 2 queries/min = 120 queries/hour
 ClickHouse handles thousands of queries/sec
-120 queries/hour is trivial — no caching layer needed
+120 queries/hour is trivial — no caching needed
 ```
 
 How "load in under 2 seconds" is achieved without Redis:
@@ -1007,14 +1022,34 @@ What Flink writes:    { city, orders_count, avg_delivery, payment_failures }
 Total: ClickHouse query (10ms) + network (50ms) + render (500ms) = well under 2 sec
 ```
 
-Add Redis between ClickHouse and dashboard ONLY when:
+**Important — Redis is a cache, not a query engine:**
 ```
-- Thousands of concurrent dashboard viewers (5000 ops staff all refreshing)
-- Refresh interval very aggressive (every 1 sec)
-- Flink did NOT pre-aggregate (Grafana querying raw events = expensive query)
+Redis does NOT run aggregation queries on ClickHouse.
+
+The pattern when Redis IS used (e.g. homepage "Trending Now"):
+  Backend service queries ClickHouse once every 2 min (aggregation)
+  → stores entire result as single blob in Redis:
+    SET "trending_products" = "[product_A, product_B, ...]"
+  → 10,000 users/sec all do: GET "trending_products" from Redis
+  → ClickHouse gets 1 query per 2 min instead of 10,000/sec
+
+Redis here = cache of one aggregated result, served to many as single key lookup
+Redis is NOT computing the aggregation — ClickHouse does that once
 ```
 
-At GB scale with a small ops team — none of these apply.
+Add Redis between ClickHouse and consumers ONLY when:
+```
+- SAME aggregated result needed by MANY concurrent consumers (10,000 users/sec)
+- Result changes slowly (every few minutes) — caching is safe
+- Computing fresh each time would overload ClickHouse
+
+Do NOT add Redis when:
+- Each consumer needs DIFFERENT result (different filter, different time range)
+- Query volume is low (Grafana 120 queries/hour)
+- Result changes every few seconds (cache would serve stale data)
+```
+
+At GB scale with a small ops team — none of the Redis conditions apply.
 
 #### Why Not Use Snowflake for Ops Dashboard
 
