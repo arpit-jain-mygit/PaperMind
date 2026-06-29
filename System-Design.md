@@ -48,8 +48,6 @@ A comprehensive guide covering foundational system design concepts and detailed 
 - Architecture and scaling
 - Real-world examples
 
-### **Special Sections**
-
 #### [CHUBB Interview Question: Design a Unique Code Generator](#chubb-interview-question-design-a-unique-code-generator)
 - Problem and bottlenecks
 - RDBMS approach (why it fails)
