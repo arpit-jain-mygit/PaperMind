@@ -50,6 +50,23 @@
 | 11 | GB + Batch + Dashboards | Fixed executive KPI dashboard loads instantly once daily | dbt builds daily_kpi_summary (1 row/day, 6 KPIs). Dashboard reads 1 row = instant load. Pre-aggregate everything — never query raw table at dashboard open time. | daily_kpi_summary dbt model | ClickHouse, real-time pipeline | [diagram](#scenario-11--gb--batch--dashboards) |
 | 12 | GB + Batch + Another System | External partners/regulators expect scheduled FILE transfers (CSV/XML), not events | Spark generates formatted files → validate (row count, checksum, schema) → deliver via SFTP/S3/API → track acknowledgement in PostgreSQL. File schema is a contract. | File export Spark job, SFTP delivery, delivery ack log | Kafka consumers, Redis, real-time components | [diagram](#scenario-12--gb--batch--another-system) |
 
+### Speed Pattern (what changes with processing speed)
+
+| Speed | SLA | Key Tool | Why |
+|---|---|---|---|
+| Real-time | Seconds | Flink (always-on) | Processes every event in milliseconds, stateful RAM |
+| Near Real-time | 5-15 min | Spark micro-batch (scheduled) | Runs every 5 min, simpler, cheaper, backfill free |
+| Batch | Hours/daily | Spark + Airflow (nightly) | Full day settled data, complete joins, dbt for logic |
+
+### Use Case Pattern (what changes with consumer type)
+
+| Use Case | Core Challenge | Solution Pattern |
+|---|---|---|
+| Analytics | OLTP must not slow down during queries | Separate OLAP store — ClickHouse (real-time), Snowflake (historical) |
+| ML | Features fresh + predictions fast | Redis Feature Store + Lambda Architecture (Flink + Spark) |
+| Dashboards | Two audiences, different latency needs | Two tools if speeds differ; one tool (Snowflake) if both accept delay |
+| Another System | Machines act on events — duplicates cause real damage | Idempotency + DLQ + Schema Registry + Fraud always sync HTTP |
+
 ---
 
 ## The 3 Fundamental Questions (Always Ask These First)
