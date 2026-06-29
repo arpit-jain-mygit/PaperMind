@@ -4,72 +4,84 @@ A comprehensive guide covering three critical system design problems: Unique Cod
 
 ---
 
-## Table of Contents (2 Levels)
-
-### 1. [Unique Code Generation at Scale](#1-unique-code-generation-at-scale)
-   - [The Problem](#the-problem)
-   - [Why It's Hard](#whys-hard)
-   - [Approach 1: RDBMS (❌ Fails)](#approach-1-rdbms-fails)
-   - [Approach 2: Pre-Generation + Queue (✅ Works)](#approach-2-pre-generation--queue-works)
-   - [How It Really Works](#how-it-really-works)
-   - [Optimization: Bulk Reading](#optimization-bulk-reading)
-   - [When Codes Run Out: Regeneration](#when-codes-run-out-regeneration)
-   - [Interview Answer](#interview-answer)
-
-### 2. [Design a Rate Limiter](#2-design-a-rate-limiter)
-   - [Problem Statement](#problem-statement)
-     * [Real-World Examples](#real-world-examples)
-     * [Why Rate Limiting Matters](#why-rate-limiting-matters)
-     * [Rate Limiting for Both Free AND Paid APIs](#rate-limiting-for-both-free-and-paid-apis)
-   - [Testing Scenarios](#testing-scenarios)
-     * [Scenario A: Web API Rate Limiting](#scenario-a-web-api-rate-limiting)
-     * [Scenario B: Payment Processing](#scenario-b-payment-processing)
-     * [Scenario C: Email Service](#scenario-c-email-service)
-   - [Algorithm Comparison](#algorithm-comparison)
-     * [Token Bucket Algorithm](#️-token-bucket-algorithm-)
-     * [Leaking Bucket Algorithm](#️-leaking-bucket-algorithm)
-     * [Fixed Window Counter](#️-fixed-window-counter)
-     * [Sliding Window Log](#️-sliding-window-log)
-     * [Sliding Window Counter](#️-sliding-window-counter-)
-   - [Interview Q&A](#interview-qa)
-   - [Implementation Guide](#implementation-guide)
-   - [Distributed Systems Challenges](#distributed-systems-challenges)
-   - [Edge Cases & Gotchas](#edge-cases--gotchas)
-
-### 3. [Design a URL Shortener](#3-design-a-url-shortener)
-   - [Problem Statement](#problem-statement-1)
-   - [How URL Shorteners Work](#how-url-shorteners-work)
-   - [Functional Requirements](#functional-requirements)
-   - [Non-Functional Requirements](#non-functional-requirements)
-   - [API Design](#api-design)
-   - [Database Schema](#database-schema)
-   - [Design Approaches](#design-approaches)
-   - [Deep Dive: URL Encoding](#deep-dive-url-encoding)
-   - [System Architecture](#system-architecture)
-   - [Handling Scale](#handling-scale)
-   - [Cache Strategy](#cache-strategy)
-   - [Analytics & Monitoring](#analytics--monitoring)
-   - [Security Considerations](#security-considerations)
-   - [Interview Answer](#interview-answer-1)
-
----
-
-# Unique Code Generation at Scale
-
-A practical guide to generating unique referral codes, short URLs, vouchers, or session tokens without race conditions, database bottlenecks, or latency issues.
-
----
-
 ## Table of Contents
 
-1. [The Problem](#the-problem)
-2. [Why It's Hard](#why-its-hard)
-3. [Approach 1: RDBMS (❌ Fails)](#approach-1-rdbms-fails)
-4. [Approach 2: Pre-Generation + Queue (✅ Works)](#approach-2-pre-generation--queue-works)
-5. [How It Really Works](#how-it-really-works)
-6. [Optimization: Bulk Reading](#optimization-bulk-reading)
-7. [When Codes Run Out: Regeneration](#when-codes-run-out-regeneration)
-8. [Interview Answer](#interview-answer)
+### 1. Unique Code Generation at Scale
+   - 1.1 The Problem
+     * 1.1.1 What's a Referral Code?
+     * 1.1.2 Why It's Hard at Scale
+   - 1.2 Why It's Hard
+     * 1.2.1 The Race Condition
+     * 1.2.2 The Bottleneck
+   - 1.3 Approach 1: RDBMS (❌ Fails)
+     * 1.3.1 The Naive Solution
+     * 1.3.2 Why It Fails
+   - 1.4 Approach 2: Pre-Generation + Queue (✅ Works)
+     * 1.4.1 The Genius Solution
+     * 1.4.2 How It Works (4 Steps)
+   - 1.5 How It Really Works
+     * 1.5.1 The Complete Flow
+     * 1.5.2 Marking Codes as "Used"
+   - 1.6 Optimization: Bulk Reading
+     * 1.6.1 The Problem
+     * 1.6.2 The Solution
+     * 1.6.3 Performance Impact
+   - 1.7 When Codes Run Out: Regeneration
+     * 1.7.1 The Timeline
+     * 1.7.2 Solution: Expand Code Length
+     * 1.7.3 Regeneration Process
+     * 1.7.4 Automated Monitoring
+   - 1.8 Performance Comparison
+   - 1.9 Interview Answer
+   - 1.10 Key Takeaways
+
+### 2. Design a Rate Limiter
+   - 2.1 Problem Statement
+     * 2.1.1 Real-World Examples
+     * 2.1.2 Why Rate Limiting Matters
+     * 2.1.3 Rate Limiting for Both Free AND Paid APIs
+   - 2.2 Testing Scenarios
+     * 2.2.1 Scenario A: Web API Rate Limiting
+     * 2.2.2 Scenario B: Payment Processing
+     * 2.2.3 Scenario C: Email Service
+   - 2.3 Algorithm Comparison
+     * 2.3.1 Token Bucket Algorithm ⭐
+     * 2.3.2 Leaking Bucket Algorithm
+     * 2.3.3 Fixed Window Counter
+     * 2.3.4 Sliding Window Log
+     * 2.3.5 Sliding Window Counter ⭐
+     * 2.3.6 Side-by-Side Comparison
+     * 2.3.7 Decision Matrix
+   - 2.4 Interview Q&A
+   - 2.5 Implementation Guide
+   - 2.6 Distributed Systems Challenges
+   - 2.7 Edge Cases & Gotchas
+   - 2.8 Real-World Companies & Their Approaches
+   - 2.9 Summary: Quick Reference
+   - 2.10 References
+
+### 3. Design a URL Shortener
+   - 3.1 Problem Statement
+   - 3.2 How URL Shorteners Work
+   - 3.3 Functional Requirements
+   - 3.4 Non-Functional Requirements
+   - 3.5 API Design
+   - 3.6 Database Schema
+   - 3.7 Design Approaches
+   - 3.8 Deep Dive: URL Encoding
+   - 3.9 System Architecture
+   - 3.10 Handling Scale
+   - 3.11 Cache Strategy
+   - 3.12 Analytics & Monitoring
+   - 3.13 Security Considerations
+   - 3.14 Interview Answer
+   - 3.15 Key Takeaways
+
+---
+
+# 1. Unique Code Generation at Scale
+
+A practical guide to generating unique referral codes, short URLs, vouchers, or session tokens without race conditions, database bottlenecks, or latency issues.
 
 ---
 
@@ -77,45 +89,6 @@ A practical guide to generating unique referral codes, short URLs, vouchers, or 
 
 ### What's a Referral Code?
 
-```
-User signs up → Gets unique code: ARPIT123
-Shares it → Friend uses it → Referral credit earned
-
-Requirement: Each user needs a DIFFERENT code
-Problem: Two users can't have code ARPIT123
-```
-
-### Why It's Hard at Scale
-
-```
-At 10 users/sec: Easy (check database, assign)
-At 1000 users/sec: Breaks (database bottleneck + race conditions)
-At 10,000 users/sec: Impossible (cascading failures)
-```
-
----
-
-## Why It's Hard
-
-### The Race Condition
-
-```
-Timeline:
-
-t=0:   User 1: Generate code ABC123
-       User 2: Generate code ABC123  ← SAME!
-
-t=50ms: User 1: "Is ABC123 taken?" → DB query
-        User 2: "Is ABC123 taken?" → DB query
-
-t=100ms: DB response to User 1: "No, it's free"
-         DB response to User 2: "No, it's free"  ← BOTH think it's free!
-
-t=150ms: User 1: Assign ABC123
-         User 2: Assign ABC123
-
-Result: COLLISION! Two users have same code.
-```
 
 ### The Bottleneck
 
@@ -530,96 +503,7 @@ Result: Scalable, fast, zero-contention unique code generation!
 ```
 
 ---
-# System Design Interview - Chapter 4: Design a Rate Limiter
-
-## Table of Contents
-
-### Core Concepts
-1. [Problem Statement](#problem-statement)
-   - [Real-World Examples](#real-world-examples)
-   - [Why Rate Limiting Matters](#why-rate-limiting-matters)
-   - [Rate Limiting for BOTH Free AND Paid APIs](#rate-limiting-for-both-free-and-paid-apis)
-2. [Testing Scenarios](#testing-scenarios)
-   - [Scenario A: Web API Rate Limiting](#scenario-a-web-api-rate-limiting)
-   - [Scenario B: Payment Processing](#scenario-b-payment-processing)
-   - [Scenario C: Email Service](#scenario-c-email-service)
-
-### Algorithm Deep Dive
-3. [Algorithm Comparison](#algorithm-comparison)
-   - [1️⃣ Token Bucket Algorithm](#️-token-bucket-algorithm-)
-     * [How It Works](#how-it-works)
-     * [Using Scenario A](#using-scenario-a-web-api)
-     * [Advantages](#advantages)
-     * [Limitations](#limitations)
-     * [When to Use](#when-to-use)
-     * [Real-World Case: GitHub API](#real-world-case-github-api)
-   - [2️⃣ Leaking Bucket Algorithm](#️-leaking-bucket-algorithm)
-     * [How It Works](#how-it-works-1)
-     * [Problems It Solves](#problems-it-solves-from-token-bucket)
-     * [Using Scenario C](#using-scenario-c-email-service)
-     * [Advantages](#advantages-1)
-     * [Limitations](#limitations-1)
-     * [When to Use](#when-to-use-1)
-     * [Real-World Case: Shopify](#real-world-case-shopify)
-   - [3️⃣ Fixed Window Counter](#️-fixed-window-counter)
-     * [How It Works](#how-it-works-2)
-     * [Problems It Solves](#problems-it-solves)
-     * [Using Scenario A](#using-scenario-a-web-api-1)
-     * [Advantages](#advantages-2)
-     * [Limitations](#limitations-2)
-     * [When to Use](#when-to-use-2)
-     * [Real-World Case: NOT RECOMMENDED](#real-world-case-not-recommended)
-     * [Security: How Attackers Exploit This](#security-how-attackers-exploit-this)
-   - [4️⃣ Sliding Window Log](#️-sliding-window-log)
-     * [How It Works](#how-it-works-3)
-     * [Problems It Solves](#problems-it-solves-from-fixed-window)
-     * [Using Scenario B](#using-scenario-b-payment-processing)
-     * [Advantages](#advantages-3)
-     * [Limitations](#limitations-3)
-     * [Storage Reality](#storage-reality)
-     * [When to Use](#when-to-use-3)
-     * [Real-World Case: Payment Systems](#real-world-case-payment-systems)
-   - [5️⃣ Sliding Window Counter](#️-sliding-window-counter-)
-     * [How It Works](#how-it-works-4)
-     * [Problems It Solves](#problems-it-solves-1)
-     * [Using Scenario A](#using-scenario-a-web-api-2)
-     * [Advantages](#advantages-4)
-     * [Limitations](#limitations-4)
-     * [Storage Breakdown](#storage-breakdown)
-     * [When to Use](#when-to-use-4)
-     * [Real-World Case: Most Companies](#real-world-case-most-companies)
-   - [Side-by-Side Using Scenario A](#side-by-side-using-scenario-a)
-   - [Decision Matrix](#decision-matrix)
-
-### Interview Preparation
-4. [Interview Q&A](#interview-qa)
-   - [Design Questions](#design-questions)
-   - [Problem-Solving Questions](#problem-solving-questions)
-   - [Trade-off Questions](#trade-off-questions)
-
-### Implementation & Operations
-5. [Implementation Guide](#implementation-guide)
-   - [Choosing Where to Place Rate Limiter](#choosing-where-to-place-rate-limiter)
-   - [Storage: Why Redis?](#storage-why-redis)
-   - [Rate Limit Headers](#rate-limit-headers)
-   - [Client Retry Strategy](#client-retry-strategy)
-
-6. [Distributed Systems Challenges](#distributed-systems-challenges)
-   - [Challenge 1: Race Conditions](#challenge-1-race-conditions)
-   - [Challenge 2: Synchronization Across Data Centers](#challenge-2-synchronization-across-data-centers)
-   - [Challenge 3: Eventual Consistency](#challenge-3-eventual-consistency)
-
-7. [Edge Cases & Gotchas](#edge-cases--gotchas)
-   - [Edge Case 1: Clock Skew](#edge-case-1-clock-skew)
-   - [Edge Case 2: Sudden Traffic Spike](#edge-case-2-sudden-traffic-spike)
-   - [Edge Case 3: User Identity Issues](#edge-case-3-user-identity-issues)
-
-### Reference
-8. [Real-World Companies & Their Approaches](#real-world-companies--their-approaches)
-9. [Summary: Quick Reference](#summary-quick-reference)
-10. [References](#references)
-
----
+# 2. Design a Rate Limiter
 
 ## Problem Statement
 
