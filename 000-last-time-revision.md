@@ -14,9 +14,7 @@
 | GenAI | [GenAI.md](https://github.com/arpit-jain-mygit/interview-preparation/blob/main/GenAI.md) |
 | Microservices Questions | [MicroServices-Questions.md](https://github.com/arpit-jain-mygit/interview-preparation/blob/main/MicroServices-Questions.md) |
 | Kafka Questions | [Kafka-Questions.md](https://github.com/arpit-jain-mygit/interview-preparation/blob/main/Kafka-Questions.md) |
-| Rate Limiter System Design | [rate-limiter-system-design.md](https://github.com/arpit-jain-mygit/interview-preparation/blob/main/rate-limiter-system-design.md) |
 | Transcription Project Interview | [transcription-project-interview.md](https://github.com/arpit-jain-mygit/interview-preparation/blob/main/transcription-project-interview.md) |
-| URL Shortener System Design | [url-shortener-system-design.md](https://github.com/arpit-jain-mygit/interview-preparation/blob/main/url-shortener-system-design.md) |
 | NFR (Non-Functional Requirements) | [NFR.md](https://github.com/arpit-jain-mygit/interview-preparation/blob/main/NFR.md) |
 
 ---
