@@ -6,76 +6,76 @@ A comprehensive guide covering three critical system design problems: Unique Cod
 
 ## Table of Contents
 
-### 1. Unique Code Generation at Scale
-   - 1.1 The Problem
-     * 1.1.1 What's a Referral Code?
-     * 1.1.2 Why It's Hard at Scale
-   - 1.2 Why It's Hard
-     * 1.2.1 The Race Condition
-     * 1.2.2 The Bottleneck
-   - 1.3 Approach 1: RDBMS (❌ Fails)
-     * 1.3.1 The Naive Solution
-     * 1.3.2 Why It Fails
-   - 1.4 Approach 2: Pre-Generation + Queue (✅ Works)
-     * 1.4.1 The Genius Solution
-     * 1.4.2 How It Works (4 Steps)
-   - 1.5 How It Really Works
-     * 1.5.1 The Complete Flow
-     * 1.5.2 Marking Codes as "Used"
-   - 1.6 Optimization: Bulk Reading
-     * 1.6.1 The Problem
-     * 1.6.2 The Solution
-     * 1.6.3 Performance Impact
-   - 1.7 When Codes Run Out: Regeneration
-     * 1.7.1 The Timeline
-     * 1.7.2 Solution: Expand Code Length
-     * 1.7.3 Regeneration Process
-     * 1.7.4 Automated Monitoring
-   - 1.8 Performance Comparison
-   - 1.9 Interview Answer
-   - 1.10 Key Takeaways
+### [1. Unique Code Generation at Scale](#1-unique-code-generation-at-scale)
+   - [1.1 The Problem](#the-problem)
+     * [1.1.1 What's a Referral Code?](#whats-a-referral-code)
+     * [1.1.2 Why It's Hard at Scale](#why-its-hard-at-scale)
+   - [1.2 Why It's Hard](#whys-hard)
+     * [1.2.1 The Race Condition](#the-race-condition)
+     * [1.2.2 The Bottleneck](#the-bottleneck)
+   - [1.3 Approach 1: RDBMS (❌ Fails)](#approach-1-rdbms-fails)
+     * [1.3.1 The Naive Solution](#the-naive-solution)
+     * [1.3.2 Why It Fails](#why-it-fails)
+   - [1.4 Approach 2: Pre-Generation + Queue (✅ Works)](#approach-2-pre-generation--queue-works)
+     * [1.4.1 The Genius Solution](#the-genius-solution)
+     * [1.4.2 How It Works (4 Steps)](#how-it-works-4-steps)
+   - [1.5 How It Really Works](#how-it-really-works)
+     * [1.5.1 The Complete Flow](#the-complete-flow)
+     * [1.5.2 Marking Codes as "Used"](#marking-codes-as-used)
+   - [1.6 Optimization: Bulk Reading](#optimization-bulk-reading)
+     * [1.6.1 The Problem](#the-problem-1)
+     * [1.6.2 The Solution](#the-solution)
+     * [1.6.3 Performance Impact](#performance-impact)
+   - [1.7 When Codes Run Out: Regeneration](#when-codes-run-out-regeneration)
+     * [1.7.1 The Timeline](#the-timeline)
+     * [1.7.2 Solution: Expand Code Length](#solution-expand-code-length)
+     * [1.7.3 Regeneration Process](#regeneration-process)
+     * [1.7.4 Automated Monitoring](#automated-monitoring)
+   - [1.8 Performance Comparison](#performance-comparison)
+   - [1.9 Interview Answer](#interview-answer)
+   - [1.10 Key Takeaways](#key-takeaways)
 
-### 2. Design a Rate Limiter
-   - 2.1 Problem Statement
-     * 2.1.1 Real-World Examples
-     * 2.1.2 Why Rate Limiting Matters
-     * 2.1.3 Rate Limiting for Both Free AND Paid APIs
-   - 2.2 Testing Scenarios
-     * 2.2.1 Scenario A: Web API Rate Limiting
-     * 2.2.2 Scenario B: Payment Processing
-     * 2.2.3 Scenario C: Email Service
-   - 2.3 Algorithm Comparison
-     * 2.3.1 Token Bucket Algorithm ⭐
-     * 2.3.2 Leaking Bucket Algorithm
-     * 2.3.3 Fixed Window Counter
-     * 2.3.4 Sliding Window Log
-     * 2.3.5 Sliding Window Counter ⭐
-     * 2.3.6 Side-by-Side Comparison
-     * 2.3.7 Decision Matrix
-   - 2.4 Interview Q&A
-   - 2.5 Implementation Guide
-   - 2.6 Distributed Systems Challenges
-   - 2.7 Edge Cases & Gotchas
-   - 2.8 Real-World Companies & Their Approaches
-   - 2.9 Summary: Quick Reference
-   - 2.10 References
+### [2. Design a Rate Limiter](#2-design-a-rate-limiter)
+   - [2.1 Problem Statement](#problem-statement)
+     * [2.1.1 Real-World Examples](#real-world-examples)
+     * [2.1.2 Why Rate Limiting Matters](#why-rate-limiting-matters)
+     * [2.1.3 Rate Limiting for Both Free AND Paid APIs](#rate-limiting-for-both-free-and-paid-apis)
+   - [2.2 Testing Scenarios](#testing-scenarios)
+     * [2.2.1 Scenario A: Web API Rate Limiting](#scenario-a-web-api-rate-limiting)
+     * [2.2.2 Scenario B: Payment Processing](#scenario-b-payment-processing)
+     * [2.2.3 Scenario C: Email Service](#scenario-c-email-service)
+   - [2.3 Algorithm Comparison](#algorithm-comparison)
+     * [2.3.1 Token Bucket Algorithm ⭐](#️-token-bucket-algorithm-)
+     * [2.3.2 Leaking Bucket Algorithm](#️-leaking-bucket-algorithm)
+     * [2.3.3 Fixed Window Counter](#️-fixed-window-counter)
+     * [2.3.4 Sliding Window Log](#️-sliding-window-log)
+     * [2.3.5 Sliding Window Counter ⭐](#️-sliding-window-counter-)
+     * [2.3.6 Side-by-Side Comparison](#side-by-side-using-scenario-a)
+     * [2.3.7 Decision Matrix](#decision-matrix)
+   - [2.4 Interview Q&A](#interview-qa)
+   - [2.5 Implementation Guide](#implementation-guide)
+   - [2.6 Distributed Systems Challenges](#distributed-systems-challenges)
+   - [2.7 Edge Cases & Gotchas](#edge-cases--gotchas)
+   - [2.8 Real-World Companies & Their Approaches](#real-world-companies--their-approaches)
+   - [2.9 Summary: Quick Reference](#summary-quick-reference)
+   - [2.10 References](#references)
 
-### 3. Design a URL Shortener
-   - 3.1 Problem Statement
-   - 3.2 How URL Shorteners Work
-   - 3.3 Functional Requirements
-   - 3.4 Non-Functional Requirements
-   - 3.5 API Design
-   - 3.6 Database Schema
-   - 3.7 Design Approaches
-   - 3.8 Deep Dive: URL Encoding
-   - 3.9 System Architecture
-   - 3.10 Handling Scale
-   - 3.11 Cache Strategy
-   - 3.12 Analytics & Monitoring
-   - 3.13 Security Considerations
-   - 3.14 Interview Answer
-   - 3.15 Key Takeaways
+### [3. Design a URL Shortener](#3-design-a-url-shortener)
+   - [3.1 Problem Statement](#problem-statement-1)
+   - [3.2 How URL Shorteners Work](#how-url-shorteners-work)
+   - [3.3 Functional Requirements](#functional-requirements)
+   - [3.4 Non-Functional Requirements](#non-functional-requirements)
+   - [3.5 API Design](#api-design)
+   - [3.6 Database Schema](#database-schema)
+   - [3.7 Design Approaches](#design-approaches)
+   - [3.8 Deep Dive: URL Encoding](#deep-dive-url-encoding)
+   - [3.9 System Architecture](#system-architecture)
+   - [3.10 Handling Scale](#handling-scale)
+   - [3.11 Cache Strategy](#cache-strategy)
+   - [3.12 Analytics & Monitoring](#analytics--monitoring)
+   - [3.13 Security Considerations](#security-considerations)
+   - [3.14 Interview Answer](#interview-answer-1)
+   - [3.15 Key Takeaways](#key-takeaways-1)
 
 ---
 
