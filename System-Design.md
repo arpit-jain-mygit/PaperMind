@@ -6450,11 +6450,6 @@ Server1 Server2 Server3 Server4
 
 ---
 
-## Navigation
-
-**Table of Contents:** [Back to Top](#table-of-contents)
-
----
 
 # CHUBB Interview Question: Design a Unique Code Generator
 
@@ -6668,48 +6663,43 @@ Pre-gen approach (✅):
 ### The Problem
 
 ```
-Naive approach:
-  User 1 signup → Read 1 code from Kafka (5ms)
-  User 2 signup → Read 1 code from Kafka (5ms)
-  ...
-  At 1000 req/sec = 1000 Kafka calls/sec!
-  
-  Latency per user: 5ms
-  Network overhead: High
+Current approach:
+  1 code per request → Kafka call per request
+  1000 users/sec → 1000 Kafka calls/sec
+  Latency: 5ms per request
+  Overkill!
 ```
 
 ### The Solution
 
 ```
-Read 100 codes at once, cache locally!
+Bulk read 100 codes at once:
 
-Server startup:
-  Batch read 100 codes from Kafka (5ms)
-  Cache in memory: [xYz9aB, 2kLmOp, Q7rWvX, ...]
+Consumer service:
+  1. Read 100 codes from Kafka (1 call)
+  2. Cache in memory (local list)
+  3. Serve 100 requests from cache
+  4. When cache empty, refill
 
-User 1 signup: Get from cache: xYz9aB (<1ms)
-User 2 signup: Get from cache: 2kLmOp (<1ms)
-...
-User 100 signup: Get from cache: (last code from batch)
-
-Cache empty? Auto-refill: Read next 100 codes (5ms)
-
-User 101 signup: Get from cache: (first of new batch) (<1ms)
+Performance:
+  1000 users/sec ÷ 100 = 10 Kafka calls/sec
+  Latency: 5ms ÷ 100 = 0.05ms per user
+  99.5% faster!
 ```
 
 ### Performance Impact
 
 ```
-Without bulk reading:
-  Kafka calls/sec: 1000
-  Latency per user: 5ms
+Without bulk read:
+  Kafka calls: 1000/sec
+  Latency: 5ms
+  Network overhead: HIGH
 
-With bulk reading (batch=100):
-  Kafka calls/sec: 10
-  Latency per user: 0.5ms (5ms amortized over 100 users)
-  
-Result: 100x fewer Kafka calls!
-        10x lower latency!
+With bulk read:
+  Kafka calls: 10/sec (100x fewer!)
+  Latency: 0.05ms
+  Network overhead: MINIMAL
+  Cache hit rate: 99%+
 ```
 
 ---
@@ -6719,81 +6709,55 @@ Result: 100x fewer Kafka calls!
 ### The Timeline
 
 ```
-Consumption rate: 1000 users/sec (constant)
+Starting point:
+  Code format: 6 chars
+  Total codes: 62^6 = 56.8 billion
 
-Codes per year: 31.536 billion
-Total codes: 56.8 billion
-Time to exhaust: 56.8B ÷ 31.536B = 1.8 years ≈ 2 years
+At 1000 codes/sec:
+  56.8B ÷ 1000/sec ÷ 86400 sec/day = 657 days
+  ≈ 1.8 YEARS
 
-⚠️ After 2 years, Kafka queue is EMPTY!
+At 100K codes/sec (peak):
+  56.8B ÷ 100K/sec ÷ 86400 = 6.5 days
 ```
 
 ### Solution: Expand Code Length
 
 ```
-Current: 6-character codes
-  62^6 = 56.8 billion
-  Lasts: 2 years
+Current: 6 characters = 62^6 = 56.8 billion
+Next: 7 characters = 62^7 = 3.5 trillion (62x more!)
 
-New: 7-character codes
-  62^7 = 3.5 trillion
-  Lasts: 111 years!
-
-Even better: 8-character codes
-  62^8 = 218 trillion
-  Lasts: 6900 years (basically infinite)
+Timeline with upgrade:
+  62^7 codes ÷ 100K/sec = 1111 years (!!)
 ```
 
 ### Regeneration Process
 
 ```
-Timeline: At ~80% capacity (after 1.5 years)
-
-Month 18: Start regeneration
-  Generate 7-char codes: 100 hours
-  Randomize: 50 hours
-  Validate: 20 hours
-
-Month 19: Load to Kafka
-  Load 3.5T codes: 20 hours
-  Test: 10 hours
-
-Month 20: Gradual switchover
-  Week 1: Route 10% to v2 (7-char), 90% to v1 (6-char)
-  Week 2: Route 30% to v2, 70% to v1
-  Week 3: Route 50% to v2, 50% to v1
-  Week 4: Route 100% to v2, 0% to v1
-  
-  Zero downtime! Smooth transition!
-
-Month 22: Decommission old codes
-  Keep v1 running for 30 days (fallback)
-  After 30 days: Safe to delete v1
+Step 1: Monitor exhaustion (track % used)
+Step 2: Trigger regeneration at 80% capacity
+Step 3: Generate new batch with 7 chars
+Step 4: Gradual switchover:
+  - New users get 7-char codes
+  - Old users still have 6-char codes
+  - Both systems coexist (no downtime!)
+Step 5: Complete migration after transition period
 ```
 
 ### Automated Monitoring
 
 ```python
 def monitor_code_exhaustion():
-    codes_remaining = kafka_topic.size()
-    daily_consumption = calculate_daily_consumption()
-    days_remaining = codes_remaining / daily_consumption
+    remaining = kafka.get_queue_depth()
+    total = 62^6
+    percent_used = (total - remaining) / total * 100
     
-    if days_remaining > 365:
-        status = "🟢 OK"
-    elif days_remaining > 180:
-        status = "🟡 WARNING - Start planning"
-        alert_engineering_team()
-    elif days_remaining > 30:
-        status = "🔴 CRITICAL - Start now"
-        page_on_call()
-    else:
-        status = "🔥 DISASTER - Emergency codes"
-        failover_to_emergency_pool()
+    if percent_used > 80:
+        trigger_regeneration()
     
-    log_metrics(days_remaining, status)
+    log_metrics(percent_used, remaining)
 
-# Run daily
+# Run periodically
 schedule.every().day.at("02:00").do(monitor_code_exhaustion)
 ```
 
@@ -6843,32 +6807,21 @@ When asked: "How would you design referral code generation at scale?"
 > 1. **Offline generation:** Generate all 62^6 (56B) codes
 > 2. **Randomize:** Shuffle them (prevent predictability)
 > 3. **Load to Kafka:** Multi-partition queue with atomic dequeue
-> 4. **Consume:** Read from queue, assign to user (instant, <1ms)
+> 4. **Consumers read:** Bulk read 100 codes, cache locally
 >
 > **Why it works:**
-> - No uniqueness checking (already guaranteed)
-> - No database involved (zero contention)
-> - No race conditions (Kafka is atomic)
-> - Constant latency (<1ms)
-> - Scales linearly (more partitions = more throughput)
+> - Uniqueness guaranteed offline (no runtime checks)
+> - Kafka handles atomicity (no race conditions)
+> - No database overhead (simple insert)
+> - Scales linearly (add partitions = add throughput)
 >
-> **Optimization:** Bulk read 100 codes at once, cache locally
-> - Reduces Kafka calls: 1000/sec → 10/sec
-> - Reduces latency: 5ms → 0.5ms per user
->
-> **When codes run out (after ~2 years):**
-> - Expand code length (6 → 7 characters)
-> - Pre-generate new batch (3.5 trillion codes)
-> - Gradual switchover (zero downtime)
-> - New codes last 111 years
->
-> **Real numbers:**
-> - Latency: 150ms → 1ms (150x faster!)
-> - Throughput: 100 req/sec → 100K req/sec
+> **Benefits:**
+> - Latency: 150ms → 1ms (150x faster)
+> - Throughput: 100 req/sec → 100K req/sec (1000x)
+> - Success rate: 95% → 99.99%
 > - Duplicates: Yes → IMPOSSIBLE
-> - Cost: Database 100% → 0% CPU
 >
-> **Applicable to:** Referral codes, short URLs, vouchers, session tokens, any high-volume unique ID generation"
+> **Applicable to:** Referral codes, short URLs, vouchers, session tokens, any high-volume unique ID generation
 
 ---
 
@@ -6886,13 +6839,6 @@ When asked: "How would you design referral code generation at scale?"
 Result: Scalable, fast, zero-contention unique code generation!
 ```
 
----
-
----
-
-## Navigation
-
-**Table of Contents:** [Back to Top](#table-of-contents)
 
 ---
 
