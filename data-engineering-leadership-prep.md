@@ -50,115 +50,147 @@
 | 11 | GB + Batch + Dashboards | Fixed executive KPI dashboard loads instantly once daily | dbt builds daily_kpi_summary (1 row/day, 6 KPIs). Dashboard reads 1 row = instant load. Pre-aggregate everything — never query raw table at dashboard open time. | daily_kpi_summary dbt model | ClickHouse, real-time pipeline | [diagram](#scenario-11--gb--batch--dashboards) |
 | 12 | GB + Batch + Another System | External partners/regulators expect scheduled FILE transfers (CSV/XML), not events | Spark generates formatted files → validate (row count, checksum, schema) → deliver via SFTP/S3/API → track acknowledgement in PostgreSQL. File schema is a contract. | File export Spark job, SFTP delivery, delivery ack log | Kafka consumers, Redis, real-time components | [diagram](#scenario-12--gb--batch--another-system) |
 
-### Generic Full Architecture — GB + TB Scenarios (Combined)
+### Generic Full Architecture — All 36 Scenarios (GB + TB + PB)
 
 ```
-                                       [App]
-                                         │
-               ┌─────────────────────────┼──────────────────────────────────────┐
-               │                         │                                       │
-         WRITE (all)               WRITE (all)                    REQUEST — sync, blocks order
-               │                         │                         RT + Near-RT + Another System
-  GB: [PostgreSQL]          GB: [PostgreSQL]                                 │
-  TB: [Cassandra/DynamoDB]  TB: [Cassandra/DynamoDB]              GB: [Fraud Service]
-  ── OLTP source ──         ── idempotency store /                TB: [Fraud Service fleet]
-  GB: 1 node                   staging table /                              │
-  TB: replicated cluster        delivery ack log ──                       READ
-               │               (Another System)                              │
-         READ (log)                                               GB: [Redis]
-               │                                                 TB: [Redis Cluster]
-  GB: [Debezium CDC]                                             ── fraud features ──
-  TB: [Debezium cluster /                                        pre-computed by Flink
+                                          [App]
+                                            │
+                ┌───────────────────────────┼─────────────────────────────────────────┐
+                │                           │                                          │
+          WRITE (all)                 WRITE (all)                       REQUEST — sync, blocks order
+                │                           │                            RT + Near-RT + Another System
+  GB: [PostgreSQL]             GB: [PostgreSQL]                                    │
+  TB: [Cassandra / DynamoDB]   TB: [Cassandra / DynamoDB]             GB: [Fraud Service]
+  PB: [Cassandra / Bigtable /  PB: [Cassandra / Bigtable]            TB: [Fraud Service fleet]
+       Spanner]                ── idempotency / staging /             PB: [Fraud Service global
+  ── OLTP source of truth ──      delivery ack log ──                      multi-region fleet]
+  GB: 1 node                      (Another System)                              │
+  TB: replicated cluster                                                       READ
+  PB: globally distributed,                                                     │
+      multi-region                                                  GB: [Redis]
+                │                                                   TB: [Redis Cluster]
+          READ (log)                                                PB: [Aerospike /
+                │                                                       Redis Global Cluster]
+  GB: [Debezium]                                                    ── fraud features ──
+  TB: [Debezium cluster /                                           pre-computed by Flink
        DynamoDB Streams]
-               │
-             WRITE
-               │
-  GB: [Kafka]  ──────────────────────────────────────── WRITE ──→ [S3]
-  TB: [Kafka Cluster 100+ partitions]                         raw Parquet, permanent
-  ── + Schema Registry (Another System) ──                    GB: partitioned by hour
-               │                                              TB: partitioned by minute
-         ┌─────┤                                                       │
-       READ   READ                                       ┌─────────────┼──────────────┐
-         │     │                                         │             │              │
-   [Payment] [Driver]                          ── REAL-TIME ──  ── NEAR RT ──  ── BATCH ──
-    Service   Service                                    │             │              │
-   GB: 1 inst  GB: 1 inst                     GB: [Flink]    GB: [Spark       GB: [Spark
-   TB: cluster TB: cluster                    TB: [Flink       micro-batch]     nightly]
-    ── OLTP consumers, all scenarios ──           Cluster]    TB: [Spark on    TB: [Spark on
-                                               always-on        EMR/            EMR/
-                                               stream           Databricks]     Databricks]
-                                               ms latency       every 5 min     + Airflow
-                                                    │                │               │
-                             ┌──────────────────────┤                │       ┌───────┤
-                             │                      │                │       │       │
-                           WRITE                  WRITE           WRITE   WRITE   WRITE
-                             │                      │                │       │       │
-               ── ANALYTICS/DASHBOARDS ──    ── ML ──        ── ANALYTICS /  ── ANALYTICS /
-                             │                      │            DASHBOARDS ──   DASHBOARDS ──
-               GB: [ClickHouse]          GB: [Redis]                │            ML / DASHBOARDS
-               TB: [Druid / Pinot]       TB: [Redis Cluster]  GB: [ClickHouse         │
-               real-time OLAP            Feature Store          or Snowflake]  GB: [Snowflake]
-               ops + analytics           (RT + Near-RT ML)     TB: [Druid/Pinot GB: [Snowflake
-                             │                      │            or BigQuery]    + dbt]
-                           READ                   READ          Near-RT          TB: [BigQuery /
-                             │                      │            Analytics +       Redshift +
-                  GB: [Grafana]          GB: [ML Service]       Dashboards         dbt]
-                  TB: [Grafana]          TB: [ML Service               │       [Model Registry]
-                  ops dashboard              fleet]                  READ       GB: MLflow
-                  RT Analytics +         on-demand prediction    [Grafana /     TB: SageMaker
-                  RT Dashboards +        RT + ML                  Tableau]       Batch ML
-                  Near-RT Analytics                              Near-RT +
-                                     GB: [App GET]               Batch
-                                     TB: [App GET]               Analytics +
-                                     pre-computed                Dashboards
-                                     Near-RT + ML
+  PB: [Custom CDC /
+       Bigtable Change Streams /
+       Spanner Change Streams]
+                │
+              WRITE
+                │
+  GB: [Kafka]                   ────────────────────────────── WRITE ──→ [S3 / GCS]
+  TB: [Kafka Cluster]                                               raw Parquet, permanent
+  PB: [Kafka + Pulsar /                                             GB: partitioned by hour
+       Google Pub/Sub]                                              TB: partitioned by minute
+  ── + Schema Registry ──                                           PB: partitioned by second
+  (Another System, all scales)                                          + column pruning
+                │                                                         + data skipping
+          ┌─────┤                                          ┌──────────────┼──────────────┐
+        READ   READ                                        │              │              │
+          │     │                                  ── REAL-TIME ──  ── NEAR RT ──  ── BATCH ──
+  [Payment] [Driver]                                       │              │              │
+   Service   Service                            GB: [Flink]     GB: [Spark        GB: [Spark
+  GB: 1 inst   GB: 1 inst                      TB: [Flink        micro-batch]      nightly]
+  TB: cluster  TB: cluster                         Cluster]     TB: [Spark         TB: [Spark on
+  PB: global   PB: global                      PB: [Flink        EMR/               EMR /
+      fleet        fleet                           Global         Databricks]        Databricks]
+  ── OLTP consumers ──                             Cluster /     PB: [Spark on      PB: [Spark on
+  all 36 scenarios                                 Apache          Dataproc /         Dataproc /
+                                                   Beam]           Databricks         Databricks]
+                                                always-on          every 5 min        + Airflow /
+                                                ms latency         Near RT            Cloud Composer
+                                                    │                   │                  │
+                              ┌─────────────────────┤                   │          ┌───────┤
+                              │                     │                   │          │       │
+                            WRITE                 WRITE              WRITE       WRITE   WRITE
+                              │                     │                   │          │       │
+          ── ANALYTICS / DASHBOARDS ──         ── ML ──       ── ANALYTICS /  ── ANALYTICS /
+                              │                     │             DASHBOARDS ──   DASHBOARDS / ML ──
+  GB: [ClickHouse]            │        GB: [Redis]               │                     │
+  TB: [Druid / Pinot]         │        TB: [Redis Cluster]  GB: [ClickHouse /    GB: [Snowflake + dbt]
+  PB: [Apache Pinot /         │        PB: [Aerospike /          Snowflake]       TB: [BigQuery /
+       Druid global           │             Redis Global]    TB: [Druid/Pinot /        Redshift + dbt]
+       cluster]               │        ── Feature Store ──       BigQuery]        PB: [BigQuery /
+  real-time OLAP              │        RT + Near-RT ML      PB: [Pinot /               Snowflake
+  ops + analytics             │                  │               BigQuery]             at scale + dbt]
+                              │                READ          Near-RT Analytics               │
+                            READ               │             + Dashboards            [Model Registry]
+                              │      GB: [ML Service]               │                GB: MLflow
+               GB: [Grafana]  │      TB: [ML Service fleet]       READ               TB: SageMaker
+               TB: [Grafana]  │      PB: [ML Service global   [Grafana /             PB: Vertex AI /
+               PB: [Grafana]  │           fleet]               Tableau]               SageMaker
+               ops dashboard  │      on-demand prediction      Near-RT +              Batch ML
+               RT + Near-RT   │      RT + ML                   Batch
+               Analytics                                        Analytics +
+               + Dashboards        GB/TB/PB: [App GET]          Dashboards
+                                   pre-computed prediction
+                                   Near-RT + ML
 
-    ──────────────── Another System — speed determines HOW events are consumed ─────────────────
+    ─────────────── Another System — speed determines HOW, scale determines WHERE ──────────────
 
-       REAL-TIME                      NEAR REAL-TIME               BATCH
-  ── always-on consumers ──      ── polling every 5-10 min ──  ── nightly file export ──
-  GB: own Consumer Group          GB: PostgreSQL staging table   GB: Spark → CSV/XML
-  TB: auto-scaling instances      TB: Cassandra staging          TB: Spark → partitioned files
-           │                                  │                          │
-  ┌────────┼────────┐           [Loyalty / Partner /            [SFTP / S3 / API]
-  │        │        │            Report Service]                 partner / regulator
-[Notif.] [Inv.] [Loyalty]
-  Svc     Svc     Svc
-  └────────┴────────┘
-  Idempotency check — all Another System (GB + TB)
-  DLQ — RT only (GB + TB)
+        REAL-TIME                     NEAR REAL-TIME                  BATCH
+  ── always-on consumers ──     ── polling every 5-10 min ──    ── nightly file export ──
+  GB: Consumer Group            GB: PostgreSQL staging           GB: Spark → CSV/XML
+  TB: auto-scaling instances    TB: Cassandra staging            TB: Spark → partitioned files
+  PB: global auto-scaling       PB: Bigtable / Spanner staging   PB: Spark → sharded files
+       multi-region                                                   + parallel delivery
+            │                                │                              │
+  ┌─────────┼─────────┐       [Loyalty / Partner /               [SFTP / S3 / API /
+  │         │         │        Report Service]                     Enterprise MQ]
+[Notif.] [Inv.]  [Loyalty]                                         partner / regulator
+  Svc      Svc     Svc
+  └─────────┴─────────┘
+  Idempotency check — all Another System, all scales
+  DLQ — RT only, all scales
 ```
 
-**How to read:**
+**Scale substitution — what changes at each tier:**
 ```
-Every box shows:  GB: <component>
-                  TB: <component>
-Where tool stays same across GB/TB, shown once without prefix.
+Component         GB (5GB/day)           TB (5TB/day)              PB (5PB/day)
+─────────────────────────────────────────────────────────────────────────────────────
+OLTP store        PostgreSQL (1 node)    Cassandra / DynamoDB      Cassandra / Bigtable /
+                                         (replicated cluster)      Spanner (global, multi-region)
+CDC               Debezium               Debezium cluster /        Bigtable Change Streams /
+                                         DynamoDB Streams          Spanner Change Streams /
+                                                                    Custom CDC
+Message bus       Kafka (3 brokers)      Kafka Cluster (10+)       Kafka + Pulsar /
+                                         100+ partitions           Google Pub/Sub (global)
+RT processing     Flink (1 node)         Flink Cluster             Flink Global Cluster /
+                                                                    Apache Beam (multi-engine)
+Batch processing  Spark (1 node)         Spark on EMR/Databricks   Spark on Dataproc /
+                                                                    Databricks (massive clusters)
+RT OLAP           ClickHouse (1 node)    Druid / Pinot             Apache Pinot (global) /
+                                         (multi-tenant)            Druid (hyperscale)
+Batch OLAP        Snowflake (small)      BigQuery / Redshift /     BigQuery (serverless PB) /
+                                         Snowflake (larger)        Snowflake (XL compute)
+Feature store     Redis (1 node)         Redis Cluster             Aerospike / Redis Global
+Fraud serving     Redis (1 node)         Redis Cluster             Aerospike (sub-ms at PB)
+ML registry       MLflow                 SageMaker                 Vertex AI / SageMaker
+File storage      S3 (hourly partition)  S3 (minute partition)     S3 / GCS (second partition
+                                                                    + column pruning)
 
-Rows = Speed tier (same pattern GB and TB):
-  Real-time  → Flink path         → ClickHouse/Druid (analytics) or Redis (ML)
-  Near RT    → Spark micro-batch  → ClickHouse/Druid or Snowflake/BigQuery
-  Batch      → Spark + Airflow    → Snowflake/BigQuery + dbt
+Architecture PATTERN: identical across all 36 scenarios.
+What changes: every component scales out. Pattern never changes.
+```
 
-Columns = Use case (same pattern GB and TB):
-  Analytics/Dashboards → columnar OLAP store
-  ML                   → Redis Feature Store (RT/Near-RT) or Model Registry (batch)
-  Another System       → consumers shift from always-on → polling → file export
+**How to read this diagram:**
+```
+Rows = Speed tier (same across GB / TB / PB):
+  Real-time   → Flink path       → ClickHouse/Pinot (analytics) or Redis/Aerospike (ML)
+  Near RT     → Spark micro-batch → Pinot/BigQuery or Snowflake/BigQuery
+  Batch       → Spark + Airflow  → Snowflake/BigQuery + dbt
 
-What changes GB → TB:
-  Every single component becomes a cluster or distributed equivalent
-  Architecture PATTERN stays 100% identical
-  PostgreSQL → Cassandra/DynamoDB
-  ClickHouse → Druid/Pinot
-  Redis      → Redis Cluster
-  Snowflake  → BigQuery/Redshift (larger compute)
-  Spark      → EMR/Databricks
-  Flink      → Flink Cluster
+Columns = Use case (same across GB / TB / PB):
+  Analytics / Dashboards → columnar OLAP (faster tier for RT, larger tier for batch)
+  ML                     → Feature Store (RT/Near-RT) or Model Registry (batch training)
+  Another System         → always-on consumers (RT) / polling (Near-RT) / file export (Batch)
 
-Backbone present in ALL 24 scenarios (GB + TB):
+Backbone in ALL 36 scenarios:
   OLTP store → CDC → Kafka → S3
   Payment + Driver Services (OLTP consumers)
-  Fraud Service via sync HTTP (any Another System scenario)
+  Fraud Service via sync HTTP (any Another System scenario, all scales)
 ```
 
 ### Speed Pattern (what changes with processing speed)
