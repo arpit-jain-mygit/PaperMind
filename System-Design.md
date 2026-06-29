@@ -6466,6 +6466,13 @@ A practical guide to generating unique referral codes, short URLs, vouchers, or 
 
 ### What's a Referral Code?
 
+A unique code assigned to each user for referrals, such as:
+- Referral codes: `FRIEND2024ABC`
+- Short URLs: `bit.ly/abc123`
+- Vouchers: `SAVE50XMAS`
+- Session tokens: `sess_xyz789`
+
+At scale, generating millions of unique codes without collisions is the challenge.
 
 ### The Bottleneck
 
