@@ -48,7 +48,7 @@ A comprehensive guide covering foundational system design concepts and detailed 
 - Architecture and scaling
 - Real-world examples
 
-#### [CHUBB Interview Question: Design a Unique Code Generator](#chubb-interview-question-design-a-unique-code-generator)
+#### [CHUBB Interview Question - Design a Unique Code Generator](#chubb-interview-question-design-a-unique-code-generator)
 - Problem and bottlenecks
 - RDBMS approach (why it fails)
 - Pre-generation + queue solution
@@ -6444,7 +6444,7 @@ Move session data OUT of web servers. Store in shared persistent storage.
 
 ---
 
-# CHUBB Interview Question: Design a Unique Code Generator
+# CHUBB Interview Question - Design a Unique Code Generator
 
 A practical guide to generating unique referral codes, short URLs, vouchers, or session tokens without race conditions, database bottlenecks, or latency issues.
 
