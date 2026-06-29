@@ -9,52 +9,52 @@ A comprehensive guide covering foundational system design concepts and detailed 
 ### **Part 1: Foundation & Framework**
 
 #### [Chapter 1: Scale from Zero to Millions of Users](#chapter-1-scale-from-zero-to-millions-of-users)
-   - Single server setup
-   - Scaling web tier  
-   - Database replication
-   - Caching strategies
-   - CDN for static content
-   - Stateless architecture
-   - Multi-datacenter setup
+- Single server setup
+- Scaling web tier
+- Database replication
+- Caching strategies
+- CDN for static content
+- Stateless architecture
+- Multi-datacenter setup
 
 #### [Chapter 2: Back-of-the-Envelope Estimation](#chapter-2-back-of-the-envelope-estimation)
-   - Power of two reference
-   - Latency numbers
-   - Availability and SLA
-   - Estimation techniques
-   - Real-world examples
+- Power of two reference
+- Latency numbers
+- Availability and SLA
+- Estimation techniques
+- Real-world examples
 
 #### [Chapter 3: A Framework for System Design Interviews](#chapter-3-a-framework-for-system-design-interviews)
-   - The 4-step framework
-   - What interviewers look for
-   - Clarification questions
-   - High-level design
-   - Deep dive strategies
-   - Time management
-   - Dos and Don'ts
+- The 4-step framework
+- What interviewers look for
+- Clarification questions
+- High-level design
+- Deep dive strategies
+- Time management
+- Dos and Don'ts
 
 ### **Part 2: Case Studies**
 
 #### [Chapter 4: Design a Rate Limiter](#chapter-4-design-a-rate-limiter)
-   - Problem statement
-   - Five algorithms compared
-   - Interview Q&A
-   - Implementation guide
-   - Distributed systems challenges
+- Problem statement
+- Five algorithms compared
+- Interview Q&A
+- Implementation guide
+- Distributed systems challenges
 
 #### [Chapter 8: Design a URL Shortener](#chapter-8-design-a-url-shortener)
-   - Problem statement
-   - Hash-based vs base 62 approaches
-   - Architecture and scaling
-   - Real-world examples
+- Problem statement
+- Hash-based vs base 62
+- Architecture and scaling
+- Real-world examples
 
 ### **Special Sections**
 
 #### [CHUBB Interview Question: Design a Unique Code Generator](#chubb-interview-question-design-a-unique-code-generator)
-   - Problem and bottlenecks
-   - RDBMS approach (why it fails)
-   - Pre-generation + queue solution
-   - Performance comparison
+- Problem and bottlenecks
+- RDBMS approach (why it fails)
+- Pre-generation + queue solution
+- Performance comparison
 
 ---
 
@@ -2071,13 +2071,9 @@ Interviewer: "Good job!"
 
 ---
 
-## Navigation
-
-**Table of Contents:** [Back to Top](#table-of-contents)
-
----
-
 # Chapter 4: Design a Rate Limiter
+
+
 
 ## Problem Statement
 
@@ -5112,6 +5108,8 @@ CLIENT SIDE:
 
 # Chapter 8: Design a URL Shortener
 
+
+
 ## Table of Contents
 1. [Executive Summary](#executive-summary)
 2. [Problem Statement](#problem-statement)
@@ -6461,6 +6459,7 @@ Server1 Server2 Server3 Server4
 # CHUBB Interview Question: Design a Unique Code Generator
 
 # CHUBB Interview Question: Design a Unique Code Generator
+# CHUBB Interview Question: Design a Unique Code Generator
 
 
 A practical guide to generating unique referral codes, short URLs, vouchers, or session tokens without race conditions, database bottlenecks, or latency issues.
@@ -6885,6 +6884,12 @@ Result: Scalable, fast, zero-contention unique code generation!
 ```
 
 ---
+
+---
+
+## Navigation
+
+**Table of Contents:** [Back to Top](#table-of-contents)
 
 ---
 
