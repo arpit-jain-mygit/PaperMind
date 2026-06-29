@@ -33,6 +33,29 @@ A comprehensive guide covering foundational system design concepts and detailed 
    - Time management
    - Dos and Don'ts
 
+### **Part 2: Case Studies**
+
+#### [Chapter 4: Design a Rate Limiter](#chapter-4-design-a-rate-limiter)
+   - Problem statement
+   - Five algorithms compared
+   - Interview Q&A
+   - Implementation guide
+   - Distributed systems challenges
+
+#### [Chapter 8: Design a URL Shortener](#chapter-8-design-a-url-shortener)
+   - Problem statement
+   - Hash-based vs base 62 approaches
+   - Architecture and scaling
+   - Real-world examples
+
+### **Special Sections**
+
+#### [CHUBB Interview Question: Design a Unique Code Generator](#chubb-interview-question-design-a-unique-code-generator)
+   - Problem and bottlenecks
+   - RDBMS approach (why it fails)
+   - Pre-generation + queue solution
+   - Performance comparison
+
 ---
 
 # Chapter 1: Scale from Zero to Millions of Users
