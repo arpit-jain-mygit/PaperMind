@@ -262,6 +262,65 @@ Backbone in ALL 36 scenarios:
 
 ---
 
+## MAANG Interview Questions by Scale
+
+### GB Scale — 5 GB/day (Single-machine, startup/team-level)
+
+| # | Question | Scenario | Answer |
+|---|---|---|---|
+| G1 | You have a food delivery app writing 5 GB/day of order events to PostgreSQL. The ops team wants a live dashboard showing orders per city, updated every 10 seconds. How do you build this without slowing down the app? | Real-time + Analytics | [S1 — GB + RT + Analytics](#scenario-1--gb--real-time--analytics) |
+| G2 | Your food delivery platform needs to predict delivery time for each new order in under 200ms. You have historical order data and a trained ML model. Design the inference pipeline. | Real-time + ML | [S2 — GB + RT + ML](#scenario-2--gb--real-time--ml) |
+| G3 | The ops team needs a live dashboard (30-sec refresh) and the business team needs a historical dashboard (hourly). They have very different query patterns. One tool or two? | Real-time + Dashboards | [S3 — GB + RT + Dashboards](#scenario-3--gb--real-time--dashboards) |
+| G4 | When an order is confirmed, you need to: send push notification, decrement inventory, trigger fraud check — all within 2 seconds. A duplicate notification is catastrophic. Design this. | Real-time + Another System | [S4 — GB + RT + Another System](#scenario-4--gb--real-time--another-system) |
+| G5 | Same analytics requirement as G1, but the ops team says 5-15 minutes of delay is acceptable. How does your architecture change? What's cheaper and simpler? | Near RT + Analytics | [S5 — GB + NRT + Analytics](#scenario-5--gb--near-real-time--analytics) |
+| G6 | The order tracking screen shows "Your order arrives in 28 min" and refreshes every 5 minutes. Design the ML pipeline so this doesn't block the order confirmation flow. | Near RT + ML | [S6 — GB + NRT + ML](#scenario-6--gb--near-real-time--ml) |
+| G7 | Both the ops team and the business team can accept 5-15 minute delay on their dashboards. Can you simplify the two-tool architecture from G3? | Near RT + Dashboards | [S7 — GB + NRT + Dashboards](#scenario-7--gb--near-real-time--dashboards) |
+| G8 | Your loyalty service, inventory service, and finance reporting all need order events — but they each process at different speeds. How do you decouple them without real-time pressure? | Near RT + Another System | [S8 — GB + NRT + Another System](#scenario-8--gb--near-real-time--another-system) |
+| G9 | The finance team needs a fully joined, cleaned dataset from yesterday's orders ready by 6am. How do you build a reliable nightly pipeline? | Batch + Analytics | [S9 — GB + Batch + Analytics](#scenario-9--gb--batch--analytics) |
+| G10 | You want to retrain your delivery time model weekly using 6 months of historical data. Design the training pipeline end-to-end, including how you validate and deploy the new model safely. | Batch + ML | [S10 — GB + Batch + ML](#scenario-10--gb--batch--ml) |
+| G11 | The CEO wants a single-page KPI dashboard that loads instantly every morning: total orders, revenue, avg delivery time, top cities. How do you design this so it never times out? | Batch + Dashboards | [S11 — GB + Batch + Dashboards](#scenario-11--gb--batch--dashboards) |
+| G12 | 500 restaurant partners each need a daily CSV file of their orders delivered via SFTP by 3am. Design the export pipeline including validation and delivery confirmation. | Batch + Another System | [S12 — GB + Batch + Another System](#scenario-12--gb--batch--another-system) |
+
+---
+
+### TB Scale — 5 TB/day (Distributed, national-scale)
+
+| # | Question | Scenario | Answer |
+|---|---|---|---|
+| T1 | Your food delivery platform has grown to 5 TB/day. The real-time analytics pipeline you built at GB scale is falling over. Walk me through every component that breaks and how you fix each one. | Real-time + Analytics | [S13 — TB + RT + Analytics](#scenario-13--tb--real-time--analytics) |
+| T2 | At TB scale, your Redis node for ML features is running out of RAM. Billions of feature keys for users, restaurants, and zones. How do you scale the Feature Store without breaking the inference SLA? | Real-time + ML | [S14 — TB + RT + ML](#scenario-14--tb--real-time--ml) |
+| T3 | At TB scale, ClickHouse can no longer ingest fast enough and Snowflake is too slow for the ops dashboard. How do you scale the two-dashboard architecture? | Real-time + Dashboards | [S15 — TB + RT + Dashboards](#scenario-15--tb--real-time--dashboards) |
+| T4 | At TB scale, your downstream consumer services (notification, inventory, loyalty) can't keep up with the event volume. PostgreSQL idempotency checks are saturating. Fix the architecture. | Real-time + Another System | [S16 — TB + RT + Another System](#scenario-16--tb--real-time--another-system) |
+| T5 | Your 5-minute micro-batch Spark job processes 1 TB per run and is now taking 45 minutes. How do you fix it? Walk me through partition strategy and cluster sizing. | Near RT + Analytics | [S17 — TB + NRT + Analytics](#scenario-17--tb--near-real-time--analytics) |
+| T6 | You have 50 million active orders that each need a pre-computed delivery estimate refreshed every 5 minutes. Single Redis node is out of RAM. Single Spark node takes too long. Fix this. | Near RT + ML | [S18 — TB + NRT + ML](#scenario-18--tb--near-real-time--ml) |
+| T7 | At TB scale, Snowpipe ingestion is lagging and your small Snowflake warehouse can't handle the query load from two dashboard teams. What's your migration plan? | Near RT + Dashboards | [S19 — TB + NRT + Dashboards](#scenario-19--tb--near-real-time--dashboards) |
+| T8 | At 5 TB/day, your PostgreSQL staging table has billions of rows. Partner services polling it are hitting timeouts. How do you redesign the staging layer? | Near RT + Another System | [S20 — TB + NRT + Another System](#scenario-20--tb--near-real-time--another-system) |
+| T9 | Your nightly Spark job processes 5 TB and is missing the 6am SLA. dbt models are timing out. Walk me through fixing the nightly pipeline for TB scale, including cost optimization. | Batch + Analytics | [S21 — TB + Batch + Analytics](#scenario-21--tb--batch--analytics) |
+| T10 | You need to train an ML model on 6 months × 5 TB/day = 900 TB of data. Single-node Spark takes weeks. Single GPU takes weeks. Design a distributed training pipeline. | Batch + ML | [S22 — TB + Batch + ML](#scenario-22--tb--batch--ml) |
+| T11 | Your daily KPI dashboard runs a dbt model that rescans 900 TB of history every night and costs $4,500/night. How do you fix this without changing the dashboard output? | Batch + Dashboards | [S23 — TB + Batch + Dashboards](#scenario-23--tb--batch--dashboards) |
+| T12 | At TB scale with 1000+ restaurant partners, your sequential Spark file generation and SFTP delivery takes all night. Design a parallel delivery pipeline that completes by 3am. | Batch + Another System | [S24 — TB + Batch + Another System](#scenario-24--tb--batch--another-system) |
+
+---
+
+### PB Scale — 5 PB/day (Global, multi-region)
+
+| # | Question | Scenario | Answer |
+|---|---|---|---|
+| P1 | Your platform is now global — US, EU, APAC. At 5 PB/day, a single-region Kafka cluster creates 200ms write latency for Asian users. Walk me through the global real-time analytics architecture. | Real-time + Analytics | [S25 — PB + RT + Analytics](#scenario-25--pb--real-time--analytics) |
+| P2 | At PB scale, your Redis Cluster for ML features would need terabytes of RAM, costing millions. What replaces it and why? How does global inference routing work? | Real-time + ML | [S26 — PB + RT + ML](#scenario-26--pb--real-time--ml) |
+| P3 | Global executives need a real-time dashboard showing "orders per minute globally" while regional ops teams need local zone-level dashboards. How do you serve both without cross-region query latency? | Real-time + Dashboards | [S27 — PB + RT + Dashboards](#scenario-27--pb--real-time--dashboards) |
+| P4 | At global PB scale, a single order event might be picked up by consumers in both US-EAST and EU-WEST due to replication lag. How do you prevent cross-region duplicate processing without distributed locking? | Real-time + Another System | [S28 — PB + RT + Another System](#scenario-28--pb--real-time--another-system) |
+| P5 | At 5 PB/day, each 5-minute micro-batch is 17 TB. Your EMR cluster takes 90 minutes to process it. How do you get back to 5-minute SLA without provisioning a permanent 10x cluster? | Near RT + Analytics | [S29 — PB + NRT + Analytics](#scenario-29--pb--near-real-time--analytics) |
+| P6 | You have 500 million active orders globally needing delivery estimates refreshed every 5 minutes. Scoring 500M orders in Spark requires 2.5 billion Aerospike feature reads per batch. Walk me through the performance problem and fix. | Near RT + ML | [S30 — PB + NRT + ML](#scenario-30--pb--near-real-time--ml) |
+| P7 | Regional ops teams in 3 continents need 5-minute-fresh dashboards while the global CFO needs a unified view. BigQuery by region means cross-region queries for the CFO. What's the right design? | Near RT + Dashboards | [S31 — PB + NRT + Dashboards](#scenario-31--pb--near-real-time--dashboards) |
+| P8 | GDPR requires that EU user data never leaves the EU region. Your current architecture processes all events in a single US-based Spark cluster. How do you restructure the polling-based downstream architecture to be GDPR-compliant? | Near RT + Another System | [S32 — PB + NRT + Another System](#scenario-32--pb--near-real-time--another-system) |
+| P9 | At 5 PB/day, you have 1.8 EB of history after one year. Active BigQuery storage costs $20/TB/month. A full history rescan costs $25,000 per night. How do you architect storage and compute to make this sustainable? | Batch + Analytics | [S33 — PB + Batch + Analytics](#scenario-33--pb--batch--analytics) |
+| P10 | Your global ML model needs retraining monthly but you have exabytes of training data. Training on all of it would take weeks and cost $1M+ per run. How do you design the training pipeline? How do you deploy safely across 3 regions? | Batch + ML | [S34 — PB + Batch + ML](#scenario-34--pb--batch--ml) |
+| P11 | A VP asks why an analyst's ad-hoc query on the global data warehouse cost $50,000 and slowed down the CEO's dashboard. How do you prevent this architecturally? What governance model do you put in place? | Batch + Dashboards | [S35 — PB + Batch + Dashboards](#scenario-35--pb--batch--dashboards) |
+| P12 | You have 50,000 restaurant partners globally and 50+ country tax authorities. Each needs a daily file of their orders. GDPR means EU partner files cannot be generated outside EU. Design the global file delivery pipeline for PB scale. | Batch + Another System | [S36 — PB + Batch + Another System](#scenario-36--pb--batch--another-system) |
+
+---
+
 ## The 3 Fundamental Questions (Always Ask These First)
 
 When dealing with large data volumes, every solution starts with:
