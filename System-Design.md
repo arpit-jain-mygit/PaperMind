@@ -6441,7 +6441,9 @@ Problem: Each user tied to specific server
 ```
 
 **Stateless (Solution):**
-```
+
+Move session data OUT of web servers. Store in shared persistent storage.
+
 ---
 
 # CHUBB Interview Question: Design a Unique Code Generator
