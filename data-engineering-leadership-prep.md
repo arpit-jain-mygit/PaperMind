@@ -2535,6 +2535,2316 @@ Regulators and enterprise partners do not consume Kafka topics — they expect f
 
 ---
 
+## TB Scale Scenarios (5 TB/day — National Scale)
+
+---
+
+### Scenario 13 — TB + Real-time + Analytics
+
+#### Problem Statement
+```
+Size:    5 TB/day, ~5B events/day
+Speed:   Real-time — seconds
+Use:     Analytics — "Orders by city right now? Which zone is spiking?"
+Who:     Food delivery platform at national scale — millions of daily orders
+```
+
+#### What's Different vs Scenario 1 (GB + Real-time + Analytics)
+```
+Scenario 1: 5 GB/day — single machines handle everything
+Scenario 13: 5 TB/day — single machines break at every layer
+
+What breaks at TB scale:
+  PostgreSQL (1 node): 5B rows/day exceeds single-node write throughput
+  Flink (1 node):      5B events/day cannot be processed on single JVM
+  ClickHouse (1 node): TB of data + continuous aggregation = disk/RAM exhaustion
+  Kafka (3 brokers):   TB/day throughput needs 100+ partitions, 10+ brokers
+
+Architecture change:
+  PostgreSQL   → Cassandra (distributed, sharded by order_id, replicated across nodes)
+  Debezium     → Debezium cluster (parallel connectors per Cassandra node)
+  Kafka        → Kafka Cluster (100+ partitions, 10+ brokers)
+  Flink        → Flink Cluster (multi-node, higher parallelism per partition)
+  ClickHouse   → Druid / Pinot (multi-tenant TB OLAP, distributed ingestion)
+  Pattern stays identical — only scale of each component changes
+```
+
+#### Full Architecture
+```
+[App] ──WRITE──→ [Cassandra Cluster]     ← OLTP, sharded by order_id
+                        │
+                  READ (commit log)
+                        │
+               [Debezium Cluster]        ← parallel connectors per node
+                        │
+                      WRITE
+                        │
+              [Kafka Cluster]  ──WRITE──→ [S3]
+              100+ partitions             partitioned by minute
+              10+ brokers                      │
+                    │                          │
+             ┌──────┤                    READ every 5 min (Near-RT)
+           READ    READ                  or nightly (Batch)
+             │      │
+       [Payment] [Driver]
+        Service   Service
+        (distributed OLTP consumers)
+             │
+           READ
+             │
+        [Flink Cluster]             ← multi-node, parallelism matches Kafka partitions
+        aggregates every 10 sec
+             │
+           WRITE
+             │
+       [Druid / Pinot]              ← TB-scale real-time OLAP
+       distributed ingestion         multi-tenant, sub-second queries
+             │
+           READ
+             │
+          [Grafana]
+          ops dashboard
+```
+
+#### Key Scale Challenges
+```
+Cassandra partition key design:
+  Wrong:  partition by timestamp → all writes go to same node (hotspot)
+  Right:  partition by order_id (or user_id) → writes spread across all nodes
+  Rule:   high cardinality partition key = even distribution = no hotspot
+
+Kafka partition count:
+  GB: 10-20 partitions (1 Flink task per partition)
+  TB: 100-200 partitions → 100-200 Flink tasks running in parallel
+  More partitions = more parallelism = more throughput, but more overhead
+
+Druid vs Pinot choice:
+  Druid:  better for internal dashboards, flexible query types
+  Pinot:  better for user-facing analytics (< 10ms p99), simpler scaling
+  Both handle TB-scale real-time OLAP — pick based on query pattern
+
+Flink cluster sizing:
+  Rule of thumb: 1 task slot per Kafka partition
+  TB: 100 partitions → 100 task slots → 10 machines × 10 slots each
+  Checkpoint interval: increase to 60 sec at TB (more state to snapshot)
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| Cassandra Cluster | Distributed OLTP (sharded by order_id) | App WRITEs, Debezium READs commit log |
+| Debezium Cluster | CDC at TB scale | READs Cassandra commit log, WRITEs Kafka |
+| Kafka Cluster (100+ partitions) | TB/day throughput event bus | Consumers READ |
+| Flink Cluster | Distributed real-time aggregation | READs Kafka, WRITEs Druid/Pinot |
+| Druid / Pinot | TB-scale real-time OLAP | Flink WRITEs, Grafana READs |
+| S3 | Raw storage (minute partitions) | Kafka WRITEs |
+
+#### Interview Answer
+```
+Same pattern as GB — only scale changes:
+1. Cassandra replaces PostgreSQL (distributed OLTP, sharded by order_id)
+2. Debezium cluster reads Cassandra commit log → Kafka Cluster (100+ partitions)
+3. Flink Cluster (1 task per partition) aggregates → Druid/Pinot
+4. Grafana reads Druid/Pinot → sub-second ops dashboard
+
+Key insight: "Pattern stays identical. Cassandra partition key is the most critical
+design decision — wrong key = hotspot = one node takes all writes = single point of failure."
+```
+
+---
+
+### Scenario 14 — TB + Real-time + ML
+
+#### Problem Statement
+```
+Size:    5 TB/day, ~5B events/day
+Speed:   Real-time — ML prediction in milliseconds
+Use:     ML Inference — delivery time prediction at national scale
+Who:     Food delivery platform — millions of concurrent orders, each needing prediction
+```
+
+#### What's Different vs Scenario 2 (GB + Real-time + ML)
+```
+Scenario 2: Redis single node holds all features — works at GB scale (millions of keys)
+Scenario 14: 5B events/day → billions of feature keys → single Redis node runs out of RAM
+
+What breaks at TB scale:
+  Redis (1 node):      billions of keys for users + restaurants + zones → OOM
+  ML Service (1 node): thousands of concurrent inference requests → CPU saturation
+  Flink (1 node):      cannot process 5B events to compute features fast enough
+  Spark (1 node):      historical feature computation on TB/day data takes too long
+
+Architecture change:
+  Redis       → Redis Cluster (sharded across 10-20 nodes by key hash)
+  ML Service  → auto-scaling fleet behind load balancer (stateless, easy to scale)
+  Flink       → Flink Cluster
+  Spark       → Spark on EMR / Databricks
+  Pattern stays identical — Lambda Architecture unchanged
+```
+
+#### Full Architecture
+```
+[App]
+  │
+  ├──WRITE──→ [Cassandra Cluster]        ← OLTP
+  │                  │
+  │           [Debezium Cluster] → [Kafka Cluster] ──WRITE──→ [S3]
+  │                  │                                    (TB raw, minute partitions)
+  │                READ
+  │                  │
+  │          [Flink Cluster] ──WRITE──→ [Redis Cluster]
+  │          real-time features          sharded by key hash
+  │          (zone traffic,              user:USR-123:velocity → node 3
+  │           active drivers)            rest:456:orders → node 7
+  │
+  │          [Spark on EMR] ──WRITE──→ [Redis Cluster]
+  │          historical features         different key prefix
+  │          (hourly, reads S3)          rest:456:avg_prep → node 7
+  │
+  └──REQUEST──→ [ML Service Fleet]       ← auto-scaling, stateless
+                load balancer routes      N instances behind ALB
+                     │
+                   READ
+                     │
+              [Redis Cluster]            ← 1ms lookup, any node
+              features for this order
+                     │
+               runs ML model
+                     │
+              RESPONSE "28 min" → App
+```
+
+#### Key Scale Challenges
+```
+Redis Cluster key distribution:
+  Keys hash to slots (0-16383), slots assigned to nodes
+  user:USR-123:velocity → hash → slot 4821 → node 3
+  All features for one user may be on different nodes — 2-3 network hops
+  Fix: hash tags { } — user:{USR-123}:velocity forces all user keys to same node
+
+ML Service stateless design:
+  Service reads Redis, runs model, returns response — no local state
+  Stateless = any request goes to any instance — easy horizontal scale
+  Scale trigger: CPU > 60% → add instance. CPU < 20% → remove instance
+
+Feature key TTL at TB scale:
+  Billions of keys with no TTL = Redis Cluster fills up and crashes
+  Every key must have TTL: real-time features 2 min, historical 2 hr
+  Monitor: Redis memory usage per node. Alert at 70% capacity.
+
+Model serving at TB scale:
+  Single model file loaded by each ML Service instance on startup
+  Model update: rolling deploy — 10% instances at a time → validate → 100%
+  Never stop all instances simultaneously — zero-downtime requirement
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| Cassandra Cluster | Distributed OLTP | App WRITEs, Debezium READs |
+| Kafka Cluster | TB/day event bus | Flink READs |
+| Flink Cluster | Real-time feature computation | READs Kafka, WRITEs Redis Cluster |
+| Spark on EMR | Historical feature computation | READs S3, WRITEs Redis Cluster |
+| Redis Cluster | Distributed Feature Store (sharded) | Flink/Spark WRITE, ML Fleet READs |
+| ML Service Fleet | Auto-scaling inference | READs Redis Cluster, RESPONDs to App |
+
+#### Interview Answer
+```
+Same Lambda Architecture as GB — scale changes execution:
+1. Flink Cluster computes real-time features → Redis Cluster (sharded, TTL on all keys)
+2. Spark on EMR computes historical features → Redis Cluster (different key prefix)
+3. ML Service Fleet (stateless, auto-scales) READs Redis → runs model → responds in <15ms
+
+Key insight: "Redis Cluster hash tags are the most common TB-scale mistake to miss.
+Without them, one user's features scatter across nodes — 2-3 hops per inference.
+With hash tags: all features for user:{USR-123} land on same node — 1 hop."
+```
+
+---
+
+### Scenario 15 — TB + Real-time + Dashboards
+
+#### Problem Statement
+```
+Size:    5 TB/day, ~5B events/day
+Speed:   Real-time ops (30 sec) + Near-real-time business (15-30 min)
+Use:     Two dashboards — ops team live + business team historical
+Who:     Food delivery platform at national scale
+```
+
+#### What's Different vs Scenario 3 (GB + Real-time + Dashboards)
+```
+Scenario 3: ClickHouse (1 node) + Snowflake (small) — works at GB scale
+Scenario 15: TB/day throughput breaks both
+
+What breaks:
+  ClickHouse (1 node): TB/day write rate exceeds single-node ingestion capacity
+  Snowflake (small):   TB/day ETL takes too long, query contention spikes
+
+Architecture change:
+  ClickHouse (1 node) → Druid / Pinot (distributed, TB ingestion via streaming)
+  Snowflake (small)   → BigQuery (serverless, auto-scales) or Redshift (larger cluster)
+  Flink               → Flink Cluster
+  Spark               → Spark on EMR / Databricks
+  Pattern identical — two stacks on same Kafka, different serving layers
+```
+
+#### Full Architecture
+```
+[Kafka Cluster] ─────────────────────────────────── WRITE ──→ [S3]
+(from Cassandra → Debezium → Kafka)                        minute partitions
+
+     READ (Flink Cluster)          READ (Spark on EMR)
+          │                               │
+    aggregates every 30s           cleans + joins hourly
+          │                               │
+        WRITE                           WRITE
+          │                               │
+   [Druid / Pinot]                [BigQuery / Redshift]
+   TB real-time OLAP              TB batch OLAP
+   distributed ingestion          serverless / large cluster
+          │                               │
+        READ                           READ
+          │                               │
+      [Grafana]                    [Tableau / Looker]
+    ops dashboard                  business dashboard
+    30-sec refresh                 on-demand queries
+```
+
+#### Key Scale Challenges
+```
+Druid ingestion at TB:
+  Druid uses "real-time nodes" that ingest from Kafka, "historical nodes" for old data
+  TB/day: need 20-30 real-time nodes ingesting in parallel (one per Kafka partition group)
+  Segments: Druid writes data as immutable segments — query planner reads only needed segments
+
+BigQuery for TB batch:
+  Serverless — no cluster to size. BigQuery auto-scales to query size.
+  TB/day ETL: Spark on EMR writes Parquet to GCS → BigQuery external table or load job
+  Cost: BigQuery charges per TB scanned — use column pruning and partitioning to reduce cost
+
+Two-dashboard governance at TB:
+  Same as GB — ClickHouse/Druid for ops, Snowflake/BigQuery for business
+  At TB: enforce separate service accounts — ops team cannot query BigQuery (cost risk)
+  Druid dedicated for dashboards — no ad-hoc query access
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| Kafka Cluster | TB event bus | Flink + Kafka Connect READ |
+| Flink Cluster | Real-time aggregation | READs Kafka, WRITEs Druid/Pinot |
+| Druid / Pinot | TB real-time OLAP (ops) | Flink WRITEs, Grafana READs |
+| S3 | Raw minute-partitioned storage | Kafka WRITEs, Spark READs |
+| Spark on EMR | Hourly ETL | READs S3, WRITEs BigQuery/Redshift |
+| BigQuery / Redshift | TB batch OLAP (business) | Spark WRITEs, Tableau READs |
+
+#### Interview Answer
+```
+Same two-stack pattern as GB, distributed components:
+1. Kafka Cluster → Flink Cluster → Druid/Pinot → Grafana (ops, 30-sec refresh)
+2. Kafka Cluster → S3 → Spark on EMR → BigQuery → Tableau (business, hourly)
+
+Key insight: "At TB, Druid/Pinot replaces ClickHouse — same role, distributed ingestion.
+BigQuery replaces small Snowflake — serverless means no cluster sizing mistake possible."
+```
+
+---
+
+### Scenario 16 — TB + Real-time + Another System
+
+#### Problem Statement
+```
+Size:    5 TB/day, ~5B events/day
+Speed:   Real-time — milliseconds to seconds
+Use:     Another System — notification, inventory, loyalty, fraud at national scale
+Who:     Food delivery platform — millions of concurrent orders, many downstream systems
+```
+
+#### What's Different vs Scenario 4 (GB + Real-time + Another System)
+```
+Scenario 4: PostgreSQL idempotency store, single consumer instances — works at GB
+Scenario 16: 5B events/day breaks both
+
+What breaks:
+  PostgreSQL idempotency: 5B idempotency checks/day on single PostgreSQL = saturation
+  Single consumer instances: cannot process TB event volume fast enough
+  Single Fraud Service: thousands of concurrent fraud checks in <200ms — one machine insufficient
+
+Architecture change:
+  PostgreSQL idempotency → Cassandra (distributed idempotency, partitioned by order_id)
+  Single consumer instances → auto-scaling consumer fleets
+  Fraud Service (1 node) → Fraud Service fleet (auto-scaling, behind load balancer)
+  Redis → Redis Cluster (fraud features)
+  Pattern identical — same Schema Registry, DLQ, Consumer Groups
+```
+
+#### Full Architecture
+```
+[App]
+  │
+  ├──WRITE──→ [Cassandra Cluster]        ← OLTP
+  │
+  └──REQUEST──→ [Fraud Service Fleet]    ← auto-scaling, <200ms
+                      │
+                    READ
+                      │
+               [Redis Cluster]           ← fraud features, sharded
+
+[Cassandra] → [Debezium Cluster] → [Kafka Cluster + Schema Registry]
+                                          │
+              ┌───────────────────────────┼───────────────────────────┐
+              │                           │                           │
+    [Notification Fleet]        [Inventory Fleet]           [Loyalty Fleet]
+    N auto-scaling instances    N auto-scaling instances    N auto-scaling instances
+    own Consumer Group          own Consumer Group           own Consumer Group
+          │                           │
+    idempotency check           idempotency check
+    WRITE to [Cassandra]        WRITE to [Cassandra]
+    (notifications_sent)        (inventory_decremented)
+          │
+    [Push Notification]         [Inventory DB Cluster]
+    global push service
+          │
+    [DLQ] — failed events retry (per service, per Consumer Group)
+```
+
+#### Key Scale Challenges
+```
+Cassandra idempotency at 5B/day:
+  Partition key: order_id — every check hits different node
+  Read-before-write: SELECT then INSERT if not exists
+  At TB: use Cassandra lightweight transactions (LWT) for atomic check-and-insert
+  Cost: LWT is slower (Paxos consensus) — acceptable for idempotency (1 check per order)
+
+Auto-scaling consumer fleet:
+  Kafka partitions = max parallelism ceiling
+  100 partitions → max 100 consumer instances per Consumer Group
+  Scale trigger: consumer lag growing → add instances (up to partition count)
+  Scale down: lag = 0 for 5 min → remove instances
+
+DLQ at TB scale:
+  DLQ topic itself can accumulate TB of failed events if service is down long
+  DLQ consumer must process fast enough to drain before TTL expires
+  Monitor: DLQ depth. Alert if > 1M messages. Page oncall.
+
+Schema Registry at TB:
+  Same tool as GB — Schema Registry is not the bottleneck
+  Cache schema locally in consumer (avoid Registry call per message)
+  Schema cache TTL: 1 hour — refresh in background
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| Cassandra Cluster | OLTP + distributed idempotency store | App WRITEs, Debezium READs, Consumers WRITE idempotency |
+| Kafka Cluster + Schema Registry | TB event bus with schema validation | Consumers READ |
+| Fraud Service Fleet | Auto-scaling sync fraud scoring | READs Redis Cluster, RESPONDs |
+| Redis Cluster | Fraud features (sharded) | Flink WRITEs, Fraud Fleet READs |
+| Consumer Fleets (Notification/Inventory/Loyalty) | Auto-scaling event processors | READ Kafka, WRITE idempotency to Cassandra |
+| DLQ | Failed event retry (per Consumer Group) | Kafka WRITEs, DLQ consumer READs |
+
+#### Interview Answer
+```
+Same pattern as GB — scale forces distribution:
+1. Fraud Service Fleet (auto-scaling) → Redis Cluster for features — always sync
+2. Cassandra → Debezium Cluster → Kafka Cluster + Schema Registry
+3. Auto-scaling Consumer Fleets (Notification/Inventory/Loyalty) — own Consumer Group
+4. Idempotency: Cassandra lightweight transactions (not PostgreSQL at TB scale)
+5. DLQ per Consumer Group — monitor depth, alert at 1M messages
+
+Key insight: "Consumer fleet size is bounded by Kafka partition count.
+100 partitions = max 100 parallel consumers. Partition count must be planned
+before data volumes peak — cannot reduce partitions without data loss."
+```
+
+---
+
+### Scenario 17 — TB + Near Real-time + Analytics
+
+#### Problem Statement
+```
+Size:    5 TB/day, ~5B events/day
+Speed:   Near Real-time — 5-15 minute delay acceptable
+Use:     Analytics — shift-level monitoring, recent trend visibility
+Who:     Food delivery platform ops team — city-level managers reviewing 15-min windows
+```
+
+#### What's Different vs Scenario 5 (GB + Near RT + Analytics)
+```
+Scenario 5: Spark micro-batch on 1 machine — processes GB in 5 min easily
+Scenario 17: TB of new data every 5 min = 1 TB per micro-batch — single Spark machine impossible
+
+What breaks:
+  Single Spark node: 1 TB per 5-min batch → hours to process → SLA broken
+  S3 hourly partitions: too coarse — need minute partitions to read only last 5 min of data
+
+Architecture change:
+  Spark (1 node) → Spark on EMR / Databricks (auto-scaling cluster)
+  S3 hourly partition → S3 minute partition (read only 5 min of files per batch)
+  Druid/Pinot remains as OLAP store (same as S13, TB RT choice)
+  Pattern identical — only Spark scales out
+```
+
+#### Full Architecture
+```
+[Kafka Cluster] ──WRITE──→ [S3]
+                            partitioned by MINUTE
+                            s3://events/date=2024-01-15/hour=11/minute=30/*.parquet
+                                 │
+                         READ every 5 min
+                         (only minute=30 folder)
+                                 │
+                  [Spark on EMR — auto-scaling cluster]
+                  reads ONLY last 5 min of S3 files
+                  aggregates: city, orders_count, avg_delivery
+                  auto-scales workers: 5 min batch = spin up → process → spin down
+                                 │
+                               WRITE
+                                 │
+                   [Druid / Pinot]          [BigQuery / Redshift]
+                   Near-RT ops              Business analytics
+                   5-min fresh              hourly fresh
+                                 │                  │
+                             [Grafana]         [Tableau]
+                             5-min refresh     on-demand
+```
+
+#### Key Scale Challenges
+```
+S3 minute partitioning is critical:
+  Without: Spark reads full hour folder (12 × more data than needed) → 6x slower
+  With:    Spark reads only minute=30 folder → reads exactly the 5-min batch
+  Implementation: Kafka Connect writes with time-based partitioner (minute granularity)
+
+EMR auto-scaling for micro-batch:
+  Each 5-min batch: spin up cluster → process 1 TB → write to Druid → spin down
+  Cold start: EMR cluster takes 3-5 min to spin up — use EMR managed scaling (pre-warmed)
+  Or: keep small standing cluster, scale out for batch, scale back in after
+
+Druid ingestion from batch:
+  Druid supports batch ingestion from S3 (not just Kafka streaming)
+  Spark writes Parquet to S3 staging → Druid batch ingestion job reads → indexes
+  Ingestion takes 1-2 min at TB scale → total pipeline: 5 min batch + 2 min ingest = 7 min
+  Acceptable at "5-15 min" SLA
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| Kafka Cluster | TB event bus | WRITEs S3 via Kafka Connect |
+| S3 (minute partitions) | Raw storage, precise time slicing | Kafka WRITEs, Spark READs |
+| Spark on EMR (auto-scaling) | 5-min micro-batch aggregation | READs S3, WRITEs Druid/BigQuery |
+| Druid / Pinot | Near-RT OLAP (ops) | Spark WRITEs, Grafana READs |
+| BigQuery / Redshift | Batch OLAP (business) | Spark WRITEs, Tableau READs |
+
+#### Interview Answer
+```
+1. Kafka → S3 (minute-level partitions — critical for reading only 5-min slices)
+2. Spark on EMR auto-scales every 5 min: reads last-minute S3 folder → aggregates → Druid
+3. Druid batch ingestion: 2-min index build → Grafana reads fresh data
+4. Same Spark run WRITEs to BigQuery for business team
+
+Key insight: "S3 minute partitioning is the difference between reading 1 TB and reading 5 GB
+per micro-batch. Partition granularity must match your micro-batch interval."
+```
+
+---
+
+### Scenario 18 — TB + Near Real-time + ML
+
+#### Problem Statement
+```
+Size:    5 TB/day, ~5B events/day
+Speed:   Near Real-time — predictions updated every 5-15 min
+Use:     ML — pre-computed delivery estimates for order tracking screen
+Who:     Food delivery platform — tens of millions of active orders, estimates refresh every 5 min
+```
+
+#### What's Different vs Scenario 6 (GB + Near RT + ML)
+```
+Scenario 6: Redis single node stores pre-computed predictions for all active orders
+Scenario 18: tens of millions of active orders simultaneously → Redis single node OOM
+
+What breaks:
+  Redis (1 node): 50M active orders × avg key size 200 bytes = 10 GB RAM minimum
+                  Plus feature keys → easily exceeds single-node RAM
+  Spark (1 node): running ML model on 50M active orders in 5 min → impossible
+
+Architecture change:
+  Redis (1 node) → Redis Cluster (sharded, predictions spread across nodes)
+  Spark (1 node) → Spark on EMR (distributes model scoring across workers)
+  Pattern identical — Spark runs model, stores result in Redis, App GETs result
+```
+
+#### Full Architecture
+```
+[S3] ──READ (every 5 min)──→ [Spark on EMR — auto-scaling]
+                               reads active orders from Cassandra
+                               reads features from Redis Cluster
+                               runs ML model (distributed scoring)
+                               writes predictions: order_id → estimate
+                                      │
+                                    WRITE
+                                      │
+                               [Redis Cluster]
+                               prediction:order:98765 → "19 min"
+                               prediction:order:98766 → "24 min"
+                               sharded by order_id hash
+                               TTL: 15 min per key
+                                      │
+                                    READ
+                                      │
+                               [App / Tracking Screen]
+                               GET prediction:order:{order_id}
+                               → displays "19 min", refreshes every 5 min
+```
+
+#### Key Scale Challenges
+```
+Distributed model scoring on Spark:
+  50M active orders → Spark partitions into 10K chunks of 5K orders each
+  Each Spark worker scores its chunk independently (embarrassingly parallel)
+  Model file: broadcast to all workers once (not loaded per partition)
+  Total time: 50M orders / N workers — scale workers until runtime < 5 min
+
+Redis Cluster for predictions:
+  Shard by order_id hash → predictions spread evenly across nodes
+  10M active orders × 200 bytes = 2 GB → 10-node cluster = 200 MB per node → comfortable
+  Monitor: memory per node. Pre-scale before peak hours (lunch/dinner rush).
+
+Feature reads during Spark scoring:
+  Spark reads Redis Cluster for each order's features → N × M network calls
+  Optimization: Spark batch-reads features (MGET) per partition → 1 call per 5K orders
+  Further: pre-join features into the active orders table before scoring (avoid Redis reads in loop)
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| Cassandra Cluster | Active order store | Spark READs active orders |
+| Redis Cluster (features) | Feature Store (real-time + historical) | Flink/Spark WRITE features |
+| Spark on EMR | Distributed model scoring every 5 min | READs Cassandra + Redis, WRITEs Redis predictions |
+| Redis Cluster (predictions) | Pre-computed estimates per order | Spark WRITEs, App READs |
+
+#### Interview Answer
+```
+Same pre-compute pattern as GB — scale forces distribution:
+1. Spark on EMR reads 50M active orders from Cassandra every 5 min
+2. Batch-reads features from Redis Cluster (MGET per partition)
+3. Distributes ML model scoring across workers (model broadcast once)
+4. Writes predictions to Redis Cluster (TTL 15 min per key)
+5. App GETs prediction for order_id — 1ms Redis lookup
+
+Key insight: "Broadcast the model file to all Spark workers once per job run.
+Never load it per partition — that's one model load per 5K orders = 10K loads total."
+```
+
+---
+
+### Scenario 19 — TB + Near Real-time + Dashboards
+
+#### Problem Statement
+```
+Size:    5 TB/day, ~5B events/day
+Speed:   Near Real-time — 5-15 min delay, both ops and business teams
+Use:     Two dashboards — both teams accept 5-min delay
+Who:     Food delivery platform — ops city managers + executive business reviews
+```
+
+#### What's Different vs Scenario 7 (GB + Near RT + Dashboards)
+```
+Scenario 7: Snowflake (small) via Snowpipe — works at GB/day
+Scenario 19: TB/day Snowpipe ingestion can lag, Snowflake small warehouse struggles
+
+What breaks:
+  Snowflake Snowpipe: designed for continuous micro-batch, but TB/day = very high file volume
+  Snowflake (small):  TB/day query compute on small warehouse = slow, expensive
+
+Architecture change:
+  Snowflake (small) → BigQuery (serverless, auto-scales to query/load size)
+                   OR Redshift (larger cluster, RA3 storage-compute separation)
+  Snowpipe → Spark on EMR writes directly to BigQuery (faster, more control)
+  One tool still serves both dashboards (5-min delay acceptable for both)
+```
+
+#### Full Architecture
+```
+[S3] ──READ every 5 min──→ [Spark on EMR]
+                            cleans + aggregates
+                                   │
+                                 WRITE
+                                   │
+                            [BigQuery]
+                            serverless, auto-scales
+                            5-min fresh
+                                   │
+                    ┌──────────────┴───────────────┐
+                  READ                           READ
+                    │                               │
+                [Grafana]                    [Tableau / Looker]
+                ops dashboard                business dashboard
+                5-min refresh                on-demand queries
+                connects to BigQuery         connects to BigQuery
+```
+
+#### Key Scale Challenges
+```
+BigQuery vs Snowflake at TB scale:
+  BigQuery: serverless — no warehouse to size, auto-scales per query
+            Ideal when: team already on GCP, or load is spiky (variable query concurrency)
+  Snowflake: needs right warehouse size — XL or XXL at TB daily load
+            Ideal when: team already uses Snowflake, prefer single SQL dialect
+
+Spark → BigQuery write pattern:
+  Spark writes Parquet to GCS staging → BigQuery load job (fastest, bulk)
+  OR Spark BigQuery connector (direct write, slightly slower)
+  At TB: GCS staging + load job is faster and cheaper
+
+One warehouse, two audiences at TB:
+  Same risk as GB: analyst heavy query during sale = Grafana dashboard slow
+  Fix at TB: BigQuery slots reservation — reserve 1000 slots for ops dashboard
+  Analyst queries use on-demand slots (billed per TB scanned)
+  Dashboard queries use reserved slots (dedicated, predictable latency)
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| S3 / GCS | Raw minute-partitioned storage | Kafka WRITEs, Spark READs |
+| Spark on EMR | 5-min micro-batch ETL | READs S3, WRITEs BigQuery |
+| BigQuery (slot reservation) | Single TB OLAP for both audiences | Spark WRITEs, Grafana + Tableau READ |
+
+#### Interview Answer
+```
+Same one-tool pattern as GB S7 — BigQuery replaces small Snowflake:
+1. S3 (minute partitions) → Spark on EMR → BigQuery every 5 min
+2. Grafana READs BigQuery reserved slots → ops team, 5-min refresh
+3. Tableau READs BigQuery on-demand → business team
+
+Key insight: "BigQuery slot reservation separates dashboard SLA from analyst workload.
+Without it, one analyst running a multi-TB scan slows every Grafana dashboard panel."
+```
+
+---
+
+### Scenario 20 — TB + Near Real-time + Another System
+
+#### Problem Statement
+```
+Size:    5 TB/day, ~5B events/day
+Speed:   Near Real-time — downstream systems react within 5-15 minutes
+Use:     Another System — loyalty, partner sync, reporting with minute-level delay
+Who:     Food delivery platform — millions of orders, many downstream systems
+```
+
+#### What's Different vs Scenario 8 (GB + Near RT + Another System)
+```
+Scenario 8: PostgreSQL staging table — consumer services poll every 5 min
+Scenario 20: TB/day = billions of rows in staging table → PostgreSQL saturates
+
+What breaks:
+  PostgreSQL staging: 5B rows/day into a single staging table = write saturation + slow polls
+
+Architecture change:
+  PostgreSQL staging → Cassandra staging (distributed, partitioned by service + time bucket)
+  Spark reads S3 → writes processed events to Cassandra staging (not PostgreSQL)
+  Consumer services poll Cassandra staging table (range scan by time bucket)
+  Pattern identical — polling replaces always-on Kafka consumers, just at scale
+```
+
+#### Full Architecture
+```
+[S3] ──READ every 5 min──→ [Spark on EMR]
+                            processes confirmed orders
+                                   │
+                                 WRITE
+                                   │
+                   [Cassandra — staging table]
+                   partition key:  (service_name, time_bucket)
+                   e.g.: ("loyalty", "2024-01-15-11:30")
+                   clustering key: order_id
+                                   │
+               ┌───────────────────┼───────────────────┐
+             POLL                POLL                 POLL
+             5 min               5 min                daily
+               │                   │                    │
+        [Loyalty Svc]       [Partner Sync]         [Report Svc]
+        reads its bucket    reads its bucket       generates daily file
+        marks processed      sends to restaurant    to finance team
+```
+
+#### Key Scale Challenges
+```
+Cassandra staging partition design:
+  Wrong: partition by order_id → each poll scans all partitions (scatter-gather)
+  Right: partition by (service_name, time_bucket) → each consumer reads one partition
+  Consumer polls: SELECT * FROM staging WHERE service='loyalty' AND bucket='11:30'
+  → reads only its 5-min slice → fast, isolated
+
+Time bucket granularity:
+  5-min buckets match the polling interval exactly
+  Each bucket: ~17M orders (5B/day ÷ 288 buckets) — manageable Cassandra partition
+  After processing: consumer marks bucket done, does not re-read
+
+Fraud at TB + Near RT:
+  Fraud Service still synchronous HTTP → still uses Redis Cluster for features
+  Near-RT speed applies to downstream consumers (loyalty etc), not fraud
+  Fraud = always synchronous, always blocks order, regardless of speed tier
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| S3 | Raw minute-partitioned storage | Kafka WRITEs, Spark READs |
+| Spark on EMR | Processes confirmed orders every 5 min | READs S3, WRITEs Cassandra staging |
+| Cassandra staging | Distributed staging (partitioned by service + time bucket) | Spark WRITEs, Consumer services READ |
+| Loyalty / Partner / Report Services | Poll Cassandra, process, mark done | READ + UPDATE Cassandra staging |
+| Fraud Service Fleet | Sync fraud scoring (always) | READs Redis Cluster |
+
+#### Interview Answer
+```
+Same polling pattern as GB S8 — Cassandra replaces PostgreSQL staging:
+1. Spark on EMR every 5 min: reads S3 → writes to Cassandra staging (partitioned by service + time_bucket)
+2. Loyalty/Partner/Report poll Cassandra: SELECT WHERE service=X AND bucket=current
+3. Process batch → mark bucket done → wait for next 5-min window
+
+Key insight: "Cassandra partition key (service_name, time_bucket) is critical.
+Each consumer reads exactly one partition — no cross-partition scatter-gather.
+Each 5-min bucket contains ~17M orders at TB scale — Cassandra handles this trivially."
+```
+
+---
+
+### Scenario 21 — TB + Batch + Analytics
+
+#### Problem Statement
+```
+Size:    5 TB/day, ~5B events/day
+Speed:   Batch — nightly, data ready by 6am
+Use:     Analytics — full business reporting, executive dashboards, finance
+Who:     Food delivery platform — finance team, product analysts, executive reviews
+```
+
+#### What's Different vs Scenario 9 (GB + Batch + Analytics)
+```
+Scenario 9: Spark nightly on 1 machine processes 5 GB in <1 hour
+Scenario 21: 5 TB nightly → single Spark machine takes 10+ hours → misses 6am SLA
+
+What breaks:
+  Spark (1 node):     5 TB ETL overnight → too slow for 6am deadline
+  Snowflake (small):  dbt models on TB-scale tables → slow, warehouse timeout
+  dbt serial models:  at TB, dbt must run models in parallel to meet SLA
+
+Architecture change:
+  Spark (1 node) → Spark on EMR (50-100 worker nodes, processes TB in parallel)
+  Snowflake (small) → BigQuery (serverless) or Snowflake XL
+  dbt: add parallelism config (threads: 16+), use incremental models
+  Airflow: same orchestration, but with EMR job steps instead of local Spark
+```
+
+#### Full Architecture
+```
+[All day: orders → Cassandra → Debezium → Kafka → S3]
+
+[2am: Airflow triggers nightly pipeline]
+
+Airflow Step 1: [Spark on EMR — 50+ workers]
+  READs: s3://events/date=yesterday/*.parquet (5 TB)
+  JOINs: user, restaurant, driver, payment tables (from Cassandra snapshots)
+  CLEANs: dedup, nulls, type casting
+  WRITEs: raw + joined tables → BigQuery (or Snowflake XL)
+  Runtime: 5 TB / 50 workers ≈ 45-60 min
+
+Airflow Step 2: [dbt — 16 parallel threads]
+  Runs SQL models on BigQuery:
+  revenue_by_city_daily, restaurant_performance, user_cohort_analysis
+  Incremental models: only processes yesterday's partition (not full history rescan)
+  Runtime: 30-45 min
+
+Airflow Step 3: alert "Pipeline complete — data ready for [date]"
+
+[BigQuery / Snowflake XL] ──READ──→ [Tableau / Looker]
+                                      analysts query in the morning
+```
+
+#### Key Scale Challenges
+```
+Incremental dbt models at TB scale:
+  Full refresh: rescan all history (PBs) every night → hours, expensive
+  Incremental: process only yesterday's new rows → append to existing table
+  dbt incremental strategy: unique_key + updated_at → merge new rows only
+  Always test: incremental result must match full refresh result (run both weekly)
+
+Spark on EMR job tuning:
+  Partition size: aim for 128-256 MB per Spark partition → 5 TB / 200 MB = ~25,000 partitions
+  Worker count: 25,000 partitions / 10 tasks per worker = 2,500 concurrent tasks → ~250 workers
+  Spot instances: use 80% spot + 20% on-demand (spot = 70% cheaper, occasional interruptions)
+  Spark adaptive query execution (AQE): auto-tuning for join strategies and partition sizes
+
+BigQuery at TB batch:
+  Load job from GCS: fastest ingestion path for Spark output
+  Partition by date: BigQuery partition pruning → queries on one date scan one partition only
+  Clustering by city: further pruning for city-level analyst queries
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| S3 | Daily raw Parquet (TB, date-partitioned) | Kafka WRITEs, Spark READs |
+| Airflow | Nightly orchestration (EMR → dbt → alert) | Triggers jobs |
+| Spark on EMR (50+ workers) | TB nightly ETL with parallelism | READs S3, WRITEs BigQuery |
+| dbt (16+ threads, incremental) | SQL business logic, partition-aware | READs BigQuery raw, WRITEs BigQuery clean |
+| BigQuery / Snowflake XL | TB data warehouse | dbt WRITEs, Tableau READs |
+
+#### Interview Answer
+```
+Same Airflow + Spark + dbt pattern — scale forces distribution:
+1. Airflow 2am: EMR cluster (50+ workers) reads 5 TB S3 → joins → loads BigQuery
+2. dbt (16 threads, incremental models): processes yesterday's partition only
+3. Analysts query BigQuery by 6am — partitioned by date, clustered by city
+
+Key insight: "Incremental dbt models are non-negotiable at TB scale.
+Full refresh means scanning all historical TB every night. Incremental means
+scanning yesterday's 5 TB only. 100x cheaper and 10x faster."
+```
+
+---
+
+### Scenario 22 — TB + Batch + ML
+
+#### Problem Statement
+```
+Size:    5 TB/day → months of history = PBs of training data
+Speed:   Batch — weekly model training
+Use:     ML Training — retrain delivery time model on 6 months of TB/day data
+Who:     Food delivery ML team — improving model accuracy at national scale
+```
+
+#### What's Different vs Scenario 10 (GB + Batch + ML)
+```
+Scenario 10: Spark reads 6 months × 5 GB/day = ~900 GB training data — single node handles
+Scenario 22: Spark reads 6 months × 5 TB/day = ~900 TB training data — single node impossible
+
+What breaks:
+  Spark (1 node):   900 TB feature engineering → weeks, not hours
+  ML training:      900 TB training dataset → single GPU/CPU node → weeks to train
+  MLflow (local):   model artifacts at TB scale need managed registry (SageMaker)
+
+Architecture change:
+  Spark (1 node) → Spark on EMR (distributed feature engineering across 100+ workers)
+  ML Training job → SageMaker distributed training (multiple GPU instances)
+  MLflow → SageMaker Model Registry (managed, integrated with deployment)
+  Pattern identical — feature engineering → training → registry → A/B test → deploy
+```
+
+#### Full Architecture
+```
+[S3 — 6 months × 5 TB/day = ~900 TB raw Parquet]
+
+[Airflow — weekly trigger]
+      │
+      ├── Step 1: [Spark on EMR — 100+ workers]
+      │           READs 900 TB from S3
+      │           feature engineering: joins, aggregations, label creation
+      │           WRITEs training_data.parquet → S3 (100-200 TB feature matrix)
+      │           Runtime: ~4-6 hours
+      │
+      ├── Step 2: [SageMaker Training Job]
+      │           distributed training across 10-20 GPU instances (ml.p3.16xlarge)
+      │           reads training_data.parquet from S3
+      │           trains XGBoost / neural net on 100 TB feature matrix
+      │           evaluates: RMSE on held-out test set
+      │           WRITEs model artifact → SageMaker Model Registry
+      │           Runtime: ~6-12 hours
+      │
+      └── Step 3: [A/B test deployment]
+                  5% traffic to new model via SageMaker endpoint
+                  monitor RMSE vs old model for 24 hours
+                  if better → promote to 100%
+                  if worse → rollback (one CLI command in SageMaker)
+```
+
+#### Key Scale Challenges
+```
+Distributed feature engineering at 900 TB:
+  S3 read: 900 TB / 100 Spark workers = 9 TB per worker → manageable
+  Memory: use Spark's lazy evaluation — never load 900 TB into RAM
+  Key optimization: feature engineering should be pushdown-compatible (use Parquet column pruning)
+  Only read needed columns: not all 50 columns, just the 10 needed for feature computation
+
+SageMaker distributed training:
+  Data parallelism: each GPU gets different batch of training data
+  10 GPU instances × same model → gradient averaging after each batch (all-reduce)
+  900 TB → cannot fit in GPU RAM → mini-batch training (read 10K rows at a time from S3)
+  SageMaker Pipe mode: streams training data from S3 directly to training job (no disk copy)
+
+Feature selection at TB:
+  More data ≠ better model (diminishing returns after certain point)
+  Sample: use 10% random sample for initial training → full data only for final run
+  Feature importance: drop features with near-zero importance to reduce training data size
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| S3 (900 TB, 6-month history) | Training data source | Kafka WRITEs raw, Spark READs |
+| Spark on EMR (100+ workers) | Distributed feature engineering | READs 900 TB S3, WRITEs feature matrix |
+| SageMaker Training (GPU fleet) | Distributed model training | READs feature matrix from S3 |
+| SageMaker Model Registry | Versioned model artifacts | Training WRITEs, Inference endpoints READ |
+
+#### Interview Answer
+```
+Same pipeline as GB — scale forces distribution:
+1. Airflow weekly: Spark on EMR (100+ workers) reads 900 TB S3 → feature matrix (100 TB)
+2. SageMaker distributed training (10-20 GPUs): trains on feature matrix → model artifact
+3. A/B test: 5% traffic → monitor 24 hrs → promote or rollback
+
+Key insight: "900 TB of training data sounds scary — but Spark parallelizes it.
+The real challenge is feature selection: if 10% of data gives 95% of accuracy,
+train on 10% first, then full only if justified. Data engineers waste GPU hours
+training on full 900 TB when a sample works equally well."
+```
+
+---
+
+### Scenario 23 — TB + Batch + Dashboards
+
+#### Problem Statement
+```
+Size:    5 TB/day, ~5B events/day
+Speed:   Batch — daily, dashboards updated once per day
+Use:     Dashboards — executive KPI dashboard, daily business reviews
+Who:     Food delivery platform leadership — CEO/CFO, city general managers
+```
+
+#### What's Different vs Scenario 11 (GB + Batch + Dashboards)
+```
+Scenario 11: dbt builds daily_kpi_summary (1 row/day) — fast at GB, BigQuery reads trivially
+Scenario 23: Source tables are now TB-scale — dbt models must be efficient or they're slow/expensive
+
+What breaks:
+  dbt full refresh: re-scanning TB history every night to produce 1 summary row → expensive
+  BigQuery cost: TB scanned × $5/TB → full history scan every night = $$$
+
+Architecture change:
+  dbt incremental models: only process yesterday's partition, append to summary table
+  BigQuery partitioned tables: date-partitioned source tables → dbt only scans yesterday
+  Output (daily_kpi_summary) stays same — 1 row per day, 6 KPIs — still instant to read
+  Governance: column-level access control (executives see revenue, not raw order data)
+```
+
+#### Full Architecture
+```
+[Same nightly pipeline as S21]
+Airflow → Spark on EMR → BigQuery (raw, date-partitioned)
+
+[dbt — incremental models, 16 threads]
+  Reads ONLY: yesterday's partition (WHERE date = '2024-01-15')
+  Produces: 1 row in daily_kpi_summary for yesterday
+  APPENDS to existing summary table (never overwrites history)
+  Runtime: 15-20 min (scanning 5 TB, not 900 TB history)
+
+[BigQuery — daily_kpi_summary table]
+┌────────────────────────────────────────────┐
+│ date      │ revenue  │ orders │ avg_del ... │
+│ 2024-01-14│ 2.3M     │ 47K    │ 31 min ...  │
+│ 2024-01-15│ 2.7M     │ 52K    │ 29 min ...  │  ← yesterday, just added
+└────────────────────────────────────────────┘
+
+[Dashboard Tool — Looker / Tableau]
+  SELECT * FROM daily_kpi_summary ORDER BY date DESC LIMIT 30
+  → reads 30 rows, <10ms, regardless of TB history
+  Auto-refreshes at 6am when pipeline completes
+```
+
+#### Key Scale Challenges
+```
+BigQuery cost control at TB scale:
+  Full scan of 900 TB history every night: 900 TB × $5/TB = $4,500/night → unacceptable
+  Incremental dbt: scans only yesterday's 5 TB → $25/night → acceptable
+  Partitioned tables: BigQuery only bills for partitions actually scanned
+  Rule: every large BigQuery table must be date-partitioned
+
+Column-level governance:
+  Executives see: revenue, order_count, avg_delivery — aggregated KPIs
+  City managers see: their city's KPIs only (row-level security in BigQuery)
+  Analysts see: raw order table (Snowflake or BigQuery analyst dataset)
+  Implementation: BigQuery column-level security + row access policies
+
+dbt at TB — what changes:
+  Same SQL models as GB, but add: `partition_by` and `incremental_strategy: merge`
+  Test incremental vs full refresh weekly: results must match
+  dbt documentation: at TB scale, model lineage documentation is essential for debugging
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| S3 / GCS | Daily raw (date-partitioned, TB) | Kafka WRITEs, Spark READs |
+| Spark on EMR | Nightly ETL | READs S3, WRITEs BigQuery (raw, date-partitioned) |
+| dbt (incremental, 16 threads) | Yesterday's partition only → append to summary | READs BigQuery raw, WRITEs daily_kpi_summary |
+| BigQuery (date-partitioned + row security) | TB warehouse, access-controlled | dbt WRITEs, Dashboard READs |
+
+#### Interview Answer
+```
+Same summary table pattern as GB — incremental dbt is the key addition:
+1. Spark on EMR nightly → BigQuery (date-partitioned raw tables)
+2. dbt incremental: scans yesterday's 5 TB only → appends 1 row to daily_kpi_summary
+3. Dashboard reads 30 rows from summary → instant, regardless of 900 TB history
+
+Key insight: "The summary table output is identical to GB — 1 row per day, 6 KPIs.
+What changes is how we compute it: incremental dbt scanning 5 TB, not full history.
+BigQuery date partitioning makes this the difference between $25/night and $4,500/night."
+```
+
+---
+
+### Scenario 24 — TB + Batch + Another System
+
+#### Problem Statement
+```
+Size:    5 TB/day, ~5B events/day
+Speed:   Batch — nightly file delivery to partners and regulators
+Use:     Another System — daily order exports to restaurant partners, regulatory reports
+Who:     Food delivery platform — 1000+ restaurant partners, multiple regulatory bodies
+```
+
+#### What's Different vs Scenario 12 (GB + Batch + Another System)
+```
+Scenario 12: Single Spark generates files for each partner, single SFTP upload
+Scenario 24: 5 TB/day × 1000+ partners → single Spark and single SFTP delivery impossible
+
+What breaks:
+  Single Spark: generating 1000 partner files from 5 TB → hours per file sequentially
+  Single SFTP:  1000+ file uploads sequentially → takes all night
+  PostgreSQL ack log: 1000+ partners × 10K file chunks each → millions of ack rows → saturation
+
+Architecture change:
+  Spark (1 node) → Spark on EMR (parallel file generation per partner)
+  Single SFTP → parallel delivery fleet (N agents, each handles subset of partners)
+  PostgreSQL ack log → Cassandra ack log (high write throughput for millions of acks)
+  File chunking: split each partner's file into manageable chunks (parallel upload)
+```
+
+#### Full Architecture
+```
+[S3 — yesterday's 5 TB, date-partitioned]
+
+[Airflow — midnight trigger, per-partner DAGs in parallel]
+
+For each partner batch (100 partners per EMR job):
+
+  [Spark on EMR — 50 workers]
+  FILTER: orders for this partner group
+  FORMAT: partner-agreed CSV/JSON schema
+  SPLIT:  into 1 GB chunks (5 TB / 1000 partners = 5 GB avg per partner → 5 chunks)
+  WRITE:  partner_A/chunk-0001.csv ... chunk-0005.csv → S3 staging
+  Runtime: parallel across partner batches
+
+  [Validation per chunk]
+  row_count, checksum, schema — abort if any chunk fails
+
+  [Delivery fleet — parallel per partner]
+  5 chunks × 1000 partners = 5000 parallel SFTP/S3 uploads
+  Each upload agent: picks up chunks for its assigned partners
+  Acks each successful chunk delivery
+
+  [Cassandra — ack log]
+  partition key: (partner_id, date)
+  row: (chunk_id, delivered_at, ack_received_at)
+  5000 concurrent ack writes → distributed, no hotspot
+
+  [Airflow monitor]
+  checks all chunks acked for all partners by 3am
+  pages oncall for any partner with missing chunks
+```
+
+#### Key Scale Challenges
+```
+Parallel partner file generation:
+  1000 partners × sequential Spark job = 1000 × (runtime per partner) → too slow
+  Solution: group partners into batches of 100, run 10 EMR jobs in parallel
+  Each EMR job: 50 workers × 100 partners = 500 tasks → fast
+  Airflow: 10 parallel tasks, each triggering one EMR job for 100-partner batch
+
+Cassandra ack log design:
+  Partition key: (partner_id, date) — all chunks for one partner on same date in one partition
+  Monitoring query: SELECT * FROM acks WHERE partner_id=X AND date='2024-01-15'
+  → reads one partition, finds all chunk acks for this partner → O(1) check
+  5000 concurrent writes → spread across all (partner_id, date) partitions → no hotspot
+
+Regulatory files at TB:
+  Tax authority: single file (not chunked) — regulators often cannot handle parallel chunks
+  Solution: Spark generates single large file for regulator → compress (gzip reduces 5 GB → 500 MB)
+  Regulatory SLA: file must arrive by midnight → highest-priority delivery job
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| S3 (5 TB, date-partitioned) | Source data | Kafka WRITEs, Spark READs |
+| Spark on EMR (parallel per partner batch) | Partner file generation + chunking | READs S3, WRITEs S3 staging chunks |
+| S3 staging | Partner file chunks (1 GB each) | Spark WRITEs, delivery fleet READs |
+| Parallel delivery fleet | 5000 concurrent SFTP/S3 uploads | READs S3 staging, WRITEs to partner endpoints |
+| Cassandra ack log | 5000 concurrent ack writes | Delivery fleet WRITEs, Airflow monitors |
+| Airflow | Per-partner parallel DAGs + SLA monitoring | Orchestrates everything |
+
+#### Interview Answer
+```
+Same file export pattern as GB — parallelism at every layer:
+1. Airflow: 10 parallel EMR jobs, each generating files for 100-partner batch
+2. Spark on EMR: chunks each partner's data into 1 GB files → S3 staging
+3. Delivery fleet: 5000 parallel SFTP uploads
+4. Cassandra ack log: 5000 concurrent writes, no hotspot (partition by partner + date)
+5. Airflow monitors: all partners fully acked by 3am? Page oncall if not.
+
+Key insight: "Partner file delivery scales by parallelising at every layer:
+parallel Spark jobs, parallel file chunks, parallel uploads, parallel ack writes.
+The bottleneck is always the slowest partner's SFTP server, not your pipeline."
+```
+
+---
+
+## PB Scale Scenarios (5 PB/day — Global Scale)
+
+---
+
+### Scenario 25 — PB + Real-time + Analytics
+
+#### Problem Statement
+```
+Size:    5 PB/day, ~5T events/day
+Speed:   Real-time — seconds
+Use:     Analytics — global ops visibility, zone-level live monitoring
+Who:     Food delivery platform at global scale — hundreds of millions of daily orders
+```
+
+#### What's Different vs Scenario 13 (TB + Real-time + Analytics)
+```
+Scenario 13: Cassandra (regional) + Kafka Cluster + Druid/Pinot — works at TB
+Scenario 25: PB/day = global multi-region traffic, single-region components create lag
+
+What breaks at PB scale:
+  Cassandra (single region): global writes from Asia + EU + US to one region → latency
+  Kafka Cluster (single region): PB/day throughput + cross-region replication lag
+  Druid/Pinot (single cluster): one global cluster becomes the hotspot
+
+Architecture change:
+  Cassandra → Bigtable / Spanner (globally distributed, multi-region writes)
+  Kafka Cluster → Kafka + Pub/Sub (Google) or Pulsar (multi-region, global topics)
+  Debezium → Bigtable Change Streams / Spanner Change Streams
+  Flink → Flink Global Cluster / Apache Beam (run anywhere: Flink, Dataflow, Spark)
+  Druid/Pinot → Apache Pinot (purpose-built for PB user-facing, multi-region)
+```
+
+#### Full Architecture
+```
+[Global App — multiple regions]
+   US-EAST              EU-WEST              ASIA-PACIFIC
+      │                    │                      │
+   WRITE                WRITE                  WRITE
+      │                    │                      │
+[Spanner / Bigtable — globally distributed OLTP]
+   multi-region writes, globally consistent
+      │
+[Bigtable Change Streams / Spanner Change Streams]
+      │
+[Google Pub/Sub / Kafka + MirrorMaker 2]
+global topics, cross-region replication
+      │                              │
+[Apache Beam / Flink Global]        WRITE to [GCS / S3]
+runs on Cloud Dataflow              globally replicated
+multi-region workers                per-second partitions
+aggregates every 10 sec
+      │
+    WRITE
+      │
+[Apache Pinot — global cluster]
+multi-region ingestion nodes
+sub-second queries at PB scale
+      │
+    READ
+      │
+[Grafana — global dashboard]
+regional views, global rollup
+```
+
+#### Key Scale Challenges
+```
+Multi-region write conflict resolution:
+  Spanner: uses TrueTime API — globally consistent timestamps, no conflicts
+  Bigtable: last-write-wins per row (not globally consistent — acceptable for analytics)
+  Choose Spanner: if strong consistency needed across regions (financial data)
+  Choose Bigtable: if eventual consistency acceptable (analytics counts, estimates)
+
+Apache Pinot at PB:
+  Designed by LinkedIn for 600B+ events/day (PB scale)
+  Segment-based: data split into immutable segments, each segment on multiple replicas
+  Real-time nodes ingest from Pub/Sub, server nodes answer queries
+  Sub-10ms p99 at PB — reason it replaced Druid at LinkedIn scale
+
+Apache Beam:
+  Write once, run anywhere: same pipeline code runs on Dataflow (Google), Flink, Spark
+  At PB: run on Cloud Dataflow (serverless, auto-scales globally)
+  Advantage: no cluster to manage, scales to PB automatically
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| Spanner / Bigtable | Global distributed OLTP | App WRITEs globally, Change Streams READ |
+| Bigtable / Spanner Change Streams | PB-scale CDC | READs change log, WRITEs Pub/Sub |
+| Google Pub/Sub / Pulsar | Global event bus (multi-region) | Consumers READ |
+| Apache Beam on Dataflow | Serverless global stream processing | READs Pub/Sub, WRITEs Pinot |
+| Apache Pinot (global cluster) | PB real-time OLAP | Beam WRITEs, Grafana READs |
+| GCS | Raw per-second partitioned storage | Pub/Sub WRITEs |
+
+#### Interview Answer
+```
+Same pattern as TB — multi-region forces global components:
+1. App writes to Spanner/Bigtable globally (multi-region, consistent)
+2. Change Streams → Pub/Sub (global topics, cross-region replication)
+3. Apache Beam on Dataflow: serverless, globally auto-scaling → Apache Pinot
+4. Grafana: regional + global rollup views from Pinot
+
+Key insight: "Apache Beam is the PB unlock — same pipeline code runs on
+Dataflow/Flink/Spark. At PB, Dataflow's serverless auto-scaling eliminates
+cluster sizing entirely. You pay per processed event, not per idle worker."
+```
+
+---
+
+### Scenario 26 — PB + Real-time + ML
+
+#### Problem Statement
+```
+Size:    5 PB/day, ~5T events/day
+Speed:   Real-time — ML prediction in milliseconds
+Use:     ML Inference — delivery time prediction at global scale
+Who:     Food delivery platform — billions of concurrent predictions across all regions
+```
+
+#### What's Different vs Scenario 14 (TB + Real-time + ML)
+```
+Scenario 14: Redis Cluster holds features — works at TB (billions of keys)
+Scenario 26: Trillions of feature keys at PB scale → Redis Cluster memory insufficient
+
+What breaks at PB scale:
+  Redis Cluster: trillions of keys × 200 bytes = TB of RAM needed → too expensive, too slow
+  ML Service fleet (regional): global users need predictions from nearest region — latency
+
+Architecture change:
+  Redis Cluster → Aerospike (designed for PB feature stores, SSD-backed, cheaper than RAM)
+  ML Service → global fleet (regional deployments, routes to nearest region)
+  Flink Global Cluster → Apache Beam on Dataflow for feature computation
+  Same Lambda Architecture — Beam (real-time) + Spark on Dataproc (historical)
+```
+
+#### Full Architecture
+```
+[Pub/Sub global topics]
+      │
+[Apache Beam on Dataflow]         [Spark on Dataproc — hourly]
+real-time features                historical features
+zone traffic, active drivers      avg_prep_time, user_history
+      │                                   │
+    WRITE                               WRITE
+      │                                   │
+[Aerospike — global Feature Store]
+SSD-backed, sub-ms reads
+replicated across regions
+      │
+    READ (nearest region)
+      │
+[ML Service — global fleet]
+deployed in each region (US/EU/APAC)
+reads Aerospike in same region (<1ms)
+runs model
+RESPONDS in <10ms total
+      │
+    RESPONSE → App (nearest region routing)
+```
+
+#### Key Scale Challenges
+```
+Aerospike vs Redis at PB:
+  Redis Cluster: all data in RAM → $$$$ at PB scale (TB of RAM needed)
+  Aerospike:     RAM for index, SSD for values → 10x cheaper, same sub-ms reads
+  Read path: key hash → RAM index lookup → SSD read → return value (1-2ms total)
+  Write path: RAM write + async SSD write → fast writes, durable storage
+
+Global ML fleet routing:
+  User in Mumbai → nearest ML Service in APAC region → Aerospike APAC replica → <5ms total
+  User in London → ML Service in EU → Aerospike EU replica → <5ms total
+  DNS-based routing (Route 53 latency routing) sends user to nearest region
+
+Model deployment at PB:
+  One model artifact in S3/GCS (replicated globally)
+  Each regional fleet downloads model on startup → all regions serve same model version
+  Blue-green deployment: deploy new model to APAC first → validate → EU → US-EAST
+  Never deploy to all regions simultaneously — risk of global outage
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| Pub/Sub / Pulsar | Global event bus | Apache Beam READs |
+| Apache Beam on Dataflow | Real-time feature computation (global) | READs Pub/Sub, WRITEs Aerospike |
+| Spark on Dataproc | Historical feature computation (hourly) | READs GCS, WRITEs Aerospike |
+| Aerospike (global, SSD-backed) | PB Feature Store (RAM index + SSD values) | Beam/Spark WRITE, ML Fleet READs |
+| ML Service (regional fleets) | Global inference, nearest-region routing | READs Aerospike, RESPONDs to App |
+
+#### Interview Answer
+```
+Same Lambda Architecture as TB — Aerospike replaces Redis Cluster:
+1. Beam on Dataflow: real-time features → Aerospike (globally replicated)
+2. Spark on Dataproc: historical features → Aerospike
+3. Regional ML Service fleets: read local Aerospike replica → model → respond <10ms
+
+Key insight: "Aerospike is the PB feature store answer. Redis Cluster needs all
+data in RAM — at PB scale that means TB of RAM. Aerospike: RAM for index only,
+SSD for values. Same sub-ms read latency, 10x lower cost at PB scale."
+```
+
+---
+
+### Scenario 27 — PB + Real-time + Dashboards
+
+#### Problem Statement
+```
+Size:    5 PB/day, ~5T events/day
+Speed:   Real-time ops (30-sec refresh) + Near-real-time business (15-30 min)
+Use:     Two dashboards — global ops visibility + global business analytics
+Who:     Food delivery platform global leadership — regional ops teams, global executives
+```
+
+#### What's Different vs Scenario 15 (TB + Real-time + Dashboards)
+```
+Scenario 15: Druid/Pinot (regional) + BigQuery (regional) — works at TB
+Scenario 27: PB global — one regional OLAP cluster becomes bottleneck, global execs need global view
+
+Architecture change:
+  Druid/Pinot (regional) → Apache Pinot (global cluster, multi-region brokers)
+  BigQuery (regional) → BigQuery (global dataset, cross-region replication)
+  Beam on Dataflow (regional) → Beam on Dataflow (multi-region workers)
+  Grafana → global Grafana with regional + global rollup panels
+```
+
+#### Full Architecture
+```
+[Pub/Sub global topics]
+      │
+[Beam on Dataflow — multi-region workers]
+aggregates every 30 sec (per-region + global)
+      │                              │
+    WRITE (regional)              WRITE (global rollup)
+      │                              │
+[Apache Pinot global]          [BigQuery global dataset]
+regional brokers                cross-region replicated
+serve regional dashboards        (US/EU/APAC availability)
+      │                              │
+    READ                           READ
+      │                               │
+[Grafana — regional dashboards]  [Tableau — global dashboard]
+"Mumbai ops: 1200 orders/min"    "Global revenue this week: $450M"
+"APAC regional: 48K orders/min"  "YoY growth by region"
+```
+
+#### Key Scale Challenges
+```
+Global vs regional aggregation:
+  Regional panel: Beam aggregates per-region events → Pinot regional broker → Grafana
+  Global panel: Beam aggregates ALL regions' events → Pinot global broker → Grafana
+  Two levels of aggregation in same Beam pipeline (partitioned by region + one global)
+
+BigQuery cross-region replication:
+  BigQuery dataset replication: primary in US, replica in EU and APAC
+  Tableau reads nearest replica → low-latency global dashboard
+  Write only to primary — replication is automatic (minutes lag, acceptable for business)
+
+Grafana at PB:
+  Separate Grafana instances per region (avoid cross-region dashboard queries)
+  Global Grafana reads Pinot global broker (slightly higher latency, acceptable for exec view)
+  Alert routing: Mumbai ops alert → APAC oncall. Global revenue alert → global VP.
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| Pub/Sub (global) | PB event bus | Beam READs |
+| Beam on Dataflow (multi-region) | Global + regional aggregation | READs Pub/Sub, WRITEs Pinot + BigQuery |
+| Apache Pinot (global cluster) | PB real-time OLAP | Beam WRITEs, Grafana READs |
+| BigQuery (global dataset) | PB batch OLAP (replicated) | Beam WRITEs, Tableau READs |
+
+#### Interview Answer
+```
+Same two-stack pattern — global distribution added:
+1. Beam on Dataflow: aggregates per-region + global rollup simultaneously
+2. Apache Pinot global: regional brokers serve local dashboards, global broker for exec view
+3. BigQuery global dataset: cross-region replicated, Tableau reads nearest replica
+
+Key insight: "Two levels of aggregation in one Beam pipeline — regional and global.
+Pinot regional brokers keep local dashboard latency low. Global broker adds 20-30ms
+for global execs — acceptable, since they're not watching millisecond ops dashboards."
+```
+
+---
+
+### Scenario 28 — PB + Real-time + Another System
+
+#### Problem Statement
+```
+Size:    5 PB/day, ~5T events/day
+Speed:   Real-time — milliseconds to seconds
+Use:     Another System — global notification, inventory, fraud at PB scale
+Who:     Food delivery platform — billions of events triggering downstream systems globally
+```
+
+#### What's Different vs Scenario 16 (TB + Real-time + Another System)
+```
+Scenario 16: Cassandra idempotency, auto-scaling fleets (regional) — works at TB
+Scenario 28: PB global — idempotency across regions (same order from multiple regions?),
+             global consumer fleet coordination
+
+What breaks at PB scale:
+  Cassandra idempotency (single region): global order may be processed by two regional consumers
+  Consumer fleet (regional): needs globally coordinated idempotency to prevent cross-region dups
+
+Architecture change:
+  Cassandra idempotency → Spanner idempotency (globally consistent, strong consistency)
+  Consumer fleets → global auto-scaling fleets with regional assignment
+  Fraud Service → globally deployed with nearest-region routing (Aerospike for features)
+  Pattern identical — Schema Registry, DLQ, Consumer Groups — just global
+```
+
+#### Full Architecture
+```
+[Spanner — globally consistent OLTP]
+      │
+[Spanner Change Streams → Pub/Sub global topics]
+      │
+[Global Schema Registry — each region has local cache]
+      │
+Consumer Groups (global, each region assigned partitions):
+US-EAST partition 0-33: [Notification Fleet US]
+EU-WEST partition 34-66: [Notification Fleet EU]
+APAC partition 67-99:   [Notification Fleet APAC]
+
+Each regional fleet:
+  READs assigned Pub/Sub partitions
+  idempotency check → [Spanner idempotency table] (globally consistent)
+  sends notification to regional push service
+  WRITEs ack to Spanner
+
+[Fraud Service — regional, always sync]
+READs [Aerospike — regional replica]
+RESPONDS <200ms always
+```
+
+#### Key Scale Challenges
+```
+Global idempotency with Spanner:
+  Problem: Order 98765 created in US, but EU consumer also picks it up (replication lag)
+  Solution: Spanner globally consistent INSERT IF NOT EXISTS
+  Spanner TrueTime: globally consistent timestamps → INSERT wins globally → one winner
+  Cost: Spanner is expensive → use only for idempotency (small table), not full event store
+
+Partition-to-region assignment:
+  Kafka/Pub/Sub: assign partition ranges to regions
+  US consumer group reads partitions 0-33 only
+  EU consumer group reads partitions 34-66 only
+  Prevents cross-region duplicate processing (each partition owned by one region)
+  Rebalancing: when region fails, reassign its partitions to another region's fleet
+
+DLQ at PB:
+  DLQ per region, DLQ consumer per region
+  Failed event in EU DLQ → EU DLQ consumer retries → never crosses regions
+  Monitor: DLQ depth per region. Alert if DLQ processing falls behind (event TTL risk).
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| Spanner | Global OLTP + globally consistent idempotency | App WRITEs, Change Streams READ |
+| Pub/Sub (global partitioned topics) | PB event bus, partition-to-region assignment | Regional consumer fleets READ |
+| Regional Consumer Fleets | Process events, idempotency check, act | READ Pub/Sub, WRITE Spanner idempotency |
+| Fraud Service (regional, sync) | Global fraud scoring, nearest-region routing | READ Aerospike regional replica |
+| Aerospike (global) | Fraud features, globally replicated | Beam WRITEs, regional Fraud Fleet READs |
+
+#### Interview Answer
+```
+Same idempotency + Consumer Group pattern — Spanner adds global consistency:
+1. Spanner Change Streams → Pub/Sub global (partitions assigned to regions)
+2. Regional Consumer Fleets process their assigned partitions
+3. Idempotency: Spanner globally consistent INSERT IF NOT EXISTS — one winner globally
+4. Fraud: regional Fraud Service fleet reads local Aerospike replica → <200ms
+
+Key insight: "Partition-to-region assignment is the PB Another System unlock.
+Each region owns a subset of Pub/Sub partitions. No cross-region event processing.
+No cross-region duplicate risk. Spanner idempotency only needed for edge cases
+where replication lag causes a partition to be briefly visible in two regions."
+```
+
+---
+
+### Scenario 29 — PB + Near Real-time + Analytics
+
+#### Problem Statement
+```
+Size:    5 PB/day, ~5T events/day
+Speed:   Near Real-time — 5-15 minute delay
+Use:     Analytics — global regional monitoring with 5-min freshness
+Who:     Food delivery global ops — regional directors reviewing 15-min trend windows
+```
+
+#### What's Different vs Scenario 17 (TB + Near RT + Analytics)
+```
+Scenario 17: Spark on EMR reads 1 TB per 5-min batch → works at TB
+Scenario 29: 5 PB/day = 17 TB per 5-min micro-batch → EMR cluster needs 10x more workers
+
+Architecture change:
+  Spark on EMR (fixed cluster) → Spark on Dataproc (auto-scaling, PB-grade)
+                               OR Beam on Dataflow (serverless, scales to PB automatically)
+  GCS per-second partitions replace S3 minute partitions
+  BigQuery replaces Redshift (BigQuery handles PB natively, serverless)
+  Pattern identical — micro-batch every 5 min, two-dashboard output
+```
+
+#### Full Architecture
+```
+[Pub/Sub] ──WRITE──→ [GCS]
+                      per-second partitions
+                      gs://events/date=.../hour=.../minute=.../second=.../
+                           │
+                     READ every 5 min
+                     (only last 5 min of second-folders)
+                           │
+            [Beam on Dataflow — serverless]
+            auto-scales to 17 TB/batch automatically
+            no cluster sizing needed
+            aggregates → writes output
+                           │
+                  ┌────────┴────────┐
+                WRITE             WRITE
+                  │                 │
+          [Apache Pinot]      [BigQuery — serverless]
+          Near-RT ops         Business analytics
+          5-min fresh         hourly fresh
+                  │                 │
+              [Grafana]        [Tableau]
+              5-min refresh    on-demand
+```
+
+#### Key Scale Challenges
+```
+Beam on Dataflow for PB micro-batch:
+  Dataflow is serverless — no workers to provision for 17 TB/batch
+  Auto-scales: spins up 1000s of workers for peak batches, releases immediately after
+  Cost: pay per worker-hour used — no idle cost between batches
+  Streaming mode: Dataflow can run in streaming mode (true streaming, not micro-batch)
+                  If SLA tightens to 1 min → switch mode, same code
+
+Per-second GCS partitioning:
+  5-min batch = 300 seconds of data
+  Dataflow reads: gs://events/date=.../hour=.../minute=11/second=00/ through second=59/
+                  + minute=12/ ... + minute=15/
+  Column pruning: Dataflow reads only needed columns (not all 50 fields)
+
+BigQuery at PB:
+  BigQuery is fully serverless — no warehouse sizing at PB
+  Query cost: $5/TB scanned — partitioning + column pruning critical
+  For 5-min batch write: Dataflow → BigQuery streaming insert (real-time) or load job (batch)
+  Streaming insert: data available immediately, slightly more expensive
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| Pub/Sub (global) | PB event bus | WRITEs GCS |
+| GCS (per-second partitions) | Raw storage, precise time slicing | Pub/Sub WRITEs, Dataflow READs |
+| Beam on Dataflow (serverless) | 5-min micro-batch, auto-scaling | READs GCS, WRITEs Pinot + BigQuery |
+| Apache Pinot | Near-RT ops OLAP | Dataflow WRITEs, Grafana READs |
+| BigQuery (serverless) | Business analytics | Dataflow WRITEs, Tableau READs |
+
+#### Interview Answer
+```
+Same micro-batch pattern — Dataflow serverless handles PB scale automatically:
+1. Pub/Sub → GCS (per-second partitions)
+2. Dataflow every 5 min: reads last 300 seconds of GCS → aggregates → Pinot + BigQuery
+3. Grafana READs Pinot (5-min fresh), Tableau READs BigQuery (hourly)
+
+Key insight: "Dataflow serverless is the PB micro-batch answer.
+No EMR cluster to size — Dataflow auto-scales to 17 TB in 5 min
+and releases workers immediately. Same pipeline code as TB, zero config change."
+```
+
+---
+
+### Scenario 30 — PB + Near Real-time + ML
+
+#### Problem Statement
+```
+Size:    5 PB/day, ~5T events/day
+Speed:   Near Real-time — predictions updated every 5-15 min globally
+Use:     ML — pre-computed delivery estimates for hundreds of millions of active orders
+Who:     Food delivery global platform — billions of tracking screen refreshes per day
+```
+
+#### What's Different vs Scenario 18 (TB + Near RT + ML)
+```
+Scenario 18: Spark on EMR scores 50M active orders in 5 min — works at TB
+Scenario 30: Hundreds of millions of active orders → scoring in 5 min needs global parallelism
+
+Architecture change:
+  Spark on EMR → Spark on Dataproc (massive clusters, auto-scaling)
+  Redis Cluster → Aerospike (PB-scale feature + prediction store)
+  Pattern identical — pre-compute in batch, App GETs result
+```
+
+#### Full Architecture
+```
+[GCS — active orders snapshot, updated every 5 min]
+[Aerospike — feature store, globally replicated]
+       │
+[Beam on Dataflow / Spark on Dataproc — every 5 min]
+reads 500M active orders (distributed across workers)
+batch-reads features from Aerospike (MGET per partition)
+distributes ML model scoring (broadcast model to all workers)
+WRITEs 500M predictions → Aerospike
+       │
+[Aerospike — prediction store]
+prediction:order:{id} → "19 min"
+SSD-backed, globally replicated
+TTL: 15 min per key
+       │
+[App / Tracking Screen — regional]
+GET prediction:order:{id} from nearest Aerospike region
+→ "Your order arrives in 19 min"
+refreshes every 5 min
+```
+
+#### Key Scale Challenges
+```
+Scoring 500M orders in 5 min:
+  Dataproc cluster: 500M orders / 5 min / 10K workers = 1000 orders per worker per minute
+  Each worker: reads 1000 order features → runs model 1000 times → writes predictions
+  Model: must be fast (XGBoost < 1ms per prediction → 1000 predictions per worker = 1 sec)
+
+Aerospike write throughput for 500M predictions:
+  500M writes in 5 min = 1.6M writes/sec
+  Aerospike: designed for millions of writes/sec (LinkedIn uses it at this scale)
+  Namespace partitioning: predictions in separate namespace from features (different TTL policy)
+
+Feature read during scoring:
+  500M orders × 5 feature reads each = 2.5B feature reads in 5 min
+  Not feasible via individual Redis/Aerospike GETs
+  Solution: export feature snapshot to GCS at start of batch → Spark reads GCS (not Aerospike)
+  → avoids 2.5B network calls to Aerospike during scoring
+  → Aerospike used only for serving predictions to App (500M concurrent readers)
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| GCS (feature snapshot + active orders) | Batch input for scoring | Beam WRITEs snapshot, Dataproc READs |
+| Spark on Dataproc | 500M-order distributed scoring | READs GCS, WRITEs Aerospike predictions |
+| Aerospike (global) | Feature store + prediction store (SSD-backed) | Dataproc WRITEs predictions, App READs |
+
+#### Interview Answer
+```
+Same pre-compute pattern — Aerospike + Dataproc handle PB:
+1. Dataproc every 5 min: reads 500M orders from GCS + feature snapshot
+2. Distributes scoring: 10K workers × 50K orders each → 500M predictions in <4 min
+3. WRITEs 500M predictions to Aerospike (1.6M writes/sec — routine for Aerospike)
+4. App GET from nearest Aerospike region → <2ms
+
+Key insight: "Export feature snapshot to GCS before batch scoring.
+Avoid 2.5B Aerospike reads during the scoring run — that's 8M reads/sec
+which stresses the feature store and adds latency to live inference requests."
+```
+
+---
+
+### Scenario 31 — PB + Near Real-time + Dashboards
+
+#### Problem Statement
+```
+Size:    5 PB/day, ~5T events/day
+Speed:   Near Real-time — 5-15 min delay, both audiences
+Use:     Two dashboards — global ops + global business, both accept 5-min delay
+Who:     Food delivery global — global ops directors + C-suite executive dashboards
+```
+
+#### What's Different vs Scenario 19 (TB + Near RT + Dashboards)
+```
+Scenario 19: BigQuery regional, one Spark on EMR batch every 5 min — works at TB
+Scenario 31: PB global — one BigQuery dataset per region, global rollup needed for execs
+
+Architecture change:
+  Spark on EMR → Beam on Dataflow (serverless, global)
+  BigQuery (regional) → BigQuery (multi-region dataset)
+  Same one-tool pattern — BigQuery serves both ops and business globally
+```
+
+#### Full Architecture
+```
+[Pub/Sub global] → [GCS per-second partitions]
+       │
+[Beam on Dataflow — serverless, every 5 min]
+computes regional aggregates + global rollup
+       │
+     WRITE
+       │
+[BigQuery — multi-region dataset]
+US, EU, APAC replicas (reads served from nearest)
+5-min fresh data
+       │
+  ┌────┴────┐
+READ       READ
+  │           │
+[Grafana]  [Tableau]
+ops teams  C-suite
+per-region  global view
+BigQuery   BigQuery
+slots      on-demand
+reserved
+```
+
+#### Key Scale Challenges
+```
+BigQuery multi-region at PB:
+  Multi-region dataset: data stored in US + EU + APAC simultaneously
+  Reads: served from nearest region (low latency globally)
+  Writes: go to all regions (slightly higher write latency, acceptable for 5-min batch)
+  Cost: multi-region storage 2x single-region — justified for global dashboard SLA
+
+Slot reservation per region:
+  Each region's ops team has reserved BigQuery slots for their Grafana dashboards
+  Global C-suite Tableau uses on-demand slots (burst queries, lower frequency)
+  Prevents one region's analyst query from slowing another region's ops dashboard
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| Beam on Dataflow (global, serverless) | 5-min micro-batch, regional + global aggregation | READs GCS, WRITEs BigQuery |
+| BigQuery (multi-region) | PB OLAP, globally replicated, slot reservation | Dataflow WRITEs, Grafana + Tableau READ |
+
+#### Interview Answer
+```
+Same one-tool pattern as GB S7 / TB S19 — BigQuery multi-region added:
+1. Dataflow serverless every 5 min → BigQuery multi-region (US/EU/APAC replicas)
+2. Grafana reads nearest BigQuery replica (reserved slots per region) → ops team
+3. Tableau reads on-demand → C-suite global view
+
+Key insight: "BigQuery multi-region means writes replicate globally automatically.
+Reads always served from nearest region. One dataset, global availability,
+no replication logic to manage. The cost premium is justified for PB global dashboards."
+```
+
+---
+
+### Scenario 32 — PB + Near Real-time + Another System
+
+#### Problem Statement
+```
+Size:    5 PB/day, ~5T events/day
+Speed:   Near Real-time — downstream systems react within 5-15 minutes globally
+Use:     Another System — global loyalty, partner sync, regulatory reporting every 15 min
+Who:     Food delivery global — billions of events, thousands of downstream integrations
+```
+
+#### What's Different vs Scenario 20 (TB + Near RT + Another System)
+```
+Scenario 20: Cassandra staging table, consumer services poll every 5 min — works at TB
+Scenario 32: PB global — Cassandra staging per region, global consistency needed for some
+
+Architecture change:
+  Cassandra staging → Bigtable (regional staging, each region processes its own events)
+  Spark on EMR → Beam on Dataflow (serverless, global)
+  Regional consumer services poll regional Bigtable staging
+  Cross-region events: routed to owning region's staging table (by order_id hash)
+```
+
+#### Full Architecture
+```
+[GCS per-second partitions — global]
+       │
+[Beam on Dataflow — every 5 min, multi-region workers]
+routes events to owning region by order_id hash
+       │
+WRITE to regional Bigtable staging:
+  row key: (service_name, time_bucket, order_id)
+  US-EAST Bigtable: US orders
+  EU-WEST Bigtable: EU orders
+  APAC Bigtable:    APAC orders
+
+Regional consumer services POLL their regional Bigtable:
+  [Loyalty Fleet US]    polls US-EAST Bigtable every 5 min
+  [Loyalty Fleet EU]    polls EU-WEST Bigtable every 5 min
+  [Loyalty Fleet APAC]  polls APAC Bigtable every 5 min
+  → adds points, marks rows processed
+
+[Regulatory reporting — global aggregation]
+  Beam aggregates globally → single regulatory report table in BigQuery
+  Regulator API pull or scheduled delivery
+```
+
+#### Key Scale Challenges
+```
+Bigtable row key design for staging:
+  Row key: reverse(time_bucket) + "#" + service + "#" + order_id
+  Reverse timestamp: avoids hotspotting on latest timestamp (Bigtable hotspot risk)
+  Scan: SCAN from reverse(current_bucket) to reverse(current_bucket - 5 min)
+  → reads exactly the 5-min window for this service
+
+Regional data sovereignty:
+  EU orders: stored only in EU Bigtable, processed only by EU Loyalty Fleet
+  Legal requirement: GDPR — EU personal data cannot leave EU region
+  Beam routing: hash order_id, if user is EU-registered → route to EU-WEST Bigtable
+  This is not just optimization — it is a legal requirement at PB global scale
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| GCS (per-second, global) | Raw event storage | Pub/Sub WRITEs |
+| Beam on Dataflow (global) | Routes events to regional Bigtable staging | READs GCS, WRITEs regional Bigtable |
+| Bigtable (per region) | Regional staging (data sovereignty compliant) | Beam WRITEs, Regional Consumer Fleets READ |
+| Regional Consumer Fleets | Poll regional Bigtable, process, mark done | READ + UPDATE regional Bigtable |
+
+#### Interview Answer
+```
+Same polling pattern — regional Bigtable replaces Cassandra, data sovereignty is explicit:
+1. Dataflow routes events to regional Bigtable by order_id region hash
+2. Regional Consumer Fleets poll their region's Bigtable every 5 min
+3. EU fleet only touches EU Bigtable — GDPR compliant by architecture
+
+Key insight: "At PB global scale, data sovereignty is not an afterthought.
+Route events to regional storage at ingestion time (Dataflow routing step).
+Regional consumers only read regional storage. Compliance enforced architecturally,
+not by policy — policy can be violated, architecture cannot."
+```
+
+---
+
+### Scenario 33 — PB + Batch + Analytics
+
+#### Problem Statement
+```
+Size:    5 PB/day, ~5T events/day
+Speed:   Batch — nightly, global data ready by 6am in all regions
+Use:     Analytics — global business reporting, regional P&L, annual planning data
+Who:     Food delivery global — CFO global view, regional VPs, annual planning teams
+```
+
+#### What's Different vs Scenario 21 (TB + Batch + Analytics)
+```
+Scenario 21: Spark on EMR (50+ workers) processes 5 TB nightly — done in 1 hour
+Scenario 33: 5 PB nightly → even 500-worker EMR cluster takes 10+ hours
+
+Architecture change:
+  Spark on EMR → Spark on Dataproc (auto-scaling, 1000+ workers) or Beam on Dataflow
+  Snowflake XL / BigQuery → BigQuery (serverless PB, no compute sizing)
+  dbt: incremental models critical (full refresh of PB history = $$$ and slow)
+  Data tiering: hot data (last 90 days) in BigQuery, cold data (older) in GCS Coldline
+```
+
+#### Full Architecture
+```
+[GCS — 5 PB/day, per-second partitioned, date-organized]
+
+[2am: Airflow — global pipeline]
+
+Step 1: [Beam on Dataflow — serverless]
+  reads yesterday's PB slice (not full history)
+  joins dimension tables (user, restaurant, driver — snapshot in GCS)
+  cleans, deduplicates
+  writes → BigQuery (date-partitioned, clustered by region + city)
+  Runtime: auto-scales, typically 45-60 min for 5 PB
+
+Step 2: [dbt — incremental models, 32 threads]
+  processes only yesterday's partition (WHERE date = yesterday)
+  appends to: revenue_by_region_daily, restaurant_performance, user_cohort
+  NEVER rescans full history (PB history rescan = $25,000/night)
+  Runtime: 30-45 min
+
+Step 3: [Data tiering — Airflow]
+  moves data older than 90 days to BigQuery long-term storage (70% cheaper)
+  moves data older than 1 year to GCS Coldline (90% cheaper)
+  analysts can still query Coldline via BigQuery external tables (slower, cheaper)
+
+Step 4: alert "Global data ready for [date]"
+
+[BigQuery] ──READ──→ [Tableau / Looker]
+                      regional views, global rollup
+                      column-level security per role
+```
+
+#### Key Scale Challenges
+```
+Data tiering at PB — cost critical:
+  Active BigQuery storage: $20/TB/month
+  Long-term storage (data > 90 days, not modified): $10/TB/month (auto-applies)
+  GCS Coldline (data > 1 year): $0.004/GB/month = $4/TB/month
+  PB/year of history: $20/TB × 365 PB = $7.3M/year in active storage → tier aggressively
+
+dbt at PB — incremental strategy:
+  Model: revenue_by_region_daily
+  Incremental: INSERT INTO revenue_by_region_daily SELECT ... WHERE date = '{{ds}}'
+  Unique key: (region, date) — prevents duplicate rows on re-run
+  Test weekly: run full refresh on sample → compare to incremental → must match
+
+Dimension table joins at PB:
+  User table: 1B users — joining at PB scale requires broadcast hash join or pre-built snapshot
+  Solution: snapshot dimension tables to GCS daily → Dataflow broadcasts small snapshot
+            to all workers → no shuffle join (most expensive operation at PB)
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| GCS (PB, per-second + date partitions) | Global raw storage with tiering | Pub/Sub WRITEs, Dataflow READs |
+| Beam on Dataflow (serverless) | PB nightly ETL, parallel global | READs GCS, WRITEs BigQuery |
+| BigQuery (global, partitioned + clustered) | PB data warehouse + data tiering | Dataflow WRITEs, dbt + Tableau READ |
+| dbt (32 threads, incremental) | Partition-aware business logic | READs BigQuery raw, WRITEs clean |
+| GCS Coldline | Long-term cold storage (1+ year) | Airflow tiering job moves data |
+
+#### Interview Answer
+```
+Same nightly ETL pattern — Dataflow + BigQuery handle PB serverlessly:
+1. Dataflow serverless: reads yesterday's 5 PB → joins dimension snapshots → BigQuery
+2. dbt incremental (32 threads): yesterday's partition only → appends to summary tables
+3. Airflow data tiering: moves >90-day data to long-term, >1-year to GCS Coldline
+4. BigQuery column/row security: regional VPs see their region, CFO sees global
+
+Key insight: "Data tiering at PB is not optional — it is budgetary survival.
+5 PB/day × 365 days = 1.8 EB/year. Without tiering to Coldline: $7B+/year in storage.
+With tiering: $400M/year. BigQuery external tables let analysts still query cold data."
+```
+
+---
+
+### Scenario 34 — PB + Batch + ML
+
+#### Problem Statement
+```
+Size:    5 PB/day → years of history = EB of training data
+Speed:   Batch — monthly model training on massive historical dataset
+Use:     ML Training — retrain global delivery model on years of PB/day data
+Who:     Food delivery global ML team — training the core prediction model
+```
+
+#### What's Different vs Scenario 22 (TB + Batch + ML)
+```
+Scenario 22: Spark on EMR (100+ workers), 900 TB training data, SageMaker training
+Scenario 34: Years × 5 PB/day = EB of potential training data — cannot use all of it
+
+What changes at PB ML training:
+  Data sampling becomes critical: training on EB is wasteful and slow
+  GPU cluster: hundreds of GPU instances for distributed training
+  Feature store: training features must be materialized to GCS (not queried live)
+  Model registry: Vertex AI Model Registry (Google-native, global deployment)
+```
+
+#### Full Architecture
+```
+[GCS — years of history, 5 PB/day, EB total]
+
+[Airflow — monthly trigger]
+      │
+Step 1: [Data sampling + feature materialization — Dataproc]
+  Sample: 10% of last 6 months = 0.1 × 6 × 5 PB = 3 PB training sample
+  Feature engineering: join sampled orders with features → training matrix
+  Write: training_data.parquet → GCS (3 PB compressed to ~600 GB with column selection)
+  Runtime: 4-6 hours on 500-worker Dataproc cluster
+
+Step 2: [Vertex AI Training Job — distributed GPU cluster]
+  200 A100 GPU instances (data parallelism)
+  streams training_data from GCS via Vertex AI managed datasets
+  gradient averaging after each batch (all-reduce via NCCL)
+  evaluates: RMSE per region (global model + regional fine-tuning)
+  WRITEs: model artifact → Vertex AI Model Registry
+  Runtime: 12-24 hours
+
+Step 3: [Regional A/B test rollout]
+  deploy to APAC (5% traffic) → validate 48 hrs → EU → US → global
+  shadow mode: new model scores all requests, old model serves
+  compare: new RMSE vs old RMSE per region
+  rollback: single command in Vertex AI if any region degrades
+```
+
+#### Key Scale Challenges
+```
+Why not train on all EB of history:
+  Model accuracy improvement with data: logarithmic (diminishing returns after 6 months)
+  Training cost: 200 GPUs × 24 hrs × $3/hr = $14,400 per training run
+  Training on 3 PB sample vs full EB: similar accuracy, 100x less compute cost
+  Rule: sample strategically — oversample rare events (fraud, long delivery times)
+
+Regional model fine-tuning:
+  One global model: trained on all regions → biased toward high-volume regions
+  Better: global base model → fine-tune per region (transfer learning)
+  APAC model: start from global weights → fine-tune on APAC data only (2-4 hours)
+  Result: regional models outperform global model by 15-20% RMSE
+
+Vertex AI vs SageMaker at PB:
+  Vertex AI: native GCP, seamless GCS integration, Dataproc compatibility
+  SageMaker: native AWS, seamless S3 integration, EMR compatibility
+  Choose: whichever matches your cloud (do not cross-cloud for training data access)
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| GCS (EB, years of history) | Training data source with tiering | Historical storage |
+| Dataproc (500+ workers) | Data sampling + feature engineering | READs GCS sample, WRITEs training matrix |
+| Vertex AI Training (200 GPUs) | Distributed model training | READs training matrix from GCS |
+| Vertex AI Model Registry | Global versioned model storage + deployment | Training WRITEs, regional inference READs |
+
+#### Interview Answer
+```
+Same pipeline as TB — sampling and GPU scale are the key additions:
+1. Dataproc: sample 10% of 6 months = 3 PB → feature engineering → 600 GB training matrix
+2. Vertex AI: 200 GPUs, distributed training (data parallelism) → global + regional models
+3. Regional A/B test: APAC first → EU → US → global (48-hour validation per region)
+
+Key insight: "Train on a smart sample, not all EB. Oversample rare events.
+Fine-tune regional models from global base — 4 hours of fine-tuning per region
+beats training 5 regional models from scratch (5 × 24 hours = 120 GPU-hours vs 4)."
+```
+
+---
+
+### Scenario 35 — PB + Batch + Dashboards
+
+#### Problem Statement
+```
+Size:    5 PB/day, ~5T events/day
+Speed:   Batch — daily, global executive dashboards updated once per day
+Use:     Dashboards — global CEO/CFO KPI dashboard, board-level reporting
+Who:     Food delivery global C-suite — daily briefing, board presentations
+```
+
+#### What's Different vs Scenario 23 (TB + Batch + Dashboards)
+```
+Scenario 23: dbt incremental scans 5 TB/day → builds summary row → BigQuery — works at TB
+Scenario 35: Same pattern — BigQuery serverless and incremental dbt work identically at PB
+             Key difference: governance, access control, and cost management at global scale
+
+Architecture: identical to S23 — Dataflow + BigQuery + dbt incremental
+What changes:
+  Column-level + row-level security enforced globally (board sees different view than VPs)
+  Regional summary tables: one row per region per day + one global rollup row
+  Cost governance: strict BigQuery slot reservations, query cost alerts
+```
+
+#### Full Architecture
+```
+[Same pipeline as S33 — Dataflow + BigQuery nightly]
+
+[dbt — incremental, adds one row to each summary table per day]
+
+Summary tables produced:
+  global_kpi_daily:    1 row/day — global revenue, orders, avg delivery
+  regional_kpi_daily:  1 row/region/day — per-region KPIs
+  Both tables: < 10,000 rows total (3 years × 365 days)
+
+[BigQuery — global dataset with column/row security]
+  Board view:        global_kpi_daily — revenue, growth%, key metrics
+  Regional VP view:  regional_kpi_daily WHERE region = their_region (row-level policy)
+  CFO view:          all regions + financial columns (cost, margin)
+
+[Dashboard Tool — Looker embedded / Tableau Server]
+  Auto-refreshes at 6am global (after all regional pipelines confirm complete)
+  CEO dashboard: 6 tiles, loads in <1 sec (reads 365 rows)
+  Board deck: Looker → auto-generates weekly PDF from same data
+```
+
+#### Key Scale Challenges
+```
+BigQuery row-level access policies at PB:
+  Row access policy: regional_kpi WHERE region IN (user's assigned regions)
+  Implementation: BigQuery row access policies → no separate view per region needed
+  Auditing: BigQuery Data Catalog logs every query with user identity → compliance
+
+Cost governance:
+  At PB: one poorly written analyst query can scan EB and cost $50,000
+  Fix: BigQuery slot reservation for dashboards (predictable cost)
+        Query cost alerts: if query > $100 → require approval
+        Scheduled queries for known reports (pre-approved cost)
+        Analyst sandbox: separate project with monthly budget cap
+
+Auto-generated board deck:
+  Looker API: run dashboard → export to PDF → email to board distribution list
+  Scheduled: every Monday 7am → board deck ready before 9am leadership call
+  Data is fresh (from Friday's batch), formatted automatically, no manual slide prep
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| Dataflow + BigQuery (from S33) | Nightly ETL pipeline | Writes raw + clean tables |
+| dbt (incremental, daily append) | Builds global + regional summary rows | READs BigQuery raw, WRITEs summary tables |
+| BigQuery (row/column security) | Global governed warehouse | dbt WRITEs, Looker + Tableau READ |
+| Looker / Tableau Server | Executive dashboard + auto PDF | READs BigQuery summary tables |
+
+#### Interview Answer
+```
+Same summary table pattern as GB S11 / TB S23 — governance is the PB addition:
+1. dbt incremental: appends 1 global row + N regional rows to summary tables daily
+2. BigQuery row access policies: each VP sees only their region
+3. Looker: CEO dashboard (6 tiles, <1 sec) + auto-generated weekly board PDF
+
+Key insight: "The summary table is identical across GB, TB, PB.
+What scales is governance. At PB, one ungoverned analyst query can cost $50K.
+BigQuery slot reservations + row access policies + query cost alerts are non-negotiable."
+```
+
+---
+
+### Scenario 36 — PB + Batch + Another System
+
+#### Problem Statement
+```
+Size:    5 PB/day, ~5T events/day
+Speed:   Batch — nightly file delivery, global partners and regulators
+Use:     Another System — daily file exports to thousands of restaurant partners globally,
+         multi-country regulatory filings
+Who:     Food delivery global — 50,000+ restaurant partners, 50+ country tax authorities
+```
+
+#### What's Different vs Scenario 24 (TB + Batch + Another System)
+```
+Scenario 24: Spark on EMR, 1000 partners, Cassandra ack log — works at TB
+Scenario 36: 5 PB/day, 50,000+ partners → parallel file generation at global scale
+
+What breaks at PB:
+  Single EMR cluster: 50,000 partners × 5 PB/day = cannot generate all files in one night
+  Cassandra ack log: 50,000 partners × 10K chunks each = 500M ack writes per night
+
+Architecture change:
+  Spark on EMR → Spark on Dataproc (per-region, parallel partner batches)
+  Cassandra ack log → Bigtable (500M writes/night, globally distributed)
+  SFTP → regional delivery fleets + cloud storage handoff (partners read from their S3/GCS bucket)
+  Data residency: EU partner files generated in EU, never leave EU (GDPR)
+```
+
+#### Full Architecture
+```
+[GCS — 5 PB/day, regionally partitioned, per-second precision]
+
+[Midnight: Airflow — global orchestrator, per-region sub-DAGs]
+
+PER REGION (parallel, all regions run simultaneously):
+
+  [Regional Dataproc — 500 workers per region]
+  reads regional slice of GCS (data residency: EU data stays in EU)
+  filters per partner assigned to this region
+  generates chunks: partner_A_eu/chunk-0001.parquet ... chunk-10000.parquet
+  writes to regional GCS export staging
+  Runtime per region: ~2 hours (500 workers, regional data slice)
+
+  [Validation fleet — parallel per partner]
+  row_count + checksum + schema per chunk
+  aborts if any chunk fails → alerts, does not deliver partial data
+
+  [Delivery fleet — regional, parallel]
+  50,000 partners × 10K chunks = 500M parallel uploads per region
+  Each partner: files dropped to their pre-agreed GCS bucket / S3 bucket
+  Enterprise partners: SFTP (legacy systems still common)
+  Regulators: signed Parquet or XML to official regulatory API endpoint
+
+  [Bigtable — regional ack log]
+  row key: reverse(timestamp)#partner_id#chunk_id
+  500M ack writes per night → trivial for Bigtable (designed for millions of ops/sec)
+
+[Global Airflow monitor]
+  all regional DAGs complete by 3:30am?
+  all partners acked by 4am?
+  any regulatory filing missed → immediate escalation (legal risk)
+```
+
+#### Key Scale Challenges
+```
+Data residency as architecture driver at PB global:
+  EU partner files: generated by EU Dataproc, stored in EU GCS, delivered from EU
+  US partner files: generated by US Dataproc, stored in US GCS, delivered from US
+  Zero cross-region data movement — legal requirement enforced architecturally
+  Airflow: per-region DAGs run independently, global DAG only monitors completion signals
+
+Bigtable for 500M nightly ack writes:
+  Row key: reverse(timestamp)#partner_id#chunk_id — reversed timestamp avoids hotspot
+  500M writes in 4 hours = 35K writes/sec — Bigtable handles millions/sec
+  Monitoring query: SCAN by partner_id#date → all chunks for one partner → fast
+  Retention: 7 days (regulators may ask for delivery proof up to 7 days later)
+
+Partner handoff model — SFTP vs cloud bucket:
+  Legacy partners: SFTP (slow, sequential, error-prone) → 10K chunks via SFTP = hours
+  Modern partners: GCS/S3 cross-account bucket handoff (instant, parallel, reliable)
+  Migration: offer partners cloud bucket onboarding → reduces SFTP fleet maintenance
+  At PB: SFTP delivery fleet is a significant operational cost — actively migrate partners
+
+Regulatory filings at global scale:
+  50+ countries × different formats × different deadlines
+  Some countries: real-time tax filing (not batch) — separate pipeline entirely
+  Batch countries: generate country-specific XML, sign with country-specific certificate
+  Delivery: often via government API (not SFTP) — need per-country API client
+  Audit trail: every filing logged in Bigtable + Spanner (globally consistent, legally required)
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| GCS (PB, per-region, per-second) | Source data, residency-compliant | Pub/Sub WRITEs |
+| Regional Dataproc (500 workers) | Per-region partner file generation | READs regional GCS, WRITEs export staging |
+| Regional GCS export staging | Partner file chunks (per-region) | Dataproc WRITEs, delivery fleet READs |
+| Regional delivery fleet | 500M parallel uploads per region | READs GCS staging, WRITEs partner endpoints |
+| Bigtable (regional ack log) | 500M concurrent ack writes | Delivery fleet WRITEs, Airflow monitors |
+| Airflow (per-region + global) | Orchestration + SLA + escalation | Triggers all jobs, monitors acks |
+
+#### Interview Answer
+```
+Same parallel file export pattern as TB — regional architecture enforces data residency:
+1. Per-region Dataproc (500 workers): generates partner files from regional GCS slice
+2. 500M parallel chunk uploads per region (cloud bucket handoff preferred over SFTP)
+3. Bigtable ack log: 35K writes/sec, reverse-timestamp row key (no hotspot)
+4. Global Airflow: monitors all regional DAGs complete by 4am
+
+Key insight: "At PB global, data residency law IS the architecture.
+Regional-first file generation is not a performance optimization — it is a legal requirement.
+Enforce it architecturally (data never leaves region) not by policy (policy can be violated).
+SFTP is the operational debt of PB batch delivery — every partner migrated to cloud
+bucket handoff saves hours of SFTP fleet maintenance monthly."
+```
+
+---
+
 ## Reference — Tool Stacks and Counterparts
 
 ### The Two Standard Stacks
