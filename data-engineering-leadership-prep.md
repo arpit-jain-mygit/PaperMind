@@ -42,13 +42,13 @@
 | 3 | GB + Real-time + Dashboards | Two audiences: ops (seconds) + business (historical). One tool cannot serve both | Speed Stack: Flink→ClickHouse→Grafana. Scale Stack: S3→Spark→Snowflake→Tableau. Same Kafka feeds both | ClickHouse, Grafana, Snowflake, Tableau | Redis, ML Service | [diagram](#scenario-3--gb--real-time--dashboards) |
 | 4 | GB + Real-time + Another System | Downstream machines take ACTIONS. Duplicate = real damage. Fraud must block order | Schema Registry (schema stability). Consumer Groups (isolation). Idempotency (exactly-once). DLQ (retry). Fraud = sync HTTP, not Kafka | Schema Registry, Consumer Groups, Idempotency store, DLQ, Fraud Service | ClickHouse, Snowflake, Grafana, Tableau | [diagram](#scenario-4--gb--real-time--another-system) |
 | 5 | GB + Near RT + Analytics | Same analytics as S1 but 5-15 min delay acceptable | Flink → Spark micro-batch (every 5 min from S3). $50/month cheaper. Backfill is free | Spark Structured Streaming | Flink | [diagram](#scenario-5--gb--near-real-time--analytics) |
-| 6 | GB + Near RT + ML | — | — | — | — | coming soon |
-| 7 | GB + Near RT + Dashboards | — | — | — | — | coming soon |
-| 8 | GB + Near RT + Another System | — | — | — | — | coming soon |
-| 9 | GB + Batch + Analytics | — | — | — | — | coming soon |
-| 10 | GB + Batch + ML | — | — | — | — | coming soon |
-| 11 | GB + Batch + Dashboards | — | — | — | — | coming soon |
-| 12 | GB + Batch + Another System | — | — | — | — | coming soon |
+| 6 | GB + Near RT + ML | Predictions needed every 5 min on tracking screen — not blocking order confirmation | Pre-compute predictions in Spark micro-batch for ALL active orders → store in Redis. App just GETs result. No ML Service running models on-demand. | Spark micro-batch (prediction run) | ML Inference Service (on-demand) | [diagram](#scenario-6--gb--near-real-time--ml) |
+| 7 | GB + Near RT + Dashboards | Both ops AND business teams accept 5-15 min delay | One tool (Snowflake) serves both dashboards via Snowpipe. Eliminates ClickHouse + Flink. Simpler, cheaper. | Snowflake for ops dashboard too | Flink, ClickHouse | [diagram](#scenario-7--gb--near-real-time--dashboards) |
+| 8 | GB + Near RT + Another System | Downstream systems act within minutes, not seconds. Fraud still blocks order. | DB polling every 5-10 min replaces always-on Kafka consumers. Staging table in PostgreSQL. Simpler for downstream teams. Fraud = always sync HTTP. | PostgreSQL staging table, Spark micro-batch | Always-on Kafka consumers per service | [diagram](#scenario-8--gb--near-real-time--another-system) |
+| 9 | GB + Batch + Analytics | Analysts need fully settled, joined, clean data from yesterday | Airflow + Spark (nightly ETL) + dbt (SQL business logic) + Snowflake. Complete joins across all tables. Data freshness contract: ready by 6am. | Airflow, dbt | Flink, ClickHouse, micro-batch scheduling | [diagram](#scenario-9--gb--batch--analytics) |
+| 10 | GB + Batch + ML | Train or retrain ML model on 6 months of historical data | Spark feature engineering (joins 6 months S3) → ML training job → Model Registry (MLflow). A/B test before rollout. Output = model artifact, not predictions. | ML Training Job, Model Registry (MLflow) | Redis, Flink, ML Inference (inference replaced by training) | [diagram](#scenario-10--gb--batch--ml) |
+| 11 | GB + Batch + Dashboards | Fixed executive KPI dashboard loads instantly once daily | dbt builds daily_kpi_summary (1 row/day, 6 KPIs). Dashboard reads 1 row = instant load. Pre-aggregate everything — never query raw table at dashboard open time. | daily_kpi_summary dbt model | ClickHouse, real-time pipeline | [diagram](#scenario-11--gb--batch--dashboards) |
+| 12 | GB + Batch + Another System | External partners/regulators expect scheduled FILE transfers (CSV/XML), not events | Spark generates formatted files → validate (row count, checksum, schema) → deliver via SFTP/S3/API → track acknowledgement in PostgreSQL. File schema is a contract. | File export Spark job, SFTP delivery, delivery ack log | Kafka consumers, Redis, real-time components | [diagram](#scenario-12--gb--batch--another-system) |
 
 ---
 
@@ -1478,6 +1478,899 @@ Kafka is NOT a database:
 CDC pattern: app writes ONLY to PostgreSQL (ACID guaranteed).
 Debezium reads WAL AFTER confirmed write → no dual write.
 PostgreSQL = source of truth. Kafka = event bus. Never conflate the two.
+```
+
+---
+
+### Scenario 6 — GB + Near Real-time + ML
+
+#### Problem Statement
+```
+Size:    5 GB/day, ~25M events/day
+Speed:   Near Real-time — 5 to 15 minute delay acceptable
+Use:     ML — predictions needed but not in same HTTP request as order
+Who:     Food delivery startup — show updated delivery estimates on tracking screen
+         (not on order confirmation — that needs Scenario 2 real-time)
+```
+
+#### What's Different vs Scenario 2 (GB + Real-time + ML)
+```
+Scenario 2 need:  Predict delivery time BEFORE confirmation screen loads (<200ms, sync)
+Scenario 6 need:  Update delivery estimate on TRACKING screen (user already waiting, 5-min update is fine)
+
+Functional difference:
+  Scenario 2: customer is on checkout page → prediction blocks order confirmation → must be instant
+  Scenario 6: customer is on "Your order is being prepared" screen → estimate refreshes every 5 min
+              "28 min" → "24 min" → "19 min" — small error is acceptable
+
+Technical difference:
+  Scenario 2: ML inference is ON-DEMAND (App calls ML Service per request, model runs live)
+              Cannot pre-compute because each order has unique context at submission time
+  Scenario 6: predictions can be PRE-COMPUTED in batch every 5 min
+              Spark computes updated estimates for ALL active orders → stores in Redis
+              App just READs Redis — no model runs at request time
+
+Architecture change that solves it:
+  DROP: ML Inference Service running model on-demand per request
+  ADD:  Spark micro-batch (every 5 min) runs model on ALL active orders → writes to Redis
+  App: READs pre-computed prediction from Redis directly (simple GET, no HTTP to ML service)
+  Flink: still computes real-time features (active drivers, traffic) → Redis
+  Spark: reads S3 + Redis features → runs model for each active order → writes result to Redis
+```
+
+#### Full Architecture
+
+```
+[Customer places order]
+        ↓
+[App] ──WRITE──→ [PostgreSQL]        ← saves order (OLTP)
+                       │
+                 READ (WAL)
+                       │
+                [Debezium CDC]
+                       │
+                     WRITE
+                       │
+                   [Kafka] ──────WRITE──────→ [S3]
+                       │                  raw Parquet files
+              READ     │     READ
+        ┌──────────────┤
+        ↓              ↓
+  [Payment]        [Driver]
+   Service          Service
+    OLTP             OLTP
+
+
+[Kafka] ──READ──→ [Flink]                    [S3]
+                  state in RAM                 │
+                  real-time features      READ (every 5 min)
+                        │                     │
+                      WRITE              [Spark micro-batch]
+                        │               reads active orders
+                        ↓               reads Flink features from Redis
+                   [Redis]              runs ML model for each
+                        │               WRITEs prediction per order_id
+                      WRITE ←───────────────────┘
+                        │
+                      READ
+                        │
+                    [App / Tracking Screen]
+                    GET prediction:order_id
+                    → "Your order arrives in 19 min"
+                    (refreshes every 5 min)
+```
+
+#### Key Design Decisions
+
+```
+Pre-computed vs on-demand:
+  On-demand (Scenario 2):  App → ML Service → Redis → model → response  (per request, <200ms)
+  Pre-computed (Scenario 6): Spark → Redis (every 5 min) → App just GETs result (1ms)
+
+  Pre-computed is simpler: no ML Service to operate, no latency concern, easy to scale
+  Acceptable when: prediction does not need to be unique per-request-moment
+  NOT acceptable when: prediction depends on real-time order details at submission (Scenario 2)
+
+What Spark writes to Redis:
+  KEY:   prediction:order:98765
+  VALUE: { estimate: "19 min", updated_at: "11:32:00", confidence: 0.87 }
+  TTL:   15 min (if order not updated in 15 min, something is wrong)
+
+App behaviour:
+  Tracking screen loads → GET prediction:order:98765 from Redis → display
+  Refreshes every 5 min → GET again → display updated value
+  No ML model runs at request time — pure Redis lookup
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| PostgreSQL | OLTP source of truth | App WRITEs, Debezium READs WAL |
+| Debezium | CDC connector | READs WAL, WRITEs Kafka |
+| Kafka | Event bus | Consumers READ |
+| S3 | Raw Parquet storage | Kafka WRITEs, Spark READs |
+| Flink | Real-time features (drivers, traffic) | READs Kafka, WRITEs Redis |
+| Spark micro-batch | Runs model for all active orders every 5 min | READs S3 + Redis, WRITEs Redis predictions |
+| Redis | Feature store + prediction store | Flink/Spark WRITE, App READs |
+
+#### Interview Answer
+```
+1. App WRITEs to PostgreSQL → Debezium → Kafka
+2. Flink READs Kafka → real-time features (active drivers, zone traffic) → Redis
+3. Spark micro-batch runs every 5 min:
+   READs active orders from PostgreSQL/S3
+   READs features from Redis
+   Runs ML model for each active order
+   WRITEs prediction:order_id → Redis (TTL 15 min)
+4. Tracking screen: App GETs prediction from Redis → displays "19 min"
+   Refreshes every 5 min → new Spark run → updated prediction
+
+Key insight: "Pre-compute predictions in batch for all active orders.
+App reads result from Redis — no ML model at request time.
+Simpler than Scenario 2, acceptable when 5-min staleness is fine."
+```
+
+---
+
+### Scenario 7 — GB + Near Real-time + Dashboards
+
+#### Problem Statement
+```
+Size:    5 GB/day, ~25M events/day
+Speed:   Near Real-time — 5 to 15 minute delay acceptable for ALL dashboards
+Use:     Dashboards — both ops team and business team can tolerate 5-15 min delay
+Who:     Food delivery startup — weekly ops reviews, shift-level monitoring (not live alerts)
+```
+
+#### What's Different vs Scenario 3 (GB + Real-time + Dashboards)
+```
+Scenario 3 need:  Ops team needs LIVE data (30-sec refresh). Business needs history.
+                  Two tools required: ClickHouse (speed) + Snowflake (depth)
+Scenario 7 need:  Both teams accept 5-15 min delay.
+                  Ops team does shift-level review, not live incident response.
+
+Functional difference:
+  Scenario 3 ops:  "Is something broken RIGHT NOW?" → needs 30-sec data → needs ClickHouse
+  Scenario 7 ops:  "How did the 2pm-4pm shift go?" → 5-min delay fine → Snowflake works
+  Both scenarios business: "What was revenue last week?" → Snowflake always
+
+Technical difference:
+  Scenario 3: two pipelines, two stores, two tools (ClickHouse + Snowflake)
+  Scenario 7: ONE pipeline (Spark micro-batch) → ONE store (Snowflake) → TWO dashboard tools
+              Snowpipe (Snowflake's streaming ingest) accepts data every 1-5 min → 5-min SLA met
+
+Architecture change that solves it:
+  DROP: Flink, ClickHouse (no need for sub-second pipeline)
+  KEEP: Spark micro-batch every 5 min → Snowflake
+  Snowflake serves BOTH ops (Grafana reads Snowflake) AND business (Tableau reads Snowflake)
+  Simpler: one tool to operate instead of two
+```
+
+#### Full Architecture
+
+```
+[Customer places order]
+        ↓
+[App] ──WRITE──→ [PostgreSQL]        ← saves order (OLTP)
+                       │
+                 READ (WAL)
+                       │
+                [Debezium CDC]
+                       │
+                     WRITE
+                       │
+                   [Kafka] ──────WRITE──────→ [S3]
+                       │                  raw Parquet files
+              READ     │
+        ┌──────────────┤
+        ↓              ↓
+  [Payment]        [Driver]
+   Service          Service
+    OLTP             OLTP
+
+                   [S3]
+                     │
+               READ every 5 min
+                     │
+           [Spark micro-batch]
+           cleans, joins, aggregates
+                     │
+                   WRITE (Snowpipe)
+                     │
+               [Snowflake]
+               single warehouse
+               5-min fresh data
+                     │
+          ┌──────────┴──────────┐
+        READ                  READ
+          │                     │
+      [Grafana]           [Tableau/Looker]
+    Ops Dashboard         Biz Dashboard
+   (5-min refresh)        (on-demand)
+```
+
+#### Key Design Decisions
+
+```
+Why Snowflake can now serve both:
+  Scenario 3: ops needed 30-sec refresh → Snowflake cold start 3-10 sec → unacceptable
+  Scenario 7: ops needs 5-min refresh → Snowflake warm query 1-3 sec → acceptable
+              Dashboard loads in 3 sec, refreshes every 5 min — ops team is fine
+
+Snowpipe (Snowflake's micro-batch ingest):
+  Kafka → S3 (via Kafka Connect) → Snowpipe detects new files → loads to Snowflake in 1-3 min
+  OR: Spark micro-batch runs every 5 min → writes cleaned data → Snowflake
+  Both patterns give 5-15 min freshness
+
+Cost saving vs Scenario 3:
+  Scenario 3: Flink ($50) + ClickHouse ($50) + Snowflake ($50) = $150/month for data stores
+  Scenario 7: Spark micro-batch ($10) + Snowflake ($50) = $60/month
+  One tool to operate, one team to train, one query language for all consumers
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| PostgreSQL | OLTP source of truth | App WRITEs, Debezium READs WAL |
+| Debezium | CDC connector | READs WAL, WRITEs Kafka |
+| Kafka | Event bus + S3 feeder | Consumers READ, Kafka Connect WRITEs S3 |
+| S3 | Raw Parquet storage | Kafka WRITEs, Spark READs |
+| Spark micro-batch | Cleans, joins, aggregates every 5 min | READs S3, WRITEs Snowflake |
+| Snowflake | Single warehouse for both audiences | Spark WRITEs, Grafana + Tableau READ |
+| Grafana | Ops dashboard (5-min refresh) | READs Snowflake |
+| Tableau/Looker | Business dashboard (on-demand) | READs Snowflake |
+
+#### Interview Answer
+```
+1. App → PostgreSQL → Debezium → Kafka → S3
+2. Spark micro-batch runs every 5 min → cleans + joins → WRITEs Snowflake
+3. Grafana READs Snowflake (5-min refresh) → ops team sees near-live view
+4. Tableau READs Snowflake (on-demand) → business explores history
+
+Key insight: "When both audiences accept 5-min delay, consolidate to one tool.
+Scenario 3 needed two stores (ClickHouse + Snowflake). Here Snowflake serves both.
+Simpler is better — fewer tools, fewer failure points, one team owns everything."
+```
+
+---
+
+### Scenario 8 — GB + Near Real-time + Another System
+
+#### Problem Statement
+```
+Size:    5 GB/day, ~25M events/day
+Speed:   Near Real-time — 5 to 15 minute delay acceptable
+Use:     Another System — downstream systems react to events but not instantly
+Who:     Food delivery startup — loyalty points added within 10 min, weekly partner reports
+         Example: "Award loyalty points within 10 minutes of order completion"
+```
+
+#### What's Different vs Scenario 4 (GB + Real-time + Another System)
+```
+Scenario 4 need:  Downstream systems must react INSTANTLY (notification in seconds, fraud blocks order)
+Scenario 8 need:  Downstream systems react within minutes (loyalty points, partner sync, reporting)
+
+Functional difference:
+  Scenario 4: "Order confirmed → send push notification within 3 seconds" — delay = bad UX
+  Scenario 8: "Order completed → award loyalty points within 10 minutes" — delay acceptable
+              "End of day → sync orders to partner restaurant system" — batch is fine
+              Fraud still needs to be synchronous even here (never async)
+
+Technical difference:
+  Scenario 4: each consumer has always-on Kafka consumer (real-time offset tracking)
+              Idempotency checks critical (notifications sent once)
+  Scenario 8: consumers can poll/batch process every 5-10 min
+              Simpler: read from S3 or database table every N minutes instead of Kafka stream
+              Still need idempotency (loyalty points added once), but pressure is lower
+
+Architecture change that solves it:
+  OPTION A (keep Kafka, simpler): same pattern as Scenario 4 but consumers run micro-batch
+    Kafka consumer reads in batches every 5 min, processes, commits offset
+  OPTION B (drop Kafka consumers, use DB polling):
+    Spark writes processed events to PostgreSQL staging table
+    Downstream systems poll staging table every 5 min → process new rows → mark processed
+    Simpler for downstream teams — they read a database, not Kafka
+  Fraud: STILL synchronous HTTP (does not change regardless of speed tier)
+```
+
+#### Full Architecture
+
+```
+[Customer places order]
+        ↓
+[App] ──1. WRITE──→ [PostgreSQL]        ← saves order (OLTP)
+  │                       │
+  │                 READ (WAL)
+  │                       │
+  │                [Debezium CDC]
+  │                       │
+  │                     WRITE
+  │                       │
+  │                   [Kafka] ──────WRITE──────→ [S3]
+  │                                          raw Parquet files
+  │
+  └──2. REQUEST──→ [Fraud Service]    ← synchronous (always, regardless of speed tier)
+                        │
+                      READ
+                        │
+                   [Redis — fraud features]
+                   (pre-computed by Flink)
+
+
+                    [S3]
+                      │
+              READ every 5-10 min
+                      │
+             [Spark micro-batch]
+             processes confirmed orders
+                      │
+                    WRITE
+                      │
+           [PostgreSQL — staging table]
+           (orders_to_process: order_id, status, processed=false)
+                      │
+         ┌────────────┼────────────┐
+       POLL          POLL         POLL
+       5 min         5 min        daily
+         │            │             │
+  [Loyalty Svc]  [Partner Sync]  [Report Svc]
+  adds points    sends orders     generates
+  marks processed to restaurant   daily CSV
+                  system          to finance
+```
+
+#### Key Design Decisions
+
+```
+Why DB polling instead of Kafka for downstream:
+  Kafka consumers require: offset management, consumer group setup, schema registry, DLQ
+  DB polling: SELECT * FROM orders_to_process WHERE processed=false LIMIT 100
+              Process. UPDATE processed=true. Done.
+  At near real-time (5-10 min delay acceptable): DB polling is simpler and sufficient
+
+Idempotency still required:
+  Loyalty service must check before adding points:
+  SELECT * FROM loyalty_events WHERE order_id=98765 AND type='earned'
+  → exists: skip. Not exists: add points, insert record.
+  Same principle as Scenario 4, simpler implementation (no Kafka replay complexity)
+
+Fraud stays synchronous — always:
+  No matter the speed tier (real-time, near RT, batch), fraud must block the order.
+  It is the one component that never moves to async.
+
+When to choose Scenario 4 vs Scenario 8 pattern:
+  "Send notification within 3 sec"  → Scenario 4 (always-on Kafka consumer)
+  "Award points within 10 min"      → Scenario 8 (DB polling every 5 min)
+  Rule: if SLA < 30 sec → Kafka streaming. If SLA > 1 min → polling acceptable.
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| PostgreSQL | OLTP + staging table for downstream | App WRITEs, Debezium READs WAL, Downstream SERVICEs READ staging |
+| Debezium | CDC connector | READs WAL, WRITEs Kafka |
+| Kafka | Event bus + S3 feeder | WRITEs S3 |
+| S3 | Raw Parquet storage | Kafka WRITEs, Spark READs |
+| Spark micro-batch | Processes confirmed orders every 5-10 min | READs S3, WRITEs PostgreSQL staging |
+| Fraud Service | Synchronous fraud scoring | READs Redis, RESPONDs to App |
+| Redis | Fraud features | Flink WRITEs, Fraud Service READs |
+| Loyalty/Partner/Report Services | Poll staging, process, mark done | READ + UPDATE PostgreSQL staging |
+
+#### Interview Answer
+```
+1. App → PostgreSQL → Debezium → Kafka → S3
+2. App makes synchronous fraud check (always, regardless of speed tier)
+3. Spark micro-batch every 5-10 min READs S3 → WRITEs processed events to PostgreSQL staging
+4. Downstream services poll staging table every 5-10 min:
+   Loyalty: adds points, marks processed
+   Partner sync: sends order data to restaurant system
+   Report service: batches into daily export
+
+Key insight: "Near real-time downstream systems don't need Kafka consumers.
+DB polling every 5 min is simpler, easier for downstream teams, and meets the SLA.
+Fraud check is always synchronous — no speed tier changes that."
+```
+
+---
+
+### Scenario 9 — GB + Batch + Analytics
+
+#### Problem Statement
+```
+Size:    5 GB/day, ~25M events/day
+Speed:   Batch — hours to daily. Analytics team queries next-day data.
+Use:     Analytics — "What was yesterday's revenue by city? Weekly trends? Monthly reports?"
+Who:     Food delivery startup — finance team, business analysts, executive reporting
+```
+
+#### What's Different vs Scenario 5 (GB + Near RT + Analytics)
+```
+Scenario 5 need:  5-15 min delay — ops team wants recent data
+Scenario 9 need:  Hours to daily delay — analysts work on yesterday's completed data
+
+Functional difference:
+  Scenario 5: "How many orders in the last 15 min?" — shift manager, operational
+  Scenario 9: "What was total revenue yesterday by restaurant category?" — finance, strategic
+              Data is fully settled (no partial orders, all payments confirmed)
+              Analysts want CLEAN, JOINED, COMPLETE data — not raw event stream
+
+Technical difference:
+  Scenario 5: Spark runs every 5 min, reads incremental S3 files, writes to ClickHouse
+  Scenario 9: Spark runs ONCE per day (nightly), reads ALL of yesterday's data
+              More joins possible (user table, restaurant table, driver table, payment table)
+              dbt runs SQL transformations after Spark load — clean business-logic layer
+              Airflow orchestrates: wait for all data → trigger Spark → trigger dbt → alert done
+
+Architecture change that solves it:
+  DROP: Flink, ClickHouse, micro-batch scheduling
+  ADD:  Airflow (orchestration), dbt (SQL transformations on top of Snowflake)
+  SIMPLIFY: Spark runs once nightly, reads full day's S3 data, loads to Snowflake
+  GAIN: complete joins across ALL tables, business-logic transformations via dbt
+```
+
+#### Full Architecture
+
+```
+[All day: orders flow normally]
+[App] ──WRITE──→ [PostgreSQL] → [Debezium] → [Kafka] → [S3]
+                                                    raw Parquet, partitioned by day
+
+[Nightly at 2am: Airflow triggers pipeline]
+
+[Airflow]
+    │
+    ├── Step 1: wait for S3 partition complete (all day's files landed)
+    │
+    ├── Step 2: trigger [Spark job]
+    │           READs: s3://events/orders/date=2024-01-15/*.parquet
+    │           JOINs: user table, restaurant table, driver table, payment table
+    │           CLEANs: dedup, null handling, type casting
+    │           WRITEs: raw + joined tables to [Snowflake]
+    │
+    ├── Step 3: trigger [dbt]
+    │           runs SQL models on top of Snowflake:
+    │           revenue_by_city_daily
+    │           restaurant_performance_weekly
+    │           user_cohort_analysis
+    │           WRITEs: clean business tables back to Snowflake
+    │
+    └── Step 4: alert "Pipeline complete — data ready for 2024-01-15"
+
+[Snowflake] ──READ──→ [Tableau / Looker / Metabase]
+                       Analysts run queries in the morning
+                       Data is from yesterday, fully complete
+```
+
+#### Key Design Decisions
+
+```
+Why dbt (data build tool):
+  Spark loads raw data. Business logic still needed:
+    "revenue" = amount - refunds - discounts (not just SUM(amount))
+    "active restaurant" = placed ≥ 5 orders this week
+  dbt writes these as SQL models — version-controlled, testable, documented
+  Analysts trust the numbers because logic is explicit and reviewed
+
+Why Airflow:
+  Dependencies matter in batch:
+    Cannot run dbt before Spark finishes
+    Cannot run Spark before all S3 files for the day have landed
+    Cannot alert users before dbt completes
+  Airflow manages this DAG (Directed Acyclic Graph) of dependencies
+  Failed step → retry → alert → no silent data gaps
+
+Why not keep ClickHouse:
+  Batch analytics consumers (finance, execs) already use Snowflake
+  ClickHouse holds only recent hours — useless for "last quarter" queries
+  Batch delay means Snowflake's cold-start latency (3-10 sec) is irrelevant
+
+Data freshness contract:
+  Analysts know: "data is complete for yesterday by 6am"
+  No confusion about partial data, no stale dashboard checks
+  Cleaner than near-real-time where data may be partially processed
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| PostgreSQL | OLTP source of truth | App WRITEs, Debezium READs WAL |
+| Debezium + Kafka | CDC + event bus | READs WAL, WRITEs S3 via Kafka Connect |
+| S3 | Raw Parquet (partitioned by day) | Kafka WRITEs, Spark READs |
+| Airflow | Orchestrates nightly pipeline | Triggers Spark → dbt → alerts |
+| Spark | Nightly ETL: read, join, clean | READs S3 + dimension tables, WRITEs Snowflake |
+| dbt | SQL business logic transformations | READs Snowflake raw, WRITEs Snowflake clean |
+| Snowflake | Historical data warehouse | Spark/dbt WRITE, Tableau READs |
+| Tableau/Looker | Business analytics | READs Snowflake |
+
+#### Interview Answer
+```
+1. All day: App → PostgreSQL → Debezium → Kafka → S3 (raw Parquet by day)
+2. Nightly 2am: Airflow triggers pipeline
+3. Spark READs full day's S3 → JOINs all dimension tables → WRITEs raw to Snowflake
+4. dbt runs SQL models: revenue_by_city, restaurant_performance, cohort analysis
+5. Analysts query Snowflake in the morning — fully complete, business-logic-clean data
+
+Key insight: "Batch gives you completeness that streaming cannot.
+All payments confirmed, all refunds settled, all tables joinable.
+dbt + Airflow = auditable, testable pipeline that finance teams trust."
+```
+
+---
+
+### Scenario 10 — GB + Batch + ML
+
+#### Problem Statement
+```
+Size:    5 GB/day, ~25M events/day
+Speed:   Batch — hours to daily
+Use:     ML — training a new model or retraining existing model on historical data
+Who:     Food delivery ML team — improving delivery time prediction, surge pricing model
+```
+
+#### What's Different vs Scenario 6 (GB + Near RT + ML)
+```
+Scenario 6 need:  Pre-compute predictions every 5 min for active orders (inference, near-live)
+Scenario 10 need: Train or retrain ML model using months of historical data (training, not inference)
+
+Functional difference:
+  Scenario 6: "Update delivery estimate every 5 min" — model is ALREADY trained, running inference
+  Scenario 10: "Train a better model using last 6 months of orders" — building/improving the model
+               ML team runs experiment: new feature? new algorithm? retrain on recent data?
+               Output: a new model artifact (file), not predictions
+
+Technical difference:
+  Scenario 6: Spark runs model on current data, writes predictions to Redis
+  Scenario 10: Spark reads MONTHS of S3 data, creates feature matrix, trains model
+               Training takes hours (not minutes), requires large cluster temporarily
+               Output goes to Model Registry (not Redis) — model file stored, versioned, deployed
+
+Architecture change that solves it:
+  DROP: Redis, prediction store, Flink (no real-time features needed for training)
+  ADD:  Feature engineering Spark job (creates training dataset), ML Training job,
+        Model Registry (MLflow, SageMaker, Databricks MLflow)
+  GAIN: full historical data for training, versioned models, rollback capability
+```
+
+#### Full Architecture
+
+```
+[Months of historical data already in S3]
+s3://events/orders/date=2024-01-*/
+s3://events/orders/date=2024-02-*/
+...
+s3://events/orders/date=2024-06-*/
+
+[Airflow — weekly or on-demand trigger]
+    │
+    ├── Step 1: [Spark — Feature Engineering]
+    │           READs: 6 months of S3 order data
+    │           JOINs: user, restaurant, driver, weather tables
+    │           CREATEs: feature matrix
+    │           { order_id, restaurant_avg_prep_time, driver_zone_count,
+    │             distance_km, time_of_day, day_of_week, actual_delivery_min }
+    │           WRITEs: training_data.parquet → S3
+    │
+    ├── Step 2: [ML Training Job] (Spark MLlib / Python scikit-learn / XGBoost)
+    │           READs: training_data.parquet from S3
+    │           TRAINs: model (gradient boosted tree, or neural net)
+    │           EVALUATEs: RMSE, MAE on held-out test set
+    │           WRITEs: model artifact → [Model Registry] (MLflow / SageMaker)
+    │                   model version, metrics, training date logged
+    │
+    └── Step 3: [Model Deployment Decision]
+                A/B test: old model vs new model on 5% traffic
+                If new model better → promote to production
+                If worse → rollback to previous version in Registry
+                Deploy: model artifact loaded by ML Inference Service
+
+
+[ML Inference Service] (from Scenario 2 / Scenario 6)
+    READs model from Registry on startup
+    Serves predictions using newly trained model
+```
+
+#### Key Design Decisions
+
+```
+Model Registry — why it matters:
+  Without registry: model is a file somewhere. Who trained it? When? On what data?
+                    Bad model deployed? Cannot roll back. Cannot audit.
+  With registry:    every model version tracked: training date, dataset, metrics, author
+                    Rollback: "revert to model v3.2" → one command
+                    MLflow: open source. SageMaker Model Registry: AWS managed.
+
+Training vs Inference separation:
+  Training: heavyweight, hourly+ runtime, large cluster, runs weekly/monthly
+  Inference: lightweight, milliseconds, always-on, small cluster
+  Never mix: training job running on inference cluster = inference slows/stops
+
+Feature engineering is most of the work:
+  Model training itself: 1 hour
+  Feature engineering Spark job: 4-6 hours (joining 6 months of data)
+  Rule: 80% of ML time is data preparation, not model tuning
+
+A/B testing before full rollout:
+  Never swap model for 100% traffic immediately
+  Route 5% traffic to new model → compare actual delivery time vs prediction
+  If RMSE improves → roll out to 100%
+  Protects users from bad model causing wrong estimates
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| S3 | Historical raw data + training datasets | Kafka WRITEs raw, Spark READs + WRITEs training data |
+| Airflow | Orchestrates weekly training pipeline | Triggers Feature Eng → Training → Registry |
+| Spark (feature engineering) | Joins 6 months of data → training matrix | READs S3, WRITEs training_data.parquet |
+| ML Training Job | Trains model, evaluates, registers | READs training_data.parquet, WRITEs Model Registry |
+| Model Registry (MLflow) | Versions, stores, serves model artifacts | Training WRITEs, ML Service READs on deploy |
+| ML Inference Service | Serves predictions using trained model | READs Model Registry on startup, READs Redis for features |
+
+#### Interview Answer
+```
+1. S3 holds months of historical raw data (always — from Kafka pipeline)
+2. Weekly Airflow job triggers:
+   a. Spark feature engineering: 6 months S3 → join all tables → training_data.parquet
+   b. ML training job: trains model, evaluates RMSE → logs to MLflow Model Registry
+3. A/B test: 5% traffic to new model → validate improvement
+4. Promote to production → ML Inference Service loads new model on next deploy
+
+Key insight: "Batch ML training needs S3 as the permanent data store — Kafka 7-day
+retention is useless for 6-month training windows. Model Registry = version control
+for models. A/B test before 100% rollout — never swap blindly."
+```
+
+---
+
+### Scenario 11 — GB + Batch + Dashboards
+
+#### Problem Statement
+```
+Size:    5 GB/day, ~25M events/day
+Speed:   Batch — daily. Dashboards updated once a day (morning).
+Use:     Dashboards — executive reporting, weekly business reviews, monthly P&L
+Who:     Food delivery startup — CEO/CFO looks at yesterday's numbers every morning
+```
+
+#### What's Different vs Scenario 9 (GB + Batch + Analytics)
+```
+Scenario 9 need:  Analysts run ad-hoc SQL queries on clean data (flexible, exploratory)
+Scenario 11 need: Fixed dashboards with pre-defined metrics, auto-refreshed once daily
+
+Functional difference:
+  Scenario 9: analyst opens Tableau, drags dimensions, writes custom queries — exploratory
+  Scenario 11: CEO opens dashboard at 9am, sees same 6 KPIs every day — fixed, curated
+               "Yesterday revenue: ₹2.3M | Orders: 47,832 | Avg delivery: 31 min"
+               No ad-hoc queries. Same view. Auto-refreshed. Fast load.
+
+Technical difference:
+  Scenario 9: Snowflake needs to handle any SQL → flexible schema, analyst access
+  Scenario 11: dashboards need to load in <2 sec — pre-build the view, not query at load time
+               Pre-aggregated daily summary tables → dashboard reads 1 row, not 47K rows
+
+Architecture change that solves it:
+  SAME pipeline as Scenario 9 (Airflow + Spark + dbt + Snowflake)
+  ADD: dbt creates pre-aggregated daily_summary table (6 KPIs, 1 row per day)
+  Dashboard tool reads daily_summary — instant load, no heavy SQL at dashboard open time
+  Tool: Metabase / Looker / Tableau — all connect to Snowflake daily_summary
+```
+
+#### Full Architecture
+
+```
+[Same nightly pipeline as Scenario 9]
+Airflow → Spark → Snowflake (raw) → dbt → Snowflake (clean tables)
+
+[dbt adds one extra model: daily_kpi_summary]
+
+dbt model: daily_kpi_summary
+┌──────────────────────────────────────────────────┐
+│ date        │ 2024-01-15                          │
+│ total_rev   │ 2,347,892                           │
+│ total_orders│ 47,832                              │
+│ avg_delivery│ 31.2 min                            │
+│ new_users   │ 1,247                               │
+│ top_city    │ Mumbai                              │
+│ fail_rate   │ 1.8%                                │
+└──────────────────────────────────────────────────┘
+1 row per day. Pre-computed. Reads in 1ms.
+
+[Dashboard Tool — Metabase / Looker / Tableau]
+    READs daily_kpi_summary
+    Renders fixed KPI tiles
+    Auto-refreshes at 6am (after nightly pipeline completes)
+    CEO opens at 9am → instant load (1 row query)
+```
+
+#### Key Design Decisions
+
+```
+Pre-aggregated summary table vs raw table:
+  Raw table: 47,832 rows for one day
+             Dashboard runs: SELECT SUM(revenue), COUNT(*), AVG(delivery_time) FROM orders WHERE date='2024-01-15'
+             Snowflake: 2-5 sec, gets slower as months accumulate
+  Summary table: 1 row for one day
+                 Dashboard runs: SELECT * FROM daily_kpi_summary WHERE date='2024-01-15'
+                 Snowflake: <10ms always, regardless of history size
+
+Dashboard alert: "data not refreshed":
+  Airflow pipeline completes 6am → sets flag: data_ready_for=2024-01-15
+  Dashboard checks flag before loading: if not ready → shows "Yesterday's data loading..."
+  Prevents CEO seeing yesterday's yesterday data silently
+
+This is the simplest architecture in all 12 scenarios:
+  One pipeline (Airflow + Spark + dbt). One store (Snowflake). One summary table.
+  Leadership lesson: "not every problem needs Kafka and Flink."
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| PostgreSQL | OLTP source of truth | App WRITEs |
+| Debezium + Kafka | CDC + event bus | WRITEs S3 |
+| S3 | Raw daily Parquet | Kafka WRITEs, Spark READs |
+| Airflow | Nightly orchestration | Triggers Spark → dbt |
+| Spark | Full-day ETL, joins | READs S3, WRITEs Snowflake raw |
+| dbt | Business logic + daily_kpi_summary | READs Snowflake raw, WRITEs summary |
+| Snowflake | Data warehouse + summary table | dbt WRITEs, Dashboard READs |
+| Metabase/Tableau | Fixed executive dashboard | READs Snowflake summary |
+
+#### Interview Answer
+```
+1. Nightly Airflow: Spark reads S3 → loads raw to Snowflake → dbt runs models
+2. dbt creates daily_kpi_summary: 1 row per day, 6 pre-computed KPIs
+3. Dashboard auto-refreshes at 6am from daily_kpi_summary — instant load
+4. CEO opens at 9am → 6 tiles, all green or red, no waiting
+
+Key insight: "Simplest architecture of all 12 scenarios. No streaming needed.
+Pre-aggregate into a summary table — dashboard reads 1 row, not millions.
+dbt makes business logic explicit, auditable, version-controlled."
+```
+
+---
+
+### Scenario 12 — GB + Batch + Another System
+
+#### Problem Statement
+```
+Size:    5 GB/day, ~25M events/day
+Speed:   Batch — daily or hourly file transfer
+Use:     Another System — send data to external partner, regulatory body, or legacy system
+Who:     Food delivery startup — daily order export to restaurant partners, weekly GST report
+         to tax authority, nightly sync to legacy ERP system
+```
+
+#### What's Different vs Scenario 8 (GB + Near RT + Another System)
+```
+Scenario 8 need:  Downstream systems react within 5-10 minutes (loyalty points, partner sync)
+Scenario 12 need: Downstream systems receive data in scheduled bulk transfers (daily files)
+
+Functional difference:
+  Scenario 8: "Award loyalty points within 10 min of order" — near-real-time event processing
+  Scenario 12: "Send all of today's orders to restaurant partner at midnight" — daily file export
+               "Submit monthly GST report to tax authority" — regulatory, fixed schedule
+               "Sync yesterday's orders to SAP ERP" — legacy system, batch file import
+
+Technical difference:
+  Scenario 8: downstream systems have APIs or DB connections, can receive events
+  Scenario 12: downstream systems expect FILES (CSV, JSON, XML) via SFTP, S3 drop, or email
+               No Kafka consumers. No DB polling. Just: generate file → deliver file.
+               File format is contractually agreed with partner — cannot change unilaterally
+
+Architecture change that solves it:
+  DROP: all real-time components (Flink, Kafka consumers, Redis)
+  KEEP: S3 as source, Airflow for scheduling
+  ADD:  File generation step (Spark → CSV/JSON/XML), delivery step (SFTP/S3 transfer/API push)
+        File validation before delivery (row count, checksum, schema check)
+        Delivery acknowledgement tracking (did partner receive it?)
+```
+
+#### Full Architecture
+
+```
+[All day: orders accumulate in S3]
+Kafka → S3: s3://events/orders/date=2024-01-15/*.parquet
+
+[Nightly at midnight: Airflow triggers export pipelines]
+
+[Pipeline A — Restaurant Partner Export]
+Airflow
+  │
+  ├── [Spark] READs today's orders from S3
+  │   FILTERs: orders for restaurant group "PizzaCo"
+  │   FORMATs: converts to agreed CSV schema
+  │   WRITEs: partner_orders_20240115_pizzaco.csv → S3 staging bucket
+  │
+  ├── [Validation] row_count matches expected range? checksum computed?
+  │
+  ├── [SFTP Delivery] uploads CSV to PizzaCo's SFTP server
+  │
+  └── [Acknowledgement] WRITEs to PostgreSQL:
+      { export_id, partner, date, rows, delivered_at, status="success" }
+
+
+[Pipeline B — GST Tax Report]
+Airflow (monthly trigger)
+  │
+  ├── [Spark] READs full month's data from S3
+  │   COMPUTEs: taxable_amount, gst_collected, gst_owed per restaurant
+  │   FORMATs: government-specified XML schema
+  │   WRITEs: gst_report_jan2024.xml → S3
+  │
+  └── [API Push] submits to tax authority API
+
+
+[Pipeline C — Legacy ERP Sync]
+Airflow (nightly)
+  │
+  ├── [Spark] READs yesterday's completed orders
+  │   TRANSFORMs: maps order schema → SAP ERP schema
+  │   WRITEs: erp_orders_20240115.json → shared S3 bucket (ERP team reads)
+  │
+  └── [Notification] sends email/Slack "ERP file ready: 47,832 records"
+```
+
+#### Key Design Decisions
+
+```
+File validation before delivery — non-negotiable:
+  Delivered wrong file to tax authority → legal consequence
+  Checks before every delivery:
+    row_count in expected range (not 0, not 10x normal — either is a bug)
+    checksum computed (partner verifies on their end)
+    schema correct (no new/missing columns that break partner's import)
+  If validation fails → abort, alert data engineering, do NOT deliver
+
+Delivery acknowledgement tracking:
+  Delivering the file ≠ partner received it
+  Track in PostgreSQL: { delivery_id, partner, status, delivered_at, ack_received_at }
+  If no ack in 2 hours → alert → retry → escalate
+  This is the audit trail regulators ask for
+
+File format is a contract:
+  Partners import files into their own systems with hardcoded column names
+  Changing "order_amount" to "total_amount" breaks their import silently
+  Treat file schema like an API contract: versioned, backward-compatible, change with notice
+
+Idempotency for file delivery:
+  Airflow job fails after file generated but before SFTP upload → job restarts
+  Restart generates the file again (same data, same filename) → overwrites S3 staging
+  SFTP upload is idempotent: same filename, same content → partner imports once
+  Delivery log: mark as delivered only after confirmed SFTP success
+
+This is the most operationally boring — and most LEGALLY CRITICAL — of all 12 scenarios.
+Regulators do not care about your Kafka cluster. They care about the report arriving on time.
+```
+
+#### Tool Summary
+
+| Tool | Role | READ/WRITE |
+|---|---|---|
+| S3 | Raw daily Parquet (source) + staging exports | Kafka WRITEs raw, Spark READs + WRITEs exports |
+| Airflow | Schedules and orchestrates all export pipelines | Triggers Spark → validate → deliver |
+| Spark | Reads raw, filters, transforms, formats to file | READs S3, WRITEs formatted files to S3 staging |
+| PostgreSQL | Delivery acknowledgement log | Airflow WRITEs status after each delivery |
+| SFTP / S3 Transfer / API | File delivery channel to partner/regulator | Airflow DELIVERs files |
+
+#### Interview Answer
+```
+1. All day: orders flow to S3 via Kafka (raw Parquet, partitioned by day)
+2. Nightly Airflow triggers per-partner export pipelines:
+   Spark reads S3 → filters per partner → formats to agreed schema → writes to S3 staging
+3. Validation: row count, checksum, schema check — abort if fails
+4. Delivery: SFTP upload / S3 transfer / API push to partner
+5. Acknowledgement: log delivery in PostgreSQL, alert if no ack in 2 hours
+
+Key insight: "Batch file export is the most legally critical architecture.
+File schema is a contract. Validation before delivery is non-negotiable.
+Delivery ≠ receipt — track acknowledgement separately.
+Regulators and enterprise partners do not consume Kafka topics — they expect files."
 ```
 
 ---
