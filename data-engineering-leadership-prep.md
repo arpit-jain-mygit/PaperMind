@@ -267,6 +267,246 @@ BACKBONE (always, all speed tiers):
 
 ---
 
+## **Components Deep Dive: Flink & ClickHouse**
+
+### **Apache Flink: Real-Time Stream Processor**
+
+**What It Does (Simple):**
+A worker that watches a continuous stream of events and processes each one as it arrives (within milliseconds), not waiting for batches.
+
+**Key Ability:** Processes data while it's happening, outputs results immediately.
+
+#### **Business Use Cases**
+
+**1. Food Delivery - Live Order Tracking**
+```
+Scenario: Lunch rush, 10,000 orders/minute
+├─ Order placed → Flink receives event instantly
+├─ Flink calculates: "Delivery time = 28 minutes"
+├─ Updates map in real-time (not every 5 minutes)
+└─ Dashboard shows live: "5,432 orders in NYC"
+```
+
+**2. Fraud Detection - Payment Authorization**
+```
+Scenario: Credit card payment processing
+├─ User swipes card → Flink checks in <100ms
+├─ Flink asks: "Is this user usually in NYC? (Now in Tokyo?)"
+├─ Flink checks: "Normal spending? (Suddenly buying 10 iPhones?)"
+└─ Accept or block in real-time ✓
+```
+
+**3. Stock Trading - Price Alerts**
+```
+Scenario: 1,000s of price ticks per second
+├─ BTC was $50k, now $51k? → Flink detects instantly
+├─ Sends alert to traders NOW
+└─ Not "here's your alerts from an hour ago"
+```
+
+**4. IoT Sensors - Temperature Warnings**
+```
+Scenario: Factory with 1,000 machines, sensor data every second
+├─ Machine #42 temp spikes to 95°C (fire risk)
+├─ Flink detects anomaly instantly
+└─ Alerts operators BEFORE fire, not after
+```
+
+---
+
+### **ClickHouse: Super-Fast Analytics Database**
+
+**What It Does (Simple):**
+A storage system optimized for answering analytical questions about large datasets incredibly fast (sub-second), even for billions of rows.
+
+**Key Ability:** Answers "Tell me stats" questions fast (1s latency instead of 1 minute).
+
+#### **Business Use Cases**
+
+**1. E-commerce Dashboard - Live Sales Analytics**
+```
+Question: "How many orders per city in the last hour?"
+├─ Traditional DB: 30 seconds
+├─ ClickHouse: 0.5 seconds ✓
+└─ Why? Stores data by column (only reads city + count columns)
+```
+
+**2. App Analytics - User Behavior Tracking**
+```
+Questions the dashboard answers:
+├─ "How many users opened the app today by country?"
+├─ "Top 10 features used in last 24 hours?"
+├─ "Retention: % of day-1 users still active on day-7?"
+└─ All answers: <1 second (even with 10B events/day)
+```
+
+**3. Ad Network - Real-time Metrics**
+```
+Dashboard shows (updates every 10 seconds):
+├─ "1,234,567 impressions in last hour"
+├─ "CTR (click-through rate) by country"
+├─ "Top performing ads"
+└─ Each query completes in <1 second
+```
+
+**4. SaaS Platform - Churn Prediction**
+```
+Question: "Which customers will churn? (no login in 30+ days)"
+├─ Data: 100M users × 10 years = 1B+ rows of login history
+├─ Traditional DB: Takes minutes
+├─ ClickHouse: Returns in 0.8 seconds ✓
+```
+
+---
+
+### **Flink + ClickHouse Together (The Real Pattern)**
+
+This is where the magic happens in your 36 scenarios:
+
+```
+REAL-TIME ANALYTICS PIPELINE:
+
+Message Bus (Kafka): 100,000 orders/minute
+    ↓
+┌─────────────────────────────────────────────────────────┐
+│ FLINK (Stream Processing)                               │
+│                                                          │
+│ Aggregates live order stream:                           │
+│ • Orders per city (every 10 seconds)                    │
+│ • Average delivery time by region                       │
+│ • Running totals and SUM calculations                   │
+│ • Detects anomalies (unusually high/low traffic)        │
+└─────────────────────────────────────────────────────────┘
+                         ↓
+                    (WRITE events)
+                         ↓
+┌─────────────────────────────────────────────────────────┐
+│ CLICKHOUSE (Real-time OLAP)                             │
+│                                                          │
+│ Stores results in columnar format:                      │
+│ • Pre-aggregated summaries (orders by city)             │
+│ • Total revenue by region                               │
+│ • User segment metrics                                  │
+│                                                          │
+│ Dashboard queries complete in <500ms                    │
+└─────────────────────────────────────────────────────────┘
+                         ↓
+                    [Dashboards]
+                    (Grafana)
+```
+
+**Why This Works:**
+- **Flink:** Does the heavy computation (aggregating millions of events)
+- **ClickHouse:** Stores results optimized for fast retrieval (columnar storage)
+- **Result:** Sub-second dashboard responses with live data
+
+#### **Peak Lunch Hour Example (Food Delivery)**
+
+```
+Time: 12:00 PM - 100,000 orders/minute incoming
+
+FLINK processes every second:
+├─ "NYC total: 1,700 orders/min"
+├─ "Average delivery time: 28 min"
+└─ "Top restaurant: Joe's Pizza (450 active orders)"
+
+Writes to CLICKHOUSE every 30 seconds:
+├─ Pre-computed: City summaries (small, fast)
+└─ Raw events: Every order for flexible queries
+
+Manager opens dashboard at 12:05 PM:
+├─ "NYC Orders" → 0.1 seconds (pre-computed)
+├─ "Slowest Restaurants" → 0.4 seconds (calculated from raw)
+└─ "Revenue by Cuisine Type" → 0.5 seconds (calculated from raw)
+```
+
+---
+
+### **Three Architecture Options: How ClickHouse Works**
+
+#### **Option 1: ClickHouse as Dumb Storage**
+Flink does ALL the heavy work, ClickHouse just stores and retrieves.
+
+```
+Flink: Aggregates 1M events → 50 city summaries
+ClickHouse: Stores 50 rows (NYC: 5,432, LA: 3,421, etc.)
+Dashboard: "Show NYC" → Returns instantly (no calculation)
+
+✓ Pros: Super fast (0.1s latency)
+✗ Cons: Only pre-computed metrics available
+```
+
+#### **Option 2: ClickHouse as Smart Calculator**
+Flink just streams raw events, ClickHouse calculates on demand.
+
+```
+Flink: Passes through raw events unchanged
+ClickHouse: Stores EVERY order event (columnar compression)
+Dashboard: "Orders per city in last hour?" 
+  → ClickHouse scans 50k events, calculates SUM → Returns in 0.5s
+
+✓ Pros: Can answer ANY analytical question
+✗ Cons: Slower (but still <1s), ClickHouse does work on every query
+```
+
+#### **Option 3: Hybrid (Best of Both - Most Common in Production)**
+Flink pre-aggregates + ClickHouse stores both raw AND pre-computed + Materialized Views.
+
+```
+Message Bus
+├─ → Flink: Aggregates (10M events → 50 city rows)
+│        ↓
+│    ClickHouse: Pre-computed table (instant queries)
+│
+└─ → Flink: Also sends raw events
+         ↓
+     ClickHouse: Raw events table + Materialized Views
+                 (auto-updated aggregations)
+
+Results:
+├─ "Orders per city?" → Pre-computed (0.1s) ✓
+├─ "Orders by city AND hour?" → Raw data (0.3s) ✓
+└─ "Anomaly detection?" → Raw data (0.4s) ✓
+```
+
+---
+
+### **When to Use Each Component**
+
+| Need | Use | Latency |
+|------|-----|---------|
+| Process events as they arrive | Flink | <100ms |
+| Detect fraud/anomalies instantly | Flink | <500ms |
+| Answer "how many?" questions | ClickHouse | <1s |
+| Build live dashboards | Flink → ClickHouse | <500ms |
+| Explore historical data | ClickHouse | <2s |
+| Alert on metrics | Flink | <1s |
+
+---
+
+### **Your GB Scale Example**
+
+In the architecture diagram:
+```
+Message Bus (Kafka)
+    ↓
+Flink (1 node): Processes 5GB/day
+├─ Aggregates: orders per city, per restaurant
+├─ Calculates: avg delivery time, fraud flags
+└─ Produces: 1-minute summaries (~1MB/day)
+    ↓
+ClickHouse (1 node): Real-time OLAP
+├─ Stores Flink aggregations (fast queries)
+├─ Can ALSO store raw events if flexibility needed
+└─ Serves dashboard queries in <500ms
+    ↓
+Grafana Dashboard: "Show NYC metrics" → 0.2s response
+```
+
+**At TB Scale:** Flink cluster + ClickHouse cluster, same pattern, 10x throughput
+
+---
+
 ## **Architecture Invariants & Golden Rules**
 
 **What NEVER Changes (identical across all 36):**
