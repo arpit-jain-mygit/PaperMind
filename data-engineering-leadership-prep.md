@@ -272,7 +272,10 @@ Scale Dimension (CHANGES, tool selection differs):
   Pattern stays identical; every component scales independently.
 ```
 
-**Abstraction Mapping:**
+---
+
+## **Abstraction Mapping**
+
 - **RDBMS** = PostgreSQL / MySQL / Oracle / CockroachDB
 - **NoSQL** = Cassandra / DynamoDB / Bigtable / ScyllaDB
 - **CDC Tool** = Debezium / Change Streams / Custom CDC / Datastream
