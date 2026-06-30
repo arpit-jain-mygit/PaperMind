@@ -18,6 +18,7 @@ A comprehensive guide covering foundational system design concepts and detailed 
 - Multi-datacenter setup
 
 #### [Chapter 2: Back-of-the-Envelope Estimation](#chapter-2-back-of-the-envelope-estimation)
+- **🎯 Quick Cheat Sheet (Memorize!)** ← START HERE
 - Power of two reference
 - Latency numbers
 - Availability and SLA
@@ -822,6 +823,7 @@ This is **original content**: summaries, explanations, and real-world examples c
 ---
 
 ## Table of Contents
+0. [🎯 Quick Cheat Sheet (Print & Memorize!)](#quick-cheat-sheet-memorize-these) ← START HERE
 1. [Executive Summary](#executive-summary)
 2. [Power of Two](#power-of-two)
 3. [Latency Numbers](#latency-numbers-every-programmer-should-know)
