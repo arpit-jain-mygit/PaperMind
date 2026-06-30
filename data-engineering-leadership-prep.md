@@ -2033,6 +2033,38 @@ PostgreSQL is already handling OLTP — analytical queries steal resources
 ClickHouse dedicated machine: <10ms on pre-aggregated rows, zero OLTP impact
 ```
 
+**Why Kafka writes to S3? (The Backup & Archive Layer)**
+```
+Flow: PostgreSQL → Kafka → S3 (raw Parquet, permanent storage)
+
+IMPORTANT: This is NOT for real-time analytics. This is for:
+
+1. DATA PRESERVATION (Compliance & Audit)
+   - Keep permanent copy of every event for compliance/regulatory reasons
+   - "Show me ALL orders from Jan 1-31 for audit" → query S3, not Kafka
+   - Kafka only keeps data for 7 days (configured retention)
+   - S3 keeps data forever (cheap)
+
+2. BACKFILL CAPABILITY (Disaster Recovery)
+   - ClickHouse crashed/corrupted → rebuild from S3
+   - "Recalculate last 3 days of aggregations" → read from S3, rerun Flink
+   - Without S3, lost data is gone forever
+
+3. FUTURE USE CASES (Data Lake)
+   - Scenario 9 (Batch Analytics): needs raw events from yesterday for dbt transformations
+   - Scenario 10 (ML Training): needs historical events to train models
+   - All this data comes from S3, not Kafka (Kafka is too expensive for storage)
+
+4. COST
+   - Kafka storage: $0.30/GB/month
+   - S3 storage: $0.023/GB/month
+   - 100GB/month → $30 in Kafka vs $2.30 in S3
+   - S3 is 13x cheaper
+
+Real-time analytics (Flink → ClickHouse) doesn't use S3.
+But S3 is the foundation for everything else (recovery, compliance, batch, ML).
+```
+
 #### CDC Deep Dive
 ```
 WAL (Write Ahead Log) — PostgreSQL writes every change here automatically
