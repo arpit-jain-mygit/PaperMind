@@ -129,26 +129,26 @@
 Same exact structure as Pattern 2, but with generic tool names (abstractions).
 
 ```
-                                       [App]
+                                          [App]
                                             │
-        ┌─────────────────────────────┬─────────────────────────────┐
-        │                             │                             │
-    WRITE (all)                   WRITE (all)          REQUEST – sync, blocks order
-        │                             │                RT + Near-RT + Another System
-  GB: [RDBMS]                 GB: [RDBMS]                           │
-  TB: [NoSQL]                TB: [NoSQL]                 GB: [Service]
-  PB: [NoSQL /               PB: [NoSQL]                TB: [Service fleet]
-       Distributed RDBMS]     ── idempotency / staging / PB: [Service global
-  ── OLTP source of truth ──     delivery ack log ──      multi-region fleet]
-  GB: 1 node                     (Another System)                   │
-  TB: replicated cluster                                           READ
-  PB: globally distributed,                                         │
-      multi-region                                      GB: [Cache/Features]
-                │                                        TB: [Cache Cluster]
-            READ (log)                                  PB: [Cache
-                │                                           Global]
-  GB: [CDC Tool]                                        ── fraud features ──
-  TB: [CDC Cluster /                                   pre-computed by Stream
+                ┌───────────────────────────┼─────────────────────────────────────────┐
+                │                           │                                          │
+          WRITE (all)                 WRITE (all)                       REQUEST — sync, blocks order
+                │                           │                            RT + Near-RT + Another System
+  GB: [RDBMS]                 GB: [RDBMS]                                            │
+  TB: [NoSQL]                 TB: [NoSQL]                             GB: [Service]
+  PB: [NoSQL /                PB: [NoSQL]                            TB: [Service fleet]
+       Distributed RDBMS]     ── idempotency / staging /             PB: [Service global
+  ── OLTP source of truth ──      delivery ack log ──                      multi-region fleet]
+  GB: 1 node                      (Another System)                              │
+  TB: replicated cluster                                                       READ
+  PB: globally distributed,                                                     │
+      multi-region                                                  GB: [Cache/Features]
+                │                                                   TB: [Cache Cluster]
+          READ (log)                                                PB: [Cache
+                │                                                       Global]
+  GB: [CDC Tool]                                                    ── fraud features ──
+  TB: [CDC Cluster /                                               pre-computed by Stream
        Change Streams]
   PB: [Custom CDC /
        Change Streams /
@@ -156,60 +156,53 @@ Same exact structure as Pattern 2, but with generic tool names (abstractions).
                 │
               WRITE
                 │
-  GB: [Message Bus]         ────────────────────────── WRITE ──→ [Object Storage]
+  GB: [Message Bus]         ────────────────────────────── WRITE ──→ [Object Storage]
   TB: [Message Bus Cluster] raw Parquet, permanent
-  PB: [Message Bus Global]  GB: partitioned by hour
-  ── + Schema Registry ──   TB: partitioned by minute
-  (Another System, all)     PB: partitioned by second
-                │                + column pruning
-          ┌─────┤
-        READ   READ
-          │     │
-  [Service]  [Service]
-  GB: 1 inst   GB: 1 inst
-  TB: cluster  TB: cluster
-  PB: global   PB: global
-  ── OLTP consumers ──
-  all 36 scenarios
-              │
-    ┌─────────┼─────────────────────────────────────────┐
-    │         │                                         │
-─ REAL-TIME ─ NEAR RT ─ BATCH ─
-    │         │         │
- [Stream]  [Micro-batch] [Batch
-  Processing] Engine]    Computing]
-    │         │         │
-  WRITE     WRITE      WRITE
-    │         │         │
-[Real-time [Batch     [Data
- OLAP]     OLAP]      Warehouse]
-    │         │         │
-    └────┬────┴────┬────┘
-         │         │
-    ┌────▼─────────▼────┐
-    │                   │
-  WRITE              WRITE         WRITE
-    │                   │           │
-── ANALYTICS / DASHBOARDS ──    ── ML ──      ── ANALYTICS / DASHBOARDS / ML ──
-    │                   │           │         │
-GB: [Real-time OLAP]    │   GB: [Cache]      │
-TB: [Real-time OLAP]    │   TB: [Cache Clstr]│
-PB: [Real-time OLAP     │   PB: [Cache       │
-    global]             │        Global]      │
-real-time ops          │   ── Feature Store ─│
-+ analytics             │   RT + Near-RT      │
-                      READ                   READ
-                        │         │           │
-          GB: [Dashboards]  GB: [Service] [Dashboards]
-          TB: [Dashboards]  TB: [Service   (Analytics)
-          PB: [Dashboards]  fleet]
-          ops + analytics   PB: [Service   GB/TB/PB: [App GET]
-          RT + Near-RT      global fleet]  pre-computed
-          Analytics +       on-demand      Near-RT + ML
-          Dashboards        RT + ML
+  PB: [Message Bus Global]                                           GB: partitioned by hour
+  ── + Schema Registry ──                                            TB: partitioned by minute
+  (Another System, all scales)                                       PB: partitioned by second
+                │                                                         + column pruning
+          ┌─────┤                                          ┌──────────────┼──────────────┐
+        READ   READ                                        │              │              │
+          │     │                                  ── REAL-TIME ──  ── NEAR RT ──  ── BATCH ──
+  [Service]  [Service]                                     │              │              │
+  GB: 1 inst   GB: 1 inst                      GB: [Stream]     GB: [Compute        GB: [Compute
+  TB: cluster  TB: cluster                         Processing] micro-batch]      nightly]
+  PB: global   PB: global                      TB: [Stream        TB: [Compute      TB: [Compute on
+      fleet        fleet                           Cluster]       on Cloud/          Cloud /
+  ── OLTP consumers ──                         PB: [Stream        Managed]           Managed]
+  all 36 scenarios                                 Global        PB: [Compute on     PB: [Compute on
+                                                Cluster /        Managed /           Managed /
+                                                Serverless]      Serverless]         Serverless]
+                                                always-on         every 5 min        + Orchestration /
+                                                ms latency        Near RT            Managed Composer
+                                                    │                   │                  │
+                              ┌─────────────────────┤                   │          ┌───────┤
+                              │                     │                   │          │       │
+                            WRITE                 WRITE              WRITE       WRITE   WRITE
+                              │                     │                   │          │       │
+          ── ANALYTICS / DASHBOARDS ──         ── ML ──       ── ANALYTICS /  ── ANALYTICS /
+                              │                     │             DASHBOARDS ──   DASHBOARDS / ML ──
+  GB: [Real-time OLAP]        │        GB: [Cache]               │                     │
+  TB: [Real-time OLAP]        │        TB: [Cache Cluster]  GB: [Real-time OLAP /  GB: [Batch OLAP + dbt]
+  PB: [Real-time OLAP         │        PB: [Cache              Batch OLAP]          TB: [Batch OLAP /
+       global]                │             Global]        TB: [Real-time OLAP /        dbt]
+  real-time OLAP              │        ── Feature Store ──       Batch OLAP]       PB: [Batch OLAP /
+  ops + analytics             │        RT + Near-RT ML      PB: [Real-time OLAP /       dbt
+                              │                  │               Batch OLAP]             at scale]
+                            READ               │             Near-RT Analytics               │
+                              │      GB: [ML Service]               │                [ML Registry]
+               GB: [Dashboards] │      TB: [ML Service fleet]       READ               GB: ML Registry
+               TB: [Dashboards] │      PB: [ML Service global  [Dashboards /             TB: ML Registry
+               PB: [Dashboards] │           fleet]               Tableau]               PB: ML Registry /
+               ops dashboard    │      on-demand prediction      Near-RT +              Managed ML
+               RT + Near-RT     │      RT + ML                   Batch
+               Analytics                                        Analytics +
+               + Dashboards        GB/TB/PB: [App GET]          Dashboards
+                                   pre-computed prediction
+                                   Near-RT + ML
 
-
-    ─────────────── Another System – speed determines HOW, scale determines WHERE ──────────────
+    ─────────────── Another System — speed determines HOW, scale determines WHERE ──────────────
 
         REAL-TIME                     NEAR REAL-TIME                  BATCH
   ── always-on consumers ──     ── polling every 5-10 min ──    ── nightly file export ──
@@ -222,11 +215,11 @@ real-time ops          │   ── Feature Store ─│
   │         │         │        Partner]                           Enterprise Queue]
 [Service] [Service] [Service]                                     partner / regulator
   └─────────┴─────────┘
-  Idempotency check – all Another System, all scales
-  DLQ – RT only, all scales
+  Idempotency check — all Another System, all scales
+  DLQ — RT only, all scales
 ```
 
-**Scale substitution – what changes at each tier:**
+**Scale substitution — what changes at each tier:**
 ```
 Component         GB (5GB/day)           TB (5TB/day)              PB (5PB/day)
 ─────────────────────────────────────────────────────────────────────────────────────
@@ -242,8 +235,10 @@ RT OLAP           Real-time OLAP         Real-time OLAP            Real-time OLA
                   (1 node)               (cluster)                 (global)
 Batch OLAP        Batch OLAP (small)     Batch OLAP (med)          Batch OLAP (large)
 Cache/Features    Cache (1 node)         Cache Cluster             Cache Global
+ML Registry       ML Registry            ML Registry               ML Registry
 Object storage    Object Storage         Object Storage            Object Storage
-                  (hourly partition)     (minute partition)        (second partition)
+                  (hourly partition)     (minute partition)        (second partition
+                                                                    + column pruning)
 
 Architecture PATTERN: identical across all 36 scenarios.
 What changes: every component scales out. Pattern never changes.
@@ -252,17 +247,17 @@ What changes: every component scales out. Pattern never changes.
 **How to read this diagram:**
 ```
 Rows = Speed tier (same across GB / TB / PB):
-  Real-time   → Stream Processing → Real-time OLAP → Dashboards
-  Near RT     → Micro-batch → Batch OLAP → Analytics
-  Batch       → Batch Computing → Data Warehouse → ML/Reports
+  Real-time   → Stream Processing path    → Real-time OLAP/Cache (analytics or ML)
+  Near RT     → Compute micro-batch       → Batch OLAP or Batch OLAP/DW
+  Batch       → Compute + Orchestration  → Batch OLAP/DW + dbt
 
 Columns = Use case (same across GB / TB / PB):
-  Analytics / Dashboards → OLAP output
-  ML                     → Feature Store + ML Service
-  Another System         → Consumer groups or polling
+  Analytics / Dashboards → columnar OLAP (faster tier for RT, larger tier for batch)
+  ML                     → Feature Store (RT/Near-RT) or ML Registry (batch training)
+  Another System         → always-on consumers (RT) / polling (Near-RT) / file export (Batch)
 
 Backbone in ALL 36 scenarios:
-  RDBMS → CDC → Message Bus → Object Storage
+  OLTP store → CDC → Message Bus → Object Storage
   Service consumers (OLTP consumers)
   Service via sync HTTP (never async)
 ```
