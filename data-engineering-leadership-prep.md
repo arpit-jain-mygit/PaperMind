@@ -162,20 +162,22 @@ Same exact structure as Pattern 2, but with generic tool names (abstractions).
   ── + Schema Registry ──                                            TB: partitioned by minute
   (Another System, all scales)                                       PB: partitioned by second
                 │                                                         + column pruning
-          ┌─────┤                                          ┌──────────────┼──────────────┐
-        READ   READ                                        │              │              │
-          │     │                                  ── REAL-TIME ──  ── NEAR RT ──  ── BATCH ──
-  [Service]  [Service]                                     │              │              │
-  GB: 1 inst   GB: 1 inst                      GB: [Stream]     GB: [Compute        GB: [Compute
-  TB: cluster  TB: cluster                         Processing] micro-batch]      nightly]
-  PB: global   PB: global                      TB: [Stream        TB: [Compute      TB: [Compute on
-      fleet        fleet                           Cluster]       on Cloud/          Cloud /
-  ── OLTP consumers ──                         PB: [Stream        Managed]           Managed]
-  all 36 scenarios                                 Global        PB: [Compute on     PB: [Compute on
-                                                Cluster /        Managed /           Managed /
-                                                Serverless]      Serverless]         Serverless]
-                                                always-on         every 5 min        + Orchestration /
-                                                ms latency        Near RT            Managed Composer
+          ┌─────┼────────────────────────────────┐
+        READ   READ                              │
+          │     │                    ┌───────────┴───────────────────┐
+  [Service]  [Service]              ── REAL-TIME ── NEAR RT ── BATCH ──
+  GB: 1 inst   GB: 1 inst                      │              │              │
+  TB: cluster  TB: cluster                      │              │              │
+  PB: global   PB: global             GB: [Stream]     GB: [Compute        GB: [Compute
+      fleet        fleet              Processing] micro-batch]      nightly]
+  ── OLTP consumers ──                TB: [Stream        TB: [Compute      TB: [Compute on
+  all 36 scenarios                       Cluster]       on Cloud/          Cloud /
+                                       PB: [Stream        Managed]           Managed]
+                                       Global            PB: [Compute on    PB: [Compute on
+                                       Cluster /         Managed /          Managed /
+                                       Serverless]       Serverless]        Serverless]
+                                       always-on         every 5 min        + Orchestration /
+                                       ms latency        Near RT            Managed Composer
                                                     │                   │                  │
                               ┌─────────────────────┤                   │          ┌───────┤
                               │                     │                   │          │       │
