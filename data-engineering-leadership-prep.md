@@ -3294,6 +3294,23 @@ Architecture change that solves it:
    (5-min refresh)        (on-demand)
 ```
 
+**🎯 Approach Used: Simplified APPROACH 1 + Pull Model**
+```
+Pattern: S3 → Spark → Snowflake (batch + pull model)
+├─ Spark micro-batch every 5 minutes (not continuous)
+├─ Cleans, joins, aggregates data from S3
+├─ Writes to Snowflake via Snowpipe (streaming ingest)
+├─ Both ops and business dashboards query Snowflake
+└─ Latency: 1-3 sec OK (both teams accept 5-15 min delay)
+
+Why this approach:
+├─ Both teams can tolerate 5-min data delay
+├─ Single tool (Snowflake) serves everyone
+├─ Simpler than Scenario 3 (no ClickHouse + Snowflake split)
+├─ No Flink needed (sub-second pipeline not required)
+└─ Cost: cheaper than running separate real-time + batch pipelines
+```
+
 #### Key Design Decisions
 
 ```
@@ -3423,6 +3440,22 @@ Architecture change that solves it:
   adds points    sends orders     generates
   marks processed to restaurant   daily CSV
                   system          to finance
+```
+
+**🎯 Approach Used: DB Polling (Simplified Push Model)**
+```
+Pattern: S3 → Spark → PostgreSQL staging → Polling consumers
+├─ Spark micro-batch every 5-10 minutes
+├─ Reads S3, processes orders, writes to staging table
+├─ Downstream services poll staging table (simpler than Kafka)
+├─ Fraud stays synchronous (always, regardless of speed tier)
+└─ Latency: 5-10 min acceptable for all downstream systems
+
+Why this approach:
+├─ Downstream systems don't need Kafka complexity (offset, consumer groups)
+├─ DB polling is simpler: SELECT * WHERE processed=false
+├─ Idempotency still required but easier implementation
+├─ Matches the SLA: "points within 10 min" ← polling every 5 min works
 ```
 
 #### Key Design Decisions
