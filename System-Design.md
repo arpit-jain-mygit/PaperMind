@@ -1024,18 +1024,31 @@ Promise to customers about uptime:
 ### Uptime vs Downtime
 
 ```
-99% uptime:
-  Downtime per year: 365 × 24 × 60 × 0.01 = 52 minutes
+Formula: Minutes/year × (1 - Uptime%) = Downtime in minutes
+         525,600 minutes/year × downtime% = annual downtime
+
+99% uptime (2 nines):
+  Downtime per year: 365 × 24 × 60 × 0.01 = 5,256 minutes
+                    = 87.6 hours
+                    = 3.65 days per year
   
 99.9% uptime (3 nines):
-  Downtime per year: 365 × 24 × 60 × 0.001 = 5.26 minutes
+  Downtime per year: 365 × 24 × 60 × 0.001 = 525.6 minutes
+                    = 8.76 hours per year
   
 99.99% uptime (4 nines):
-  Downtime per year: 365 × 24 × 60 × 0.0001 = 31.5 seconds
+  Downtime per year: 365 × 24 × 60 × 0.0001 = 52.6 minutes per year
   
 99.999% uptime (5 nines):
-  Downtime per year: 365 × 24 × 60 × 0.00001 = 3.15 seconds
+  Downtime per year: 365 × 24 × 60 × 0.00001 = 5.26 minutes per year
+                    = 5 minutes 15 seconds per year
 ```
+
+**Note on the calculation:**
+- Each additional "nine" reduces downtime by 90%
+- Moving from 99% to 99.9% reduces downtime from 87.6 hours to 8.76 hours
+- Cost increases exponentially: each nine costs ~10x more infrastructure
+- Most production systems aim for 99.99% (4 nines), not 99.999% (5 nines)
 
 ### Real-World SLAs
 
@@ -1052,23 +1065,75 @@ Netflix relies on multiple services:
 ### How to Achieve High Availability
 
 ```
-99.9% (3 nines) - Achievable:
+99.9% (3 nines) - Achievable (8.76 hours downtime/year):
   ✓ Database replication (master-slave)
   ✓ Load balancing
   ✓ Basic failover
+  ✓ Health checks every few minutes
+  Examples: Slack, GitHub, most SaaS
+  Cost: $50K-$200K/year infrastructure
 
-99.99% (4 nines) - Requires:
+99.99% (4 nines) - Industry Standard (52.6 minutes downtime/year):
   ✓ Multi-region deployment
-  ✓ Automated failover
-  ✓ Health monitoring
-  ✓ Regular backup and recovery testing
+  ✓ Automated failover with sub-minute detection
+  ✓ Continuous health monitoring
+  ✓ Regular backup and disaster recovery testing
+  ✓ Redundancy at every layer
+  Examples: AWS, Google Cloud, Stripe, Netflix, Uber
+  Cost: $100K-$500K/year infrastructure
+  🎯 THIS IS THE SWEET SPOT FOR MOST SYSTEMS
 
-99.999% (5 nines) - Extreme:
-  ✓ Planetary-scale redundancy
-  ✓ Sophisticated monitoring
-  ✓ Zero-downtime updates
-  ✗ Very expensive ($$$)
+99.999% (5 nines) - Extreme (5.26 minutes downtime/year):
+  ✓ Planetary-scale redundancy across continents
+  ✓ Sophisticated monitoring + AI-driven anomaly detection
+  ✓ Zero-downtime updates (canary deployments)
+  ✓ Redundant network providers, power sources
+  ✓ Chaos engineering to find failure modes
+  ✗ Very expensive ($5M-$20M+/year infrastructure)
+  ✗ Rarely needed in practice
+  Examples: Nuclear power plants, hospitals, military systems, 911 dispatch
+  🔴 RARELY JUSTIFIABLE FOR COMMERCIAL SYSTEMS
 ```
+
+---
+
+### Real-World SLA Targets
+
+| Type | Company | SLA Target | Reality |
+|---|---|---|---|
+| **Cloud Providers** | AWS, Google Cloud, Azure | 99.99% (4 nines) | Most achieve this |
+| **Payments** | Stripe, Square | 99.99% (4 nines) | Financial regulations require high reliability |
+| **Social Media** | Facebook, Twitter, Instagram | 99.99% (4 nines) | Design for scale + reliability |
+| **Streaming** | Netflix, YouTube | 99.99% (4 nines) | Built for massive scale |
+| **Messaging** | Slack, Discord | 99.9% (3 nines) | "Aim for 99.99%, guarantee 99.9%" |
+| **Search** | Google Search | 99.99% (4 nines) | Geo-distributed, always available |
+| **Ride-sharing** | Uber, Lyft | 99.99% (4 nines) | Safety-critical, but not life-critical |
+| **Critical Infrastructure** | Power grids, hospitals, 911 | 99.999%+ (5+ nines) | Life-critical systems |
+
+---
+
+### Interview Insight: When Asked About 5 Nines
+
+**What to say:**
+```
+"Most commercial systems don't actually need 5 nines because:
+
+1. Cost-benefit is terrible: 10x cost for 1% improvement
+2. You can't achieve it alone: ISPs, cloud providers, 
+   dependencies must also provide 5 nines
+3. Industry standard is 4 nines: This provides 52 minutes 
+   downtime/year, which is acceptable for most businesses
+
+I'd first ask: 'What's the actual business requirement?' 
+Most times the answer is 99.99%, not 99.999%."
+```
+
+**When you DO need 5 nines:**
+- Systems where downtime costs millions per minute
+- Life-critical systems (hospitals, emergency services)
+- National security/military systems
+- Power grid or infrastructure
+- In interviews: Usually a flag that you should push back and ask WHY
 
 ---
 
