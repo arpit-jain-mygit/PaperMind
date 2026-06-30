@@ -122,6 +122,149 @@
 
 ### Generic Full Architecture — All 36 Scenarios (GB + TB + PB)
 
+---
+
+## **Pattern 1: Abstracted Architecture (Tool-Agnostic, Single Pattern)**
+
+All 36 scenarios use this identical pattern. Only tools change with scale (GB → TB → PB).
+
+```
+                                          [App]
+                                            │
+                ┌───────────────────────────┼─────────────────────────┐
+                │                           │                          │
+          WRITE (sync)              WRITE (sync)          REQUEST (sync HTTP)
+                │                           │                          │
+         [RDBMS Store]              [RDBMS Store]            [Service]
+         (OLTP source)              (idempotency/staging)         │
+                │                           │                    READ
+            READ (CDC)                      │                      │
+                │                                          [Cache/Feature Store]
+         [CDC Tool]                                                 │
+                │                                       ┌───────────┘
+              WRITE
+                │
+         [Message Bus]
+                │
+    ┌───────────┼─────────────────────────────────────────┐
+    │           │                                ┌────────┼──────────┐
+  WRITE       WRITE                        ─ REAL-TIME ─ BATCH ─ HISTORICAL ─
+    │           │                              │         │         │
+    │         WRITE                   [Stream Processing][Micro-batch][Batch Comp.]
+    │           │                              │         │         │
+    │           ↓                            WRITE      WRITE      WRITE
+    │       [Data Lake]                       │         │         │
+    │                                  [Real-time OLAP][Batch OLAP][Data Warehouse]
+    │                                       │         │         │
+    └───────────────────┬───────────────────┼─────────┼─────────┘
+                        │                   │         │
+                      WRITE              WRITE      WRITE
+                        │                   │         │
+        ── ANALYTICS / DASHBOARDS ──  ── ML ──  ── ANALYTICS/DASHBOARDS/ML ──
+                        │                   │         │
+                  [Dashboards]         [ML Registry][Export/Reports]
+
+
+Architecture PATTERN (FIXED across all 36 scenarios):
+  RDBMS → CDC Tool → Message Bus → [3 Parallel Processing Tiers] → Storage/Analytics
+  
+The 3 Processing Tiers (ALWAYS):
+  ├─ Real-time (1s latency)    → Stream Processing → Real-time OLAP
+  ├─ Batch (5-15min)           → Micro-batch Engine → Batch OLAP
+  └─ Historical (nightly)      → Batch Computing → Data Warehouse
+
+Scale Dimension (CHANGES, tool selection differs):
+  Single Node (5GB) → Cluster (5TB) → Global (5PB)
+  Pattern stays identical; every component scales independently.
+```
+
+**Abstraction Mapping:**
+- **RDBMS** = PostgreSQL / MySQL / Oracle / CockroachDB
+- **NoSQL** = Cassandra / DynamoDB / Bigtable / ScyllaDB
+- **CDC Tool** = Debezium / Change Streams / Custom CDC / Datastream
+- **Message Bus** = Kafka / Pub/Sub / Kinesis / Pulsar
+- **Stream Processing** = Flink / Spark Streaming / Beam / Kafka Streams
+- **Real-time OLAP** = ClickHouse / Druid / Pinot / TimescaleDB
+- **Batch OLAP** = Snowflake / BigQuery / Redshift / Athena
+- **Data Warehouse** = Snowflake / BigQuery / Redshift / Hive
+- **Cache/Features** = Redis / Aerospike / DynamoDB / Memcached
+- **Data Lake** = S3 / GCS / ADLS / MinIO
+- **ML Registry** = MLflow / SageMaker / Vertex AI / Kubeflow
+- **Orchestration** = Airflow / Prefect / Dagster / Cloud Composer
+
+---
+
+## **Tool Selection Matrix — All Alternatives (GB/TB/PB)**
+
+| Component | 5GB/day (Single Node) | 5TB/day (Cluster) | 5PB/day (Global) |
+|-----------|----------------------|-------------------|------------------|
+| **OLTP Store** | **PostgreSQL** / MySQL / Oracle / MariaDB | **Cassandra** / DynamoDB / ScyllaDB / HBase | **Spanner** / Bigtable / CockroachDB |
+| **CDC Tool** | **Debezium** / Maxwell / Kafka Connect / DMS | **Debezium Cluster** / DynamoDB Streams / Kinesis | **Bigtable Change Streams** / Spanner Change Streams / Custom CDC |
+| **Message Bus** | **Kafka** (3 brokers) / RabbitMQ / NATS / Redis Streams | **Kafka Cluster** (100+ partitions) / Kinesis / Pulsar | **Google Pub/Sub** / Kafka Global / Azure Event Hubs |
+| **Stream Processing** | **Apache Flink** (1 node) / Spark Streaming / Kafka Streams | **Flink Cluster** / Spark Structured Streaming / Storm | **Beam on Dataflow** / Flink Cluster (global) / Spark Streaming |
+| **Real-time OLAP** | **ClickHouse** (1 node) / TimescaleDB / QuestDB / InfluxDB | **Druid / Pinot** (cluster) / ClickHouse cluster / Timescale | **Pinot** (global) / Druid hyperscale / ClickHouse |
+| **Batch OLAP** | **Snowflake** (small) / BigQuery / Athena / Presto / PostgreSQL | **BigQuery / Redshift** / Snowflake / Athena / Trino | **BigQuery XL / Snowflake XL** / Redshift Spectrum / Athena |
+| **Data Warehouse** | **Snowflake** / PostgreSQL / BigQuery / Redshift | **BigQuery** / Redshift / Snowflake / Athena | **BigQuery** (multi-region) / Snowflake / Redshift |
+| **Cache/Feature Store** | **Redis** (1 node) / Memcached / DynamoDB / Tarantool | **Redis Cluster** / DynamoDB / Memcached / Coherence | **Aerospike** / Redis Cluster / DynamoDB Global |
+| **Data Lake** | **Amazon S3** (hourly) / GCS / ADLS / MinIO / HDFS | **S3** (minute partition) / GCS / ADLS / Wasabi / Backblaze | **GCS / S3** (second partition) / ADLS / S3-compatible |
+| **ML Registry** | **MLflow** / DVC / Weights & Biases / Kubeflow | **SageMaker** / Kubeflow / Weights & Biases / Neptune | **Vertex AI** / SageMaker / AzureML / Databricks |
+| **Orchestration** | **Cron / Prefect / Dagster** / APScheduler / Luigi | **Apache Airflow** / Prefect / Dagster / Temporal / Flyte | **Cloud Composer / Airflow** / Prefect Cloud / Dagster Cloud |
+
+**Legend:** Primary tool in **bold** → Alternatives after "/"
+
+---
+
+## **36 Scenarios — Leaf-Level Mapping (9 Use Cases × 4 Scales)**
+
+| Use Case | Real-time (1s) | Near-RT (5-15min) | Batch (nightly) |
+|----------|---|---|---|
+| **Analytics & Dashboards** | **G1**, **T13**, **P25** | **G5**, **T17**, **P29** | **G9**, **T21**, **P33** |
+| **ML Training & Serving** | **G2**, **T14**, **P26** | **G6**, **T18**, **P30** | **G10**, **T22**, **P34** |
+| **Another System / Export** | **G4**, **T16**, **P28** | **G8**, **T20**, **P32** | **G12**, **T24**, **P36** |
+
+**Example Progression (G1 → T13 → P25):**
+- **G1:** PostgreSQL → Debezium → Kafka (3 brokers) → Flink → ClickHouse
+- **T13:** Cassandra → Debezium Cluster → Kafka (100+ partitions) → Flink Cluster → Druid/Pinot
+- **P25:** Spanner → Bigtable Change Streams → Pub/Sub → Beam/Dataflow → Pinot (global)
+
+---
+
+## **Architecture Invariants & Golden Rules**
+
+**What NEVER Changes (identical across all 36):**
+```
+BACKBONE: OLTP → CDC → Message Bus → [3 Processing Tiers] → Storage
+
+3 Parallel Processing Tiers:
+  ├─ Real-time (1s latency)    → Stream Processing → Real-time OLAP → Analytics
+  ├─ Batch (5-15min)           → Micro-batch Engine → Batch OLAP → Analytics
+  └─ Historical (nightly)      → Batch Computing → Data Warehouse → Training/Reports
+
+Serving Layer: Cache/Feature Store (always separate, feeds both real-time & batch)
+External Outputs: Dashboards + ML Models + Another System (consumers)
+```
+
+**What SCALES with GB→TB→PB:**
+```
+Single Node         →  Cluster               →  Global
+PostgreSQL (1)      →  Cassandra (sharded)   →  Spanner (multi-region)
+Debezium (1)        →  Debezium Cluster      →  Change Streams (native)
+Kafka (3 brokers)   →  Kafka (100+ parts)    →  Pub/Sub (global)
+Flink (1 node)      →  Flink Cluster         →  Beam/Dataflow (serverless)
+ClickHouse (1)      →  Druid/Pinot (10-30)   →  Pinot (global)
+Hourly partition    →  Minute partition      →  Second partition
+1 instance          →  10s-100s instances    →  1000s (global)
+```
+
+**Golden Rule:** Architecture pattern = FIXED. Tools scale out independently. Choose tool alternatives based on:
+- Scale (GB→TB→PB) determines which tool version
+- Cost preference determines alternative (open-source vs managed)
+- Ops burden determines vendor (self-managed vs cloud-native)
+
+---
+
+## **Pattern 2: Specific Tools (Original — For Reference)**
+
 ```
                                           [App]
                                             │
