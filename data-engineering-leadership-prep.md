@@ -2143,37 +2143,34 @@ Architecture change that solves it:
   PostgreSQL freed: handles only OLTP (order saves), nothing else
 ```
 
-#### Full Architecture
+#### Full Architecture — Sequential Data Flow
 
+| Step | From | To | Action | Latency | Importance | Why |
+|------|------|-----|--------|---------|-----------|-----|
+| 1 | Customer | App | Places order via HTTP | ~500ms | MEDIUM | Triggers flow, not unique to analytics |
+| 2 | App | PostgreSQL | WRITE order record | ~20ms | HIGH | OLTP source of truth, required |
+| 3 | PostgreSQL | Debezium CDC | Writes change to WAL | <1ms | **CRITICAL** | Solves dual-write, separates OLTP from OLAP |
+| 4 | Debezium CDC | Kafka | WRITE order event | ~50ms | **CRITICAL** | Decouples analytics from OLTP operations |
+| 5a | Kafka | S3 | WRITE raw Parquet | ~100ms | LOW | Optional: backup/archive only |
+| 5b | Kafka | Payment Service | READ + process | ~10ms | MEDIUM | Business op, independent of analytics |
+| 5c | Kafka | Driver Service | READ + assign | ~10ms | MEDIUM | Business op, independent of analytics |
+| 5d | Kafka | Flink | READ events | ~10ms | **CRITICAL** | Core to real-time aggregation requirement |
+| 6 | Flink | Flink (RAM) | Pre-aggregate state | <1ms | **CRITICAL** | Solves slow table scan problem (key!) |
+| 7 | Flink | ClickHouse | WRITE agg rows | ~50ms | **CRITICAL** | Real-time OLAP storage, fast queries |
+| 8 | ClickHouse | Grafana | READ aggregations | ~10ms | **CRITICAL** | Queryable analytics for dashboard |
+| 9 | Grafana | Ops Dashboard | Display + refresh | <2sec | HIGH | Delivers analytics to end users |
+
+**Legend:**
+- *Steps 5a-5d run in parallel (independent)*
+- **CRITICAL** = Required for scenario (real-time analytics)
+- **HIGH** = Important for system, not unique to scenario
+- **MEDIUM** = Supporting role
+- **LOW** = Optional/backup
+
+**Critical Path (solves the core problem):**
 ```
-[Customer places order]
-        ↓
-[App] ──WRITE (HTTP)──→ [PostgreSQL]        ← saves order (OLTP)
-                               │
-                         READ (WAL)
-                               │
-                        [Debezium CDC]
-                               │
-                             WRITE
-                               │
-                           [Kafka] ──────WRITE──────→ [S3]
-                               │                  raw Parquet files
-                    READ       │       READ
-              ┌────────────────┼────────────┐
-              ↓                ↓            ↓
-        [Payment]          [Driver]      [Flink]
-         Service            Service     aggregates
-          OLTP               OLTP       every 10 sec
-                                           │
-                                         WRITE
-                                           │
-                                      [ClickHouse]
-                                      pre-aggregated rows
-                                           │
-                                         READ
-                                           │
-                                       [Grafana]
-                                      auto-refresh 10 sec
+PostgreSQL → CDC → Kafka → Flink → ClickHouse → Grafana
+(Separates OLTP from OLAP, enables real-time analytics without PostgreSQL CPU spikes)
 ```
 
 #### Quick Recap — New Concepts Introduced
