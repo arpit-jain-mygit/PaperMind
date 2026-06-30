@@ -26,6 +26,18 @@
 
 ## Table of Contents
 
+- [Generic Full Architecture — All 36 Scenarios](#generic-full-architecture--all-36-scenarios-gb--tb--pb)
+  - [Generic Architecture Diagram for GB Scenarios](#generic-architecture-diagram-for-gb-scenarios-5gbday)
+  - [Abstraction Mapping](#abstraction-mapping)
+  - [Tool Selection Matrix](#tool-selection-matrix--all-alternatives-gbtbpb)
+  - [36 Scenarios — Leaf-Level Mapping](#36-scenarios--leaf-level-mapping-9-use-cases--4-scales)
+  - [Components Deep Dive: Flink & ClickHouse](#components-deep-dive-flink--clickhouse)
+  - [Snowflake: Batch Analytics Data Warehouse](#snowflake-batch-analytics-data-warehouse)
+  - [Fact & Dimension Tables: Star Schema Pattern](#fact--dimension-tables-star-schema-pattern)
+  - [Scheduled SQL Queries in Snowflake](#scheduled-sql-queries-in-snowflake)
+  - [Architecture Invariants & Golden Rules](#architecture-invariants--golden-rules)
+- [Pattern 2: Specific Tools (Original — For Reference)](#pattern-2-specific-tools-original--for-reference)
+- [MAANG Interview Questions by Scale](#maang-interview-questions-by-scale)
 - [TODO — Scenarios Not Yet Covered](#todo--scenarios-not-yet-covered)
 - [The 3 Fundamental Questions](#the-3-fundamental-questions)
 - [The Mental Model](#the-mental-model-data-factory)
