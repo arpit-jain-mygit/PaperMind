@@ -529,10 +529,10 @@ Snowflake is a **cloud data warehouse** that stores cleaned, transformed, histor
 - **ClickHouse:** Real-time (1s latency), always-on, live dashboards
 - **Snowflake:** Batch (nightly), settled historical data, business intelligence
 
-### **How Data Flows: Spark → Snowflake → Analytics**
+### **How Data Flows: Spark → dbt → Snowflake Star Schema → Analytics**
 
 ```
-UPSTREAM: Batch Processing (Nightly)
+STEP 1: SPARK reads and cleans raw data
 ┌──────────────────────────────────┐
 │ Object Storage (S3/GCS)          │
 │ Raw Parquet files (daily)        │
@@ -542,32 +542,93 @@ UPSTREAM: Batch Processing (Nightly)
         │ SPARK (Batch Processing) │
         │                          │
         │ • Read raw files         │
-        │ • Join multiple tables   │
-        │ • Clean & transform data │
-        │ • dbt: SQL transformations
-        │ • Output: Clean tables   │
+        │ • Join tables (if needed)│
+        │ • Clean data & types     │
+        │ • Remove duplicates      │
+        │ • Output: Staging tables │
         └──────────────┬───────────┘
                        ↓
-                   (WRITE)
-                       ↓
-        ┌──────────────────────────┐
-        │ SNOWFLAKE (Data Warehouse)
-        │                          │
-        │ Stores 3 types of tables:│
-        │ • fct_orders (100M rows) │
-        │ • dim_customers (10M)    │
-        │ • kpi_daily (1 row/day)  │
-        └──────────────┬───────────┘
+        Staging tables loaded to Snowflake:
+        ├─ stg_orders (raw cleaned, 100M rows)
+        ├─ stg_customers (raw cleaned, 10M rows)
+        └─ stg_restaurants (raw cleaned, 50K rows)
 
-DOWNSTREAM: Analytics
+STEP 2: dbt TRANSFORMS raw data into STAR SCHEMA
+        (dbt runs SQL on Snowflake, creates new tables)
+        
+        ┌──────────────────────────────────┐
+        │ dbt (Data Build Tool)            │
+        │                                   │
+        │ Reads staging tables, creates:   │
+        │ • fct_orders (fact table)        │
+        │ • dim_customers (dimension)      │
+        │ • dim_restaurants (dimension)    │
+        │ • dim_dates (dimension)          │
+        │ • kpi_daily (summary)            │
+        └──────────────┬───────────────────┘
                        ↓
-        ┌──────────────────────────┐
-        │ • Dashboards (Tableau)   │
-        │ • BI Reports (Looker)    │
-        │ • ML Training (features) │
-        │ • Executive KPIs         │
-        └──────────────────────────┘
+
+STEP 3: SNOWFLAKE stores the STAR SCHEMA
+        ┌──────────────────────────────────┐
+        │ SNOWFLAKE Data Warehouse         │
+        │                                   │
+        │ Production tables (star schema):  │
+        │ • fct_orders (100M rows)         │
+        │ • dim_customers (10M rows)       │
+        │ • dim_restaurants (50K rows)     │
+        │ • dim_dates (15K rows)           │
+        │ • kpi_daily (1 row per day)      │
+        │                                   │
+        │ Ready for analytics queries      │
+        └──────────────┬───────────────────┘
+
+DOWNSTREAM: Analytics queries the STAR SCHEMA
+                       ↓
+        ┌──────────────────────────────────┐
+        │ Dashboards query fct + dims:     │
+        │ • Dashboards (Tableau)           │
+        │ • BI Reports (Looker)            │
+        │ • ML Training (features)         │
+        │ • Executive KPIs                 │
+        └──────────────────────────────────┘
 ```
+
+### **The Key Insight: Spark Doesn't Create Star Schema**
+
+**Important:** Spark outputs **staging tables** (raw, cleaned data), NOT star schema.
+
+The **star schema is created by dbt** (data build tool) which:
+1. Reads Spark's staging tables
+2. Deduplicates and models the data
+3. Creates fact tables (fct_orders) and dimension tables (dim_customers)
+4. Writes results back to Snowflake
+
+**Flow breakdown:**
+
+```
+Spark Output (staging):
+├─ stg_orders: order_id, customer_id, restaurant_id, amount, date
+│              (raw data, just cleaned)
+├─ stg_customers: customer_id, name, email, segment
+│                 (raw data, just cleaned)
+└─ stg_restaurants: restaurant_id, name, city, cuisine
+                    (raw data, just cleaned)
+                    ↓
+                dbt transforms ↓
+                    ↓
+dbt Output (star schema):
+├─ fct_orders: order_id, customer_id, restaurant_id, amount
+│              (fact table - numeric transactions)
+├─ dim_customers: customer_id, name, segment, city, lifetime_value
+│                 (dimension - rich customer details)
+└─ dim_restaurants: restaurant_id, name, city, cuisine, rating
+                    (dimension - rich restaurant details)
+```
+
+**Why this separation?**
+- **Spark:** Fast ETL (Extract, Transform, Load) of raw data
+- **dbt:** Applies business logic and creates analytics-ready tables
+- **Snowflake:** Stores star schema and serves fast queries
 
 ### **What Snowflake Stores (3 Types of Tables)**
 
