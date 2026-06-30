@@ -1980,6 +1980,117 @@ The speed tier tells you HOW OFTEN to compute (continuous vs 5-min vs nightly).
 The use case tells you WHERE to store (ClickHouse vs Redis vs Snowflake).
 ```
 
+---
+
+### NRT (Near Real-Time) Storage Options — Beyond Snowflake
+
+**For NRT, Snowflake is the DEFAULT but NOT the only choice.**
+
+After Spark micro-batch (every 5-10 min), you can write to:
+
+```
+OPTION 1: Snowflake (Most Common)
+┌─────────────────────────────────────────────────────────────────┐
+│ Spark → Snowflake (Snowpipe) → Tableau/Looker                  │
+│ ✓ Powerful SQL, joins, window functions, scales to PB           │
+│ ✓ Latency: 3-10 sec queries (acceptable for NRT)               │
+│ ✗ Cons: Expensive, overkill for simple dashboards              │
+│ Use when: Complex SQL + business logic needed                   │
+└─────────────────────────────────────────────────────────────────┘
+
+OPTION 2: ClickHouse (If you need < 100ms queries)
+┌─────────────────────────────────────────────────────────────────┐
+│ Spark → ClickHouse (batch inserts) → Grafana/Tableau           │
+│ ✓ <100ms query latency (faster than Snowflake)                 │
+│ ✓ Much cheaper than Snowflake for same volume                   │
+│ ✗ No complex joins, not a data warehouse                        │
+│ Use when: Need fast ops dashboard, simpler queries              │
+└─────────────────────────────────────────────────────────────────┘
+
+OPTION 3: PostgreSQL (If you already have it)
+┌─────────────────────────────────────────────────────────────────┐
+│ Spark → PostgreSQL (upsert) → Tableau/Metabase                 │
+│ ✓ Simple, cheap, good SQL support                               │
+│ ✓ Latency: 1-5 sec queries                                      │
+│ ✗ Doesn't scale to PB, not columnar (slow aggregations)        │
+│ Use when: Small team, keep it simple, already have PostgreSQL   │
+└─────────────────────────────────────────────────────────────────┘
+
+OPTION 4: Redis (For pre-computed metrics only)
+┌─────────────────────────────────────────────────────────────────┐
+│ Spark → Redis (store computed values) → API reads directly      │
+│ ✓ <2ms latency, in-memory, very fast                            │
+│ ✗ No complex queries, only pre-computed aggregations            │
+│ Use when: "Total orders today" = simple number in Redis GET     │
+└─────────────────────────────────────────────────────────────────┘
+
+OPTION 5: TimescaleDB / InfluxDB (For time-series metrics)
+┌─────────────────────────────────────────────────────────────────┐
+│ Spark → TimescaleDB → Grafana                                   │
+│ ✓ Optimized for time-series, fast on timestamp ranges           │
+│ ✓ Latency: 10-50ms                                              │
+│ ✗ Only for time-series (not business tables)                    │
+│ Use when: "CPU%, latency, order rate by time" metrics           │
+└─────────────────────────────────────────────────────────────────┘
+
+OPTION 6: DuckDB (For embedded analytics)
+┌─────────────────────────────────────────────────────────────────┐
+│ Spark → DuckDB (parquet file) → App queries in-process         │
+│ ✓ No separate DB to operate, free, columnar, fast              │
+│ ✓ Latency: 100-500ms                                            │
+│ ✗ Single-file, not multi-user, embedded only                    │
+│ Use when: Don't want to operate a database                      │
+└─────────────────────────────────────────────────────────────────┘
+
+DECISION FRAMEWORK FOR NRT:
+┌─────────────────────────────────────────────────────────────────┐
+│ Need <10ms queries?                                              │
+│   → ClickHouse or Redis (pre-computed)                          │
+│                                                                  │
+│ Need complex SQL + joins?                                       │
+│   → Snowflake or PostgreSQL                                     │
+│                                                                  │
+│ Only have simple key-value lookups?                             │
+│   → Redis or DuckDB                                             │
+│                                                                  │
+│ Already running PostgreSQL/MySQL?                               │
+│   → Use it (faster than learning Snowflake)                     │
+│                                                                  │
+│ Data is time-series metrics?                                    │
+│   → TimescaleDB or InfluxDB                                     │
+│                                                                  │
+│ Want cheapest option?                                           │
+│   → PostgreSQL or ClickHouse or DuckDB                          │
+└─────────────────────────────────────────────────────────────────┘
+
+COMMON NRT PATTERNS IN PRODUCTION:
+
+Pattern 1 — Ops Dashboard (fast queries, cheap)
+  Spark → ClickHouse → Grafana
+  Why: <100ms queries, internal only, no cold start
+
+Pattern 2 — Business Dashboard (complex analysis)
+  Spark → Snowflake (Snowpipe) → Tableau
+  Why: Complex SQL, executives, scales well
+
+Pattern 3 — API Metrics (pre-computed cards)
+  Spark → Redis → Custom API
+  Why: <2ms reads for "Today's Stats" cards
+
+Pattern 4 — Hybrid (Multiple audiences)
+  Spark writes to THREE places:
+    ├─ ClickHouse (ops dashboard)
+    ├─ Snowflake (business analytics)
+    └─ Redis (API metrics)
+  Why: Different teams, different latency needs, same source
+
+RULE OF THUMB:
+"Snowflake is default because it's powerful and scales.
+But match the storage to your query patterns and latency needs.
+Don't use Snowflake for simple aggregations (use ClickHouse).
+Don't use ClickHouse for complex analytics (use Snowflake)."
+```
+
 ### All 6 Fundamentals — Summary
 
 | Fundamental | Core Question | Key Takeaway |
