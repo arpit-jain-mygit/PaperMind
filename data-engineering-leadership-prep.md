@@ -1917,6 +1917,69 @@ Raw trip data
 
 ---
 
+### Tech Stack by Speed Tier (Quick Reference)
+
+```
+REAL-TIME (RT) — Sub-second to 30 seconds
+────────────────────────────────────────────────────────────────────
+Pipeline: Data → Kafka → Flink → ??? (depends on use case)
+
+Storage options:
+  ├─ Analytics/Dashboards → ClickHouse + Grafana (50-100ms)
+  ├─ ML Inference → Redis + ML Service (<2ms features)
+  └─ Another System → Kafka Consumers + idempotency (<3 sec)
+
+Key: Flink = always-on stream processor (expensive, pays for speed)
+
+
+NEAR REAL-TIME (NRT) — 5-15 minutes
+────────────────────────────────────────────────────────────────────
+Pipeline: Data → Kafka → S3 → Spark (every 5-10 min) → ???
+
+Storage options:
+  ├─ Analytics/Dashboards → Snowflake + Snowpipe (3-10 sec)
+  ├─ ML Inference → Redis (pre-computed predictions)
+  └─ Another System → PostgreSQL staging + polling (5-10 min)
+
+Key: Spark micro-batch = cheaper, acceptable for non-critical paths
+
+
+BATCH — Hours to Daily
+────────────────────────────────────────────────────────────────────
+Pipeline: Data → Kafka → S3 → Airflow → Spark (nightly) → dbt → Snowflake
+
+All use cases → Snowflake (via dbt transformations):
+  ├─ Analytics: Historical queries, revenue trends
+  ├─ ML Training: Historical features for models
+  ├─ Dashboards: Executive KPIs, weekly/monthly reports
+  └─ Exports: Partner files, regulatory reports
+
+Key: Spark nightly + dbt = cheapest, most flexible (fully settled)
+
+
+STORAGE TOOL DECISION MATRIX:
+┌──────────────┬────────────────────┬──────────────┬──────────────────┐
+│ Tool         │ Best For           │ Latency      │ When to Use      │
+├──────────────┼────────────────────┼──────────────┼──────────────────┤
+│ ClickHouse   │ Aggregations       │ <100ms       │ RT dashboards    │
+│ Redis        │ Features/KV pairs  │ <2ms         │ RT ML + fraud    │
+│ Snowflake    │ Analytics queries  │ 3-10 sec     │ NRT + Batch      │
+│ Kafka        │ Events stream      │ <3 sec       │ RT downstream    │
+│ S3           │ Archive/backup     │ N/A          │ All (data lake)  │
+└──────────────┴────────────────────┴──────────────┴──────────────────┘
+
+CRITICAL INSIGHT:
+❌ WRONG: "All RT → ClickHouse, All NRT → Snowflake, All Batch → Snowflake"
+✅ RIGHT: Storage choice depends on USE CASE, not just speed:
+    • Dashboard trend (RT) → ClickHouse
+    • ML features (RT) → Redis
+    • Dashboard refresh (NRT) → Snowflake
+    • Finance report (Batch) → Snowflake
+
+The speed tier tells you HOW OFTEN to compute (continuous vs 5-min vs nightly).
+The use case tells you WHERE to store (ClickHouse vs Redis vs Snowflake).
+```
+
 ### All 6 Fundamentals — Summary
 
 | Fundamental | Core Question | Key Takeaway |
