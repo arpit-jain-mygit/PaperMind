@@ -4,6 +4,68 @@ A comprehensive guide covering foundational system design concepts and detailed 
 
 ---
 
+## Table of Contents
+
+### Chapter 1: Scale from Zero to Millions of Users
+1. [Executive Summary](#executive-summary)
+2. [Single Server Setup](#single-server-setup)
+3. [Scaling Web Tier](#scaling-web-tier)
+4. [Scaling Database Tier](#scaling-database-tier)
+5. [Adding Cache Layer](#adding-cache-layer)
+6. [Content Delivery Network (CDN)](#content-delivery-network-cdn)
+7. [Stateless vs Stateful Architecture](#stateless-vs-stateful-architecture)
+8. [Multiple Data Centers](#multiple-data-centers)
+9. [Message Queue](#message-queue)
+10. [Complete Architecture](#complete-architecture-scalable-web-application-social-media-example)
+11. [When to Use This Architecture](#when-to-use-this-architecture)
+12. [Key Takeaways](#key-takeaways)
+
+### Chapter 2: Back-of-the-Envelope Estimation
+1. [Quick Cheat Sheet (Printer-Friendly)](#quick-cheat-sheet-memorize-these-printer-friendly-3-column)
+2. [Executive Summary](#executive-summary)
+3. [Power of Two](#power-of-two)
+4. [Latency Numbers Every Programmer Should Know](#latency-numbers-every-programmer-should-know)
+5. [Availability Numbers](#availability-numbers)
+6. [Estimation Techniques](#estimation-techniques)
+7. [Real-World Example: Twitter](#real-world-example-twitter)
+8. [Tips for Estimation](#tips-for-estimation)
+
+### Chapter 3: A Framework for System Design Interviews
+*(Note: Chapter 3.5 below is the primary framework)*
+
+### Chapter 3.5: The Universal System Design Framework ⭐ START HERE
+1. [Quick Reference Table (7 Steps)](#quick-reference-table-print--use-in-interviews)
+2. [Technical Approaches: When to Use Each](#technical-approaches-when-to-use-each-purpose-based-guide)
+3. [STEP 1: Clarify Functional Requirements](#step-1-clarify-functional-requirements-5-min)
+4. [STEP 2: Clarify Non-Functional Requirements & Scale](#step-2-clarify-non-functional-requirements--scale-5-min)
+5. [STEP 3: Generic Blueprint](#step-3-generic-blueprint-high-level-design---with-technical-approaches)
+6. [STEP 4: Customize Blueprint](#step-4-customize-blueprint-for-your-system)
+7. [STEP 5: Back-of-Envelope Estimation](#step-5-back-of-envelope-estimation-5-min)
+8. [STEP 6: Design Deep-Dives](#step-6-design-deep-dives-nfrs)
+9. [STEP 7: Verify Growth & Constraints](#step-7-verify-growth--constraints)
+10. [Complete Worked Example: Design Uber](#complete-worked-example-design-uber)
+
+### Chapter 8: Design a URL Shortener
+1. [Executive Summary](#executive-summary)
+2. [Problem Statement](#problem-statement)
+3. [Why URL Shortening Matters](#why-url-shortening-matters)
+4. [Back of Envelope Estimation](#back-of-envelope-estimation)
+5. [High-Level Design](#high-level-design)
+6. [Hash Functions & Algorithms](#hash-functions--algorithms)
+7. [Algorithm Decision Matrix](#algorithm-decision-matrix)
+8. [Deep Dive Design](#deep-dive-design)
+9. [Architecture Decisions](#architecture-decisions)
+10. [Interview Q&A](#interview-qa)
+
+### CHUBB Interview Question: Design a Unique Code Generator
+1. [The Problem](#the-problem)
+2. [Approach 1: RDBMS (Why it Fails)](#approach-1-rdbms--fails)
+3. [Approach 2: Pre-Generation + Queue (Works)](#approach-2-pre-generation--queue--works)
+4. [How It Really Works](#how-it-really-works)
+5. [Performance Comparison](#performance-comparison)
+
+---
+
 
 # Chapter 1: Scale from Zero to Millions of Users
 
