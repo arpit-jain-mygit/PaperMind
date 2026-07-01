@@ -947,122 +947,172 @@ QPS Calculation:                   │  Storage Calculation:
 
 ---
 
-## 🎯 QPS ↔ DATA GENERATION BRIDGE (Print This!)
+## 🎯 QPS ↔ ALL FORMULAS DEPENDENCY FLOW (Print This!)
 
-**PRINT IN LANDSCAPE MODE - FITS ON 1 PAGE**
+**PRINT IN LANDSCAPE MODE - FITS ON 1-2 PAGES**
 
-### Left Column: QPS Formula | Right Column: Data Derivation Formula
+### Complete Flow: How All Formulas Depend on QPS
 
 ```
 ═══════════════════════════════════════════════════════════════════════════════
-              QPS FORMULA ↔ DATA GENERATION BRIDGE
+                    QPS: THE MASTER INPUT FOR ALL
 ═══════════════════════════════════════════════════════════════════════════════
 
-LEFT: CALCULATE QPS                    │  RIGHT: DERIVE DATA FROM QPS
-───────────────────────────────────────┼──────────────────────────────────────
-
-STEP 1: Off-peak QPS                   │  STEP 1: Split QPS by Operation
-  = (DAU × R) ÷ 86,400                 │    Read_ratio = Ratio ÷ (Ratio + 1)
-                                       │    Write_ratio = 1 ÷ (Ratio + 1)
-                                       │    Write_QPS = Peak_QPS × Write_ratio
-STEP 2: Peak QPS                       │
-  = Off-peak × P                       │  STEP 2: Calculate Data Per Second
-                                       │    Data/sec = Write_QPS × Bytes/write
-STEP 3: Total Daily Requests           │
-  = (Off × 3,600 × Avg_hrs) +          │  STEP 3: Convert to Daily Per User
-    (Peak × 3,600 × Peak_hrs)          │    Daily/user = (Data/sec × 86,400)
-                                       │                 ÷ DAU
-STEP 4: Servers Needed                 │
-  = Peak ÷ Server_capacity             │  STEP 4: Use in Storage Formula
-                                       │    (Feed derived value to Storage!)
-
-───────────────────────────────────────────────────────────────────────────────
-EXAMPLE: Twitter (300M DAU, 20 req/user/day)
-───────────────────────────────────────────────────────────────────────────────
-
-QPS CALCULATION:                       │  DATA DERIVATION:
-
-Off-peak QPS:                          │  Peak QPS: 277,776 (from QPS formula)
-  (300M × 20) ÷ 86,400                 │  Read:Write ratio: 10:1
-  = 69,444 QPS                         │    Write_ratio = 1 ÷ 11 = 0.0909
-                                       │    Write_QPS = 277,776 × 0.0909
-Peak QPS:                              │               = 25,252 writes/sec
-  69,444 × 4 = 277,776 QPS             │
-                                       │  Data per write operation:
-Daily Requests:                        │    Tweet (10%): 500 bytes
-  Off: 69K × 3,600 × 19 = 4.72B       │    Like (50%): 100 bytes
-  Peak: 277K × 3,600 × 5 = 4.97B      │    Retweet (20%): 100 bytes
-  Total: 9.69 billion requests/day    │    Other (20%): 50 bytes
-                                       │    Weighted avg: 130 bytes
-Servers (500 QPS/server):              │
-  Off-peak: 139 servers                │  Data per second:
-  Peak: 556 servers                    │    25,252 × 130 = 3,282,760 B/sec
-  With 2X redundancy: 1,112 peak       │                 = 3.28 MB/sec
-
-                                       │  Daily data per user:
-                                       │    3.28 MB/sec × 86,400 sec
-                                       │    ÷ 300M users
-                                       │    = 0.94 MB/user/day
-
-───────────────────────────────────────────────────────────────────────────────
-KEY INSIGHT: ONE INPUT DRIVES BOTH
-───────────────────────────────────────────────────────────────────────────────
-
-"Requests per user per day" = 20 requests
-
-    ↓ (QPS Formula)
+INPUT: "Requests per user per day" = 20
+                │
+                ↓
+        ┌───────────────┴───────────────┐
+        │                               │
+    QPS FORMULA                    DATA DERIVATION
+        │                               │
+        ↓                               ↓
+Peak QPS = 277,776              Data/user = 0.94 MB/day
     
-Peak QPS = 277,776
+        │                               │
+        ├─────────────────┬─────────────┼────────────────┬──────────────┐
+        ↓                 ↓             ↓                ↓              ↓
+    SERVERS          BANDWIDTH    CACHING LAYER    STORAGE FORMULA  DATABASE
+    556 servers      44 Gbps      500 PB cache     4,380 PB         1.2 PB
+                                  (80% hit rate)   (5 years)        (with indexes)
 
-    ↓ (Data Derivation)
-    
-Derived Data/user = 0.94 MB/day
+═══════════════════════════════════════════════════════════════════════════════
 
-    ↓ (Feed into Storage Formula)
-    
-Storage needed = 4,380 PB (for 5-year retention)
-
+STEP 1: QPS FORMULA (Primary)
 ───────────────────────────────────────────────────────────────────────────────
-COMPARISON: DERIVED vs ASSUMED DATA
-───────────────────────────────────────────────────────────────────────────────
-
-Method                 Value            │  What It Represents
-──────────────────────────────────────────────────────────────────────────────
-Derived (from writes)  0.94 MB/user     │  Actual data written to DB
-Assumed (all-in)       6 MB/user        │  Includes metadata, indexes, etc
-Ratio                  6.4X             │  84% is overhead, not raw writes!
-
-Lesson: Writes create LESS data than we assume!
-Most storage is for indexes, metadata, and replication.
-
-───────────────────────────────────────────────────────────────────────────────
-DECISION TREE: WHICH VALUE TO USE?
+  Off-peak: (300M × 20) ÷ 86,400 = 69,444 QPS
+  Peak: 69,444 × 4 = 277,776 QPS ← This is the KEY OUTPUT
+  
+STEP 2: SPLIT QPS FOR DEPENDENT FORMULAS
 ───────────────────────────────────────────────────────────────────────────────
 
-┌─ Do you know read:write ratio and bytes per write?
+From Peak QPS (277,776):
+
+  PATH A: SERVER/BANDWIDTH BRANCH
+  ├─ Servers = Peak QPS ÷ 500 QPS/server = 556 servers
+  │
+  └─ Bandwidth Formula:
+     Bytes/sec = 277,776 QPS × 2 KB = 555.5 MB/sec
+     Gbps = (555.5 × 8) ÷ 1,000 = 4.4 Gbps
+     With 10X redundancy = 44 Gbps ← Network capacity needed
+  
+  PATH B: DATA BRANCH (from Write_QPS)
+  ├─ Write_QPS = 277,776 × (1÷11) = 25,252 writes/sec
+  │
+  ├─ Data Derivation:
+  │  Data/sec = 25,252 × 130 bytes = 3.28 MB/sec
+  │  Daily/user = (3.28 × 86,400) ÷ 300M = 0.94 MB/user/day ← Data metric
+  │
+  ├─ Storage Formula:
+  │  Daily: 300M × 0.94 MB = 280 TB/day
+  │  5-year retention: 280 TB × 1,825 = 512 PB
+  │  With 2X redundancy: 512 × 2 = 1,024 PB
+  │  With compression (1.5X): 1,024 ÷ 1.5 = 682 PB
+  │  (Total with overhead ≈ 4,380 PB as estimated)
+  │
+  ├─ Database Formula:
+  │  Records/user/day: From writes, assume ~0.5 records (varies)
+  │  Total records: 300M × 0.5 × 1,825 = 273.75 billion
+  │  Record size: 500 bytes
+  │  Raw size: 273.75B × 500 = 136.9 TB
+  │  With indexes (1.5X): 136.9 × 1.5 = 205.3 TB
+  │  With 2X replication: 205.3 × 2 = 410.6 TB ← Main DB size
+  │
+  └─ Caching Formula:
+     Cache hits: 277,776 × 80% = 222,220 QPS
+     DB hits: 277,776 × 20% = 55,556 QPS
+     Working set: 1.2 PB × 20% = 240 PB
+     Cache size: 240 PB × 2 (redundancy) = 480 PB ← Cache capacity
+
+═══════════════════════════════════════════════════════════════════════════════
+
+TWITTER INFRASTRUCTURE FROM ONE INPUT
+───────────────────────────────────────────────────────────────────────────────
+
+GIVEN: 20 requests per user per day
+
+COMPUTE & EVERYTHING BRANCHES FROM IT:
+
+┌─ QPS METRICS
+│  ├─ Off-peak avg: 69,444 QPS
+│  ├─ Peak: 277,776 QPS
+│  └─ Daily total: 9.69 billion requests
 │
-├─ YES → Use DERIVED (0.94 MB/user)
-│        ✓ More accurate for this system
-│        ✓ Validates your assumptions
-│        ✓ Shows what's actually being written
+├─ SERVERS & INFRASTRUCTURE
+│  ├─ Web servers needed: 556 peak (with 2X redundancy = 1,112)
+│  ├─ Auto-scale: +417 servers for 5 peak hours
+│  ├─ Network bandwidth: 44 Gbps (10X redundancy factor)
+│  └─ Load balancers: Multiple regions
 │
-└─ NO → Use ASSUMED (6 MB/user)
-       ✓ Conservative estimate
-       ✓ Includes all overhead
-       ✓ Safe for capacity planning
-       
-BEST PRACTICE: Calculate both, use the HIGHER value!
+├─ STORAGE & DATABASE
+│  ├─ Storage needed: 4,380 PB (5-year retention)
+│  ├─ Main database: 1.2 PB (with indexes)
+│  ├─ Hot storage (SSD): 700 PB
+│  ├─ Warm storage (HDD): 3,700 PB
+│  └─ Annual cost: ~$85 million
+│
+├─ CACHING & PERFORMANCE
+│  ├─ Cache size: 500 PB
+│  ├─ Hit rate: 80% (222K QPS from cache)
+│  ├─ DB load reduction: 80%
+│  ├─ DB hits reduced: 277K → 55K QPS
+│  └─ Cache servers: ~500-1000 nodes
+│
+└─ ANALYTICS
+   ├─ Write operations: 25,252/sec
+   ├─ Read operations: 252,524/sec
+   ├─ Data created/day: 280 TB
+   └─ Read:Write ratio: 10:1
 
-───────────────────────────────────────────────────────────────────────────────
-MEMORY CHECKLIST
+═══════════════════════════════════════════════════════════════════════════════
+
+KEY INSIGHTS: WHY EVERYTHING DEPENDS ON QPS
 ───────────────────────────────────────────────────────────────────────────────
 
-QPS Calculation:                       │  Data Derivation:
-  86,400 = seconds per day             │  Only WRITES create storage
-  Peak factor = 2-5X (typical 4X)      │  Reads consume but don't create
-  Server capacity = 1K-10K QPS         │  Read:Write ratio is crucial
-  Redundancy = 2-3X                    │  Weight by operation type
-  Peak hours = 2-5 hours (typical 5)   │  Convert to MB/GB/TB/PB
+1. SERVERS depend on Peak QPS
+   └─ More QPS → More servers needed
+   
+2. BANDWIDTH depends on Peak QPS
+   └─ More QPS × Response_size → More network capacity
+   
+3. CACHING depends on Peak QPS
+   └─ More QPS → Need bigger cache to reduce DB load
+   
+4. STORAGE depends on WRITE QPS
+   └─ Only writes create data
+   └─ (Peak_QPS × Write_ratio) × Data/write → Storage needed
+   
+5. DATABASE depends on WRITE QPS
+   └─ Number of records created from writes
+   └─ (Peak_QPS × Write_ratio) × Records/write → DB size
+
+═══════════════════════════════════════════════════════════════════════════════
+
+FORMULA DEPENDENCIES CHECKLIST
+───────────────────────────────────────────────────────────────────────────────
+
+✓ QPS Formula
+  └─ Input: Requests per user per day
+  └─ Output: Peak QPS (THE KEY METRIC)
+
+✓ Bandwidth Formula  
+  └─ Input: Peak QPS, Response size
+  └─ Output: Network Gbps needed
+
+✓ Caching Formula
+  └─ Input: Peak QPS, Cache hit rate, Working set
+  └─ Output: Cache size needed
+
+✓ Data Generation Formula
+  └─ Input: Peak QPS, Read:Write ratio, Data/write
+  └─ Output: Data per user per day
+
+✓ Storage Formula
+  └─ Input: Data/user (from Data Generation), Retention
+  └─ Output: Total storage needed
+
+✓ Database Formula
+  └─ Input: Data/user (from Data Generation), Record size
+  └─ Output: Database size with indexes
 
 ═══════════════════════════════════════════════════════════════════════════════
 ```
