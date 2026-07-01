@@ -22,15 +22,16 @@ A comprehensive guide covering foundational system design concepts and detailed 
 
 ### Chapter 2: Back-of-the-Envelope Estimation
 1. [Quick Cheat Sheet (Printer-Friendly)](#quick-cheat-sheet-memorize-these-printer-friendly-3-column)
-2. [Executive Summary](#executive-summary)
-3. [Power of Two](#power-of-two)
-4. [Latency Numbers Every Programmer Should Know](#latency-numbers-every-programmer-should-know)
-5. [Availability Numbers](#availability-numbers)
-6. [Estimation Techniques](#estimation-techniques)
-7. [Real-World Example: Twitter](#real-world-example-twitter)
-8. [Peak-Adjusted QPS Formula](#peak-adjusted-qps-formula) ⭐
-9. [Universal Storage Calculation Formula](#universal-storage-calculation-formula) ⭐
-10. [Tips for Estimation](#tips-for-estimation)
+2. [Two Formulas Side-by-Side (Print This!)](#two-formulas---side-by-side-print-this) ⭐⭐
+3. [Executive Summary](#executive-summary)
+4. [Power of Two](#power-of-two)
+5. [Latency Numbers Every Programmer Should Know](#latency-numbers-every-programmer-should-know)
+6. [Availability Numbers](#availability-numbers)
+7. [Estimation Techniques](#estimation-techniques)
+8. [Real-World Example: Twitter](#real-world-example-twitter)
+9. [Peak-Adjusted QPS Formula](#peak-adjusted-qps-formula) ⭐
+10. [Universal Storage Calculation Formula](#universal-storage-calculation-formula) ⭐
+11. [Tips for Estimation](#tips-for-estimation)
 
 ### Chapter 3: A Framework for System Design Interviews
 *(Note: Chapter 3.5 below is the primary framework)*
@@ -850,6 +851,94 @@ This is **original content**: summaries, explanations, and real-world examples c
 | 99.9% = 8.76 hrs | | |
 | 99.99% = 53 min | | |
 | 99.999% = 5 min | | |
+
+---
+
+## 🎯 TWO FORMULAS - SIDE BY SIDE (Print This!) 
+
+**PRINT IN LANDSCAPE MODE - FITS ON 1 PAGE**
+
+### Left Column: QPS Formula | Right Column: Storage Formula
+
+```
+═══════════════════════════════════════════════════════════════════════════════
+                      PEAK-ADJUSTED QPS FORMULA
+═══════════════════════════════════════════════════════════════════════════════
+
+STEP 1: Off-peak QPS              │  STEP 1: Daily Data Generation
+  = (DAU × R) ÷ 86,400            │    = DAU × Data_per_user_per_day
+
+STEP 2: Peak QPS                  │  STEP 2: Apply Retention
+  = Off-peak × P                  │    = Daily_data × Retention_days
+
+STEP 3: Total Daily Requests      │  STEP 3: Apply Redundancy
+  = (Off × 3,600 × Avg_hrs) +     │    = Total_data × Redundancy_factor
+    (Peak × 3,600 × Peak_hrs)     │
+
+STEP 4: Servers Needed            │  STEP 4: Apply Compression
+  = Peak ÷ Server_capacity        │    = With_redundancy ÷ Compression
+  × Redundancy (2-3X)             │
+
+───────────────────────────────────────────────────────────────────────────────
+EXAMPLE: Twitter (300M DAU)        │  EXAMPLE: Twitter (300M DAU)
+───────────────────────────────────────────────────────────────────────────────
+
+QPS Calculation:                   │  Storage Calculation:
+  DAU = 300M                       │    DAU = 300M
+  Requests/user = 20/day           │    Data/user = 6 MB/day
+  Peak multiplier = 4X             │    Retention = 5 years (1,825 days)
+  Peak hours = 5                   │    Redundancy = 2X
+  Avg hours = 19                   │    Compression = 1.5X
+
+Off-peak: (300M × 20) ÷ 86K       │  Daily: 300M × 6 MB = 1.8 EB
+        = 69,444 QPS              │  Retention: 1.8 EB × 1,825 = 3.3 ZB
+                                  │  Redundancy: 3.3 ZB × 2 = 6.6 ZB
+Peak: 69,444 × 4 = 277,776 QPS   │  Final: 6.6 ZB ÷ 1.5 = 4.4 ZB
+                                  │         = 4,400 PB
+Servers (500 QPS/server):          │
+  Off-peak: 69K ÷ 500 = 139       │  Tiered Storage (cost-optimized):
+  Peak: 277K ÷ 500 = 556          │    Hot (1 yr, SSD): 700 PB
+  Auto-scale: +417 servers         │    Warm (4 yrs, HDD): 3,700 PB
+                                  │    Total: 4,400 PB
+
+───────────────────────────────────────────────────────────────────────────────
+QUICK REFERENCE TABLE
+───────────────────────────────────────────────────────────────────────────────
+
+System     │ QPS (Peak) │ Servers   │ Storage      │ Retention
+──────────┼────────────┼───────────┼──────────────┼──────────────
+Twitter    │ 250-500K   │ 500-1000  │ 50-100 PB    │ 5 years
+Instagram  │ 500K-1M    │ 1K-2K     │ 1-2 EB       │ 10 years
+Uber       │ 50-100K    │ 100-200   │ 50 PB        │ 3 months
+Netflix    │ 200K-500K  │ 400-1K    │ 100-500 PB   │ 2 years
+Stripe     │ 10-100K    │ 20-200    │ 100 TB-10PB  │ 10 years
+
+───────────────────────────────────────────────────────────────────────────────
+KEY INSIGHTS
+───────────────────────────────────────────────────────────────────────────────
+
+QPS Formula:                       │  Storage Formula:
+• Peak ≠ Average (it's a multiple) │  • Retention >> Daily data
+• Peak hours are 2-5 hours/day     │  • Tiered storage (hot/warm/cold)
+• Higher peak multiplier for       │  • Compression only if not already
+  interactive apps (4-5X)          │    compressed (video/images are!)
+• Redundancy: 2-3X for servers     │  • Redundancy: 2X typical, 3X critical
+  (master-slave or multi-region)   │  • Archive very old data (cold storage)
+
+───────────────────────────────────────────────────────────────────────────────
+MEMORY CHECKLIST - Memorize these constants!
+───────────────────────────────────────────────────────────────────────────────
+
+QPS Calculation:                   │  Storage Calculation:
+  86,400 = seconds per day         │  1 KB = 1,024 bytes
+  3,600 = seconds per hour         │  1 MB = 1,024 KB
+  Peak factor = 2-5X typical       │  1 GB = 1,024 MB
+  Server capacity = 1K-10K QPS     │  1 TB = 1,024 GB
+  Redundancy = 2-3X                │  1 PB = 1,024 TB
+                                  │  Redundancy = 2-3X
+
+═══════════════════════════════════════════════════════════════════════════════
+```
 
 ---
 
