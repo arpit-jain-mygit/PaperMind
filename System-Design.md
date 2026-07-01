@@ -942,6 +942,193 @@ QPS Calculation:                   │  Storage Calculation:
 
 ---
 
+## 🎬 COMPLETE TWITTER EXAMPLE - Both Formulas Applied
+
+**System:** Twitter-like social media platform
+
+### Given Assumptions
+
+```
+USERS & ACTIVITY:
+  Daily Active Users (DAU) = 300 million
+  
+USER BEHAVIOR:
+  Tweets read per user per day = 50 tweets
+  Tweets posted per user per day = 1 tweet
+  Average tweet length = 280 characters = 280 bytes
+  
+MEDIA (10% of tweets have images):
+  Average image size = 2 MB
+  Image posts per user = 0.1 (10% of 1 tweet)
+  
+TOTAL DATA PER USER PER DAY:
+  Text tweets: 1 tweet × 280 bytes = 280 bytes
+  Images: 0.1 images × 2 MB = 200 KB
+  Timeline metadata: 50 views × 1 KB = 50 KB
+  Likes/retweets: 5 interactions × 100 bytes = 500 bytes
+  ─────────────────────────────────
+  Total: ~250 KB per user per day (or 6 MB with overhead)
+```
+
+### INFRASTRUCTURE NEEDED
+
+**USING QPS FORMULA:**
+
+```
+Step 1: Off-peak QPS (average throughout day)
+  (DAU × Requests_per_user) ÷ 86,400
+  (300M × 20 requests) ÷ 86,400
+  = 6,000,000,000 ÷ 86,400
+  = 69,444 QPS (off-peak average)
+
+Step 2: Peak QPS (evening hours)
+  Off-peak × Peak_multiplier
+  69,444 × 4 (evening traffic is 4X higher)
+  = 277,776 QPS (peak)
+
+Step 3: Total Daily Requests
+  Off-peak hours (19 hrs): 69,444 × 3,600 × 19 = 4.72 billion
+  Peak hours (5 hrs): 277,776 × 3,600 × 5 = 4.97 billion
+  Total daily requests = 9.69 billion
+
+Step 4: Server Capacity
+  Assuming 500 QPS per server (typical web server):
+  
+  Off-peak servers needed: 69,444 ÷ 500 = 139 servers
+  Peak servers needed: 277,776 ÷ 500 = 556 servers
+  
+  WITH 2X REDUNDANCY (master-slave replication):
+    Off-peak: 139 × 2 = 278 servers (always running)
+    Peak: 556 × 2 = 1,112 servers (scale up 6-11 PM)
+    Auto-scale: Add +834 servers during peak hours
+```
+
+**USING STORAGE FORMULA:**
+
+```
+Step 1: Daily Data Generation
+  DAU × Data_per_user_per_day
+  300M × 6 MB
+  = 1.8 Exabytes (EB) per day
+
+Step 2: Apply Retention (tweets kept for 5 years)
+  Daily_data × Retention_days
+  1.8 EB × 1,825 days (5 years)
+  = 3.285 Zettabytes (ZB)
+
+Step 3: Apply Redundancy (2X for master-slave)
+  Total_data × Redundancy_factor
+  3.285 ZB × 2
+  = 6.57 ZB
+
+Step 4: Apply Compression (gzip ~1.5X for text)
+  With_redundancy ÷ Compression_ratio
+  6.57 ZB ÷ 1.5
+  = 4.38 ZB ≈ 4,380 Petabytes (PB)
+
+TIERED STORAGE STRATEGY (cost optimization):
+  Hot storage (current 1 year, SSD, expensive):
+    1.8 EB/day × 365 days = 657 PB
+    Cost: ~$65 million/year
+  
+  Warm storage (years 2-5, HDD, cheap):
+    1.8 EB/day × 365 × 4 = 2,628 PB
+    Cost: ~$20 million/year
+  
+  Total: 3,285 PB stored, ~$85 million/year
+```
+
+### SUMMARY TABLE: TWITTER INFRASTRUCTURE
+
+```
+┌──────────────────────────────────────────────────────┐
+│              TWITTER INFRASTRUCTURE NEEDS             │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│ COMPUTATION (QPS Formula):                           │
+│   Off-peak QPS:          69,444 QPS                 │
+│   Peak QPS:              277,776 QPS                │
+│   Off-peak servers:      139 (no redundancy)        │
+│   Peak servers:          556 (no redundancy)        │
+│   With 2X redundancy:    278 base + 1,112 peak     │
+│   Auto-scaling needed:   +834 servers (5 hours)    │
+│                                                      │
+│ STORAGE (Storage Formula):                           │
+│   Daily data:            1.8 EB                     │
+│   After 5-year retention: 3,285 PB (uncompressed)  │
+│   After compression:     2,190 PB (no redundancy)  │
+│   With 2X redundancy:    4,380 PB total            │
+│   Hot storage (SSD):     657 PB (1 year)           │
+│   Warm storage (HDD):    3,723 PB (4 years)        │
+│   Annual storage cost:   ~$85 million              │
+│                                                      │
+│ BANDWIDTH:                                           │
+│   Peak bandwidth:        277,776 QPS × 2 KB/req    │
+│                        = 555 GB/sec                 │
+│   Network capacity:      Need 10X = 5.5 TB/sec     │
+│                        = 44 Pbps (petabits/sec!)   │
+│                                                      │
+│ DATABASE CAPACITY:                                   │
+│   Tweets table size:     ~1 PB (with indexes)      │
+│   User profiles:         ~100 TB                    │
+│   Timeline cache:        ~500 PB (hot data)        │
+│   Total hot DB:          ~600 PB                    │
+│                                                      │
+│ CACHING LAYER (Redis/Memcached):                    │
+│   Cache hit rate: 80% (80% of reads from cache)    │
+│   Cache miss rate: 20% (20% hit database)          │
+│   DB load if uncached: 277K QPS → 55K after cache │
+│   Cache size needed: 200-500 PB (hot data only)   │
+│                                                      │
+└──────────────────────────────────────────────────────┘
+```
+
+### INFRASTRUCTURE DECISIONS
+
+```
+SERVERS (QPS-based):
+  ├─ Web tier: 278 base servers (always on)
+  ├─ Web tier: +834 peak servers (auto-scale 6-11 PM)
+  ├─ Load balancer: Distribute across regions
+  └─ Total: ~1,112 servers at peak
+
+STORAGE (Storage-based):
+  ├─ Hot SSD storage: 657 PB (expensive, for current data)
+  ├─ Warm HDD storage: 3,723 PB (cheap, for archive)
+  ├─ Replication: 2X across 2 data centers
+  ├─ Compression: gzip for text (1.5X improvement)
+  └─ Total annual: ~$85 million
+
+CACHING:
+  ├─ Cache popular tweets: 20% of storage
+  ├─ Cache user timelines: 30% of storage
+  ├─ Cache user profiles: 10% of storage
+  ├─ Redis cluster: 500 PB capacity
+  └─ Hit rate: 80% (massive database savings)
+
+DATABASE:
+  ├─ Master-slave replication: 2 copies
+  ├─ Sharding: By tweet ID or user ID
+  ├─ Indexes: Tweet creation time, user feed
+  ├─ Partitioning: By date (hot vs cold)
+  └─ Total DB: 600 PB (with 2X redundancy)
+
+NETWORK:
+  ├─ Peak bandwidth: 555 GB/sec
+  ├─ Redundancy: 10X capacity = 5.5 TB/sec
+  ├─ CDN for images/videos: 5 regions
+  └─ Cost: ~$10 million/month
+
+MONITORING:
+  ├─ Alert if peak QPS > 300K
+  ├─ Alert if storage > 4.5 ZB
+  ├─ Alert if cache hit rate < 75%
+  ├─ Auto-scale when QPS hits 75% capacity
+  └─ Graceful degradation: Read-only mode at 100%
+```
+
+---
+
 ## 🔥 PEAK-ADJUSTED QPS FORMULA - Universal for Any System
 
 ```
