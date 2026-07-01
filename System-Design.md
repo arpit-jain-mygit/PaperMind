@@ -29,7 +29,8 @@ A comprehensive guide covering foundational system design concepts and detailed 
 6. [Estimation Techniques](#estimation-techniques)
 7. [Real-World Example: Twitter](#real-world-example-twitter)
 8. [Peak-Adjusted QPS Formula](#peak-adjusted-qps-formula) ⭐
-9. [Tips for Estimation](#tips-for-estimation)
+9. [Universal Storage Calculation Formula](#universal-storage-calculation-formula) ⭐
+10. [Tips for Estimation](#tips-for-estimation)
 
 ### Chapter 3: A Framework for System Design Interviews
 *(Note: Chapter 3.5 below is the primary framework)*
@@ -887,6 +888,50 @@ This is **original content**: summaries, explanations, and real-world examples c
 **Works for:** Twitter, Instagram, Uber, Netflix, Stripe, or ANY system with users making requests.
 
 **Key Insight:** Peak and average QPS are NOT added together. Peak is a multiplier (4X-5X) that occurs for only part of the day (2-5 hours typically).
+
+---
+
+## 💾 UNIVERSAL STORAGE FORMULA - For Any Data System
+
+```
+╔════════════════════════════════════════════════════════╗
+║ UNIVERSAL STORAGE CALCULATION FORMULA                  ║
+╠════════════════════════════════════════════════════════╣
+║                                                        ║
+║ STEP 1: Daily Data Generation                         ║
+║  Daily_data = DAU × Data_per_user_per_day              ║
+║                                                        ║
+║ STEP 2: Apply Retention                               ║
+║  Total_data = Daily_data × Retention_days             ║
+║                                                        ║
+║ STEP 3: Apply Redundancy (2X or 3X)                   ║
+║  With_redundancy = Total_data × Redundancy_factor     ║
+║                                                        ║
+║ STEP 4: Apply Compression (if applicable)             ║
+║  Final_storage = With_redundancy ÷ Compression_ratio  ║
+║                                                        ║
+║ EXAMPLE:                                               ║
+║  DAU = 300M, Data/user = 6 MB, Retention = 5 years    ║
+║  Redundancy = 2X, Compression = 1.5X                  ║
+║                                                        ║
+║  Daily = 300M × 6 MB = 1.8 EB                         ║
+║  Retention = 1.8 EB × 1,825 days = 3.3 ZB            ║
+║  Redundancy = 3.3 ZB × 2 = 6.6 ZB                    ║
+║  Compression = 6.6 ZB ÷ 1.5 = 4.4 ZB ≈ 4,400 PB      ║
+║                                                        ║
+╚════════════════════════════════════════════════════════╝
+```
+
+**Quick Reference by System Type:**
+
+| System | Data/User/Day | Retention | Redundancy | Typical Storage |
+|--------|---------------|-----------|------------|-----------------|
+| Twitter | 6 MB | 5 yrs | 2X | 50-100 PB |
+| Instagram | 7 MB | 10 yrs | 3X | 1-2 EB |
+| Logs (30 days) | 1 MB | 30 days | 2X | 50 PB |
+| Database | 1-10 MB | 7 yrs | 2X | 100 TB - 10 PB |
+
+**Key Insight:** Retention period is critical! Even small daily data × 10 years retention = massive storage. Use tiered storage: Hot (SSD/expensive) → Warm (HDD/cheap) → Cold (Archive/very cheap).
 
 ---
 
@@ -2458,6 +2503,280 @@ Global System (e.g., YouTube, Google):
   - Traffic is completely unpredictable
   - System has 24/7 uniform load (no peak/average split)
   - Request patterns vary drastically by user type
+```
+
+---
+
+## Universal Storage Calculation Formula
+
+**Official Name:** Universal Storage Estimation Formula
+
+A generic formula to calculate total storage requirements for any system. Works for databases, file storage, logs, caches, media (photos, videos), messages, or any data you need to persist.
+
+### The Formula
+
+```
+╔════════════════════════════════════════════════════════╗
+║ UNIVERSAL STORAGE CALCULATION FORMULA                  ║
+╠════════════════════════════════════════════════════════╣
+║                                                        ║
+║ INPUTS:                                                ║
+║  DAU = Daily Active Users                             ║
+║  D = Data per user per day (in bytes/KB/MB)           ║
+║  R = Retention period (in days)                       ║
+║  X = Redundancy factor (2X for replication, 3X for   ║
+║      distributed systems)                             ║
+║  C = Compression ratio (1.0 = no compression,         ║
+║      2.0 = 50% reduction, 3.0 = 66% reduction)       ║
+║                                                        ║
+║ STEP 1: Calculate Daily Data Generation               ║
+║  Daily data = DAU × D                                 ║
+║                                                        ║
+║ STEP 2: Apply Retention Period                        ║
+║  Total data = Daily data × R (days)                   ║
+║                                                        ║
+║ STEP 3: Apply Redundancy/Replication                  ║
+║  With redundancy = Total data × X                     ║
+║                                                        ║
+║ STEP 4: Apply Compression (Optional)                  ║
+║  Final storage = With redundancy ÷ C                  ║
+║                                                        ║
+║ STEP 5: Convert to Human-Readable Units               ║
+║  If result > 10^9: Convert to GB                      ║
+║  If result > 10^12: Convert to TB                     ║
+║  If result > 10^15: Convert to PB                     ║
+║                                                        ║
+╚════════════════════════════════════════════════════════╝
+```
+
+### Real Examples
+
+**Example 1: Twitter (Text + Media)**
+
+```
+Given:
+  DAU = 300 million
+  Data per user per day:
+    ├─ 2 tweets × 500 bytes = 1 KB
+    ├─ Timeline viewing metadata = 0.5 KB
+    ├─ 10% of users post images (2 MB each) = 60 MB
+    └─ Total per user ≈ 60 MB / (1/10) = 6 MB average
+  Retention = 5 years (1,825 days)
+  Redundancy = 2X (master-slave replication)
+  Compression = 1.5X (gzip for text)
+
+Calculation:
+  Step 1: Daily = 300M × 6 MB = 1.8 EB (exabytes)
+  Step 2: Retention = 1.8 EB × 1,825 = 3.285 ZB
+  Step 3: Redundancy = 3.285 ZB × 2 = 6.57 ZB
+  Step 4: Compression = 6.57 ZB ÷ 1.5 = 4.38 ZB
+  
+  Wow! That's huge. Real Twitter uses:
+  └─ Tiered storage (hot/warm/cold)
+  └─ Data partitioning by time
+  └─ Compression ratios of 3-5X
+  └─ Actual stored: ~100-500 PB
+```
+
+**Example 2: Instagram (Photos Only)**
+
+```
+Given:
+  DAU = 500 million
+  Data per user per day:
+    ├─ 3 photos posted × 2 MB = 6 MB
+    ├─ Metadata + thumbnails = 1 MB
+    └─ Total = 7 MB per user/day
+  Retention = 10 years (3,650 days)
+  Redundancy = 3X (distributed across 3 data centers)
+  Compression = 2.5X (JPEG + advanced compression)
+
+Calculation:
+  Step 1: Daily = 500M × 7 MB = 3.5 EB
+  Step 2: Retention = 3.5 EB × 3,650 = 12.8 ZB
+  Step 3: Redundancy = 12.8 ZB × 3 = 38.4 ZB
+  Step 4: Compression = 38.4 ZB ÷ 2.5 = 15.36 ZB
+  
+  Reality check:
+  └─ Instagram stores ~1-2 EB of photos
+  └─ Uses heavy compression + CDN caching
+  └─ Most data is in CDN, not primary storage
+```
+
+**Example 3: Message Queue (Logs)**
+
+```
+Given:
+  DAU = 100 million
+  Data per user per day:
+    └─ 50 messages × 500 bytes = 25 KB
+  Retention = 30 days (compliance requirement)
+  Redundancy = 2X (Kafka replication factor)
+  Compression = 3.0X (snappy compression)
+
+Calculation:
+  Step 1: Daily = 100M × 25 KB = 2.5 PB
+  Step 2: Retention = 2.5 PB × 30 = 75 PB
+  Step 3: Redundancy = 75 PB × 2 = 150 PB
+  Step 4: Compression = 150 PB ÷ 3.0 = 50 PB
+  
+  Storage cost = 50 PB ÷ 1,000 = 50,000 TB
+  Annual cost @ $0.02/GB/month = $12M
+```
+
+**Example 4: Database (Structured Data)**
+
+```
+Given:
+  DAU = 10 million
+  Data per user per day:
+    ├─ User profile (1 MB baseline) = 1 MB
+    ├─ Activity log (100 events × 1 KB) = 100 KB
+    ├─ Transactions (10 × 500 bytes) = 5 KB
+    └─ Total = ~1.1 MB per user/day
+  Retention = 7 years (2,555 days)
+  Redundancy = 2X (master + read replica)
+  Compression = 2.0X (columnar storage compression)
+
+Calculation:
+  Step 1: Daily = 10M × 1.1 MB = 11 TB
+  Step 2: Retention = 11 TB × 2,555 = 28 PB
+  Step 3: Redundancy = 28 PB × 2 = 56 PB
+  Step 4: Compression = 56 PB ÷ 2.0 = 28 PB
+  
+  With archival strategy:
+  └─ Hot (1 year): 3 PB (expensive SSD)
+  └─ Warm (6 years): 25 PB (cheap HDD)
+  └─ Total: Cost-optimized at $5M/year
+```
+
+### Applications by System Type
+
+| System | DAU | Data/User/Day | Retention | Redundancy | Typical Storage |
+|--------|-----|---------------|-----------|------------|-----------------|
+| Twitter | 300M | 6 MB | 5 yrs | 2X | 50-100 PB |
+| Instagram | 500M | 7 MB | 10 yrs | 3X | 1-2 EB |
+| Facebook | 3B | 10 MB | Forever | 3X | 10+ EB |
+| Stripe DB | 100K | 100 MB | 10 yrs | 2X | 100 TB |
+| Uber Logs | 100M | 1 MB | 30 days | 2X | 50 PB |
+| YouTube | 500M | 50 MB | Forever | 2X | 5+ EB |
+
+### Key Insights
+
+**1. Data Per User Varies Hugely**
+```
+Text-based (tweets):     ~100 KB - 1 MB per day
+Photo (Instagram):       ~5-10 MB per day
+Video (YouTube):         ~100-500 MB per day
+Database records:        ~1-100 MB per day
+Logs/events:             ~100 KB - 1 MB per day
+
+Key: Always break down data by component!
+```
+
+**2. Retention Period is Critical**
+```
+Same system, different retention:
+
+30-day retention:  ~5 PB
+1-year retention:  ~60 PB
+5-year retention:  ~300 PB
+Forever retention: ~Infinite PB (archive)
+
+Solution: Implement tiered storage
+├─ Hot storage (SSD, expensive): 1 month
+├─ Warm storage (HDD, cheap): 1-5 years
+└─ Cold storage (Archive, very cheap): 5+ years
+```
+
+**3. Redundancy & Replication**
+```
+No redundancy (1X): Single copy (risky!)
+Master-Slave (2X): 1 primary + 1 backup
+Multi-region (3X): 3 copies across DCs
+Erasure coding (1.5X): Mathematical redundancy
+
+Cost-benefit:
+├─ 1X: Cheapest but loses data if failure
+├─ 2X: Standard for most systems
+└─ 3X: Critical systems (financial, health)
+```
+
+**4. Compression Ratios**
+```
+Text (gzip):         1.5-2.5X compression
+JSON (snappy):       1.2-1.5X compression
+Images (JPEG):       Already compressed! 1.0-1.2X
+Video (H.264/H.265): Already compressed! 1.0-1.1X
+Columnar (Parquet):  5-10X compression
+Database (custom):   2-3X typical
+
+Pro tip: Don't double-count! If data is already
+compressed (JPEG, MP4), don't apply additional
+compression factor.
+```
+
+### How to Choose Parameters
+
+**Data Per User (D):**
+```
+LIGHT (Text app):
+  └─ 100 KB - 1 MB per user per day
+
+MEDIUM (Social media):
+  └─ 1-10 MB per user per day
+
+HEAVY (Photo/Video):
+  └─ 10-500 MB per user per day
+
+VERY HEAVY (Backup service):
+  └─ 100 MB - 10 GB per user per day
+```
+
+**Retention Period (R):**
+```
+Logs/temp data:        7-30 days
+Social media posts:    1-10 years
+User profile:          Forever
+Financial records:     7-10 years (legal)
+Video/streaming:       2-5 years (then archive)
+Messages:              30 days - 1 year
+```
+
+**Redundancy Factor (X):**
+```
+Non-critical:          1.0X (no backup)
+Standard:              2.0X (master + 1 replica)
+High-availability:     2.5-3.0X (multiple regions)
+Financial/medical:     3.0X minimum
+```
+
+### Quick Estimation Checklist
+
+```
+✓ What data needs to be stored? (Be specific!)
+✓ How much per user per day? (Estimate D)
+✓ For how long? (Retention period R)
+✓ How many copies? (Redundancy X)
+✓ Is data already compressed?
+✓ Can we archive old data?
+✓ What's the cost per GB in this region?
+✓ Do we need multi-region?
+```
+
+### When to Use This Formula
+
+```
+✓ Interview: Estimate storage for any system
+✓ Capacity planning: Know how much disk to buy
+✓ Cost forecasting: Calculate storage budget
+✓ Architecture: Decide on tiered storage
+✓ Scaling: When to add new storage nodes
+
+✗ Don't use if:
+  - Data is compressed (video, image) - don't compress again
+  - You have real metrics (use actual data!)
+  - System uses deduplication (reduces storage 2-10X)
 ```
 
 ---
