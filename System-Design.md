@@ -843,99 +843,93 @@ This is **original content**: summaries, explanations, and real-world examples c
 
 ---
 
-## 🎯 QUICK CHEAT SHEET (Memorize These!) - Single Page Wall Reference
+## 🎯 QUICK CHEAT SHEET (Memorize These!) - Printer-Friendly 3-Column Layout
 
-**Print this & memorize before your interview**
-
-### **POWERS & CONVERSIONS**
-
-| Category | Formula | Value |
-|----------|---------|-------|
-| **2^10** | 1 KB | 1,024 bytes |
-| **2^20** | 1 MB | ~1 Million |
-| **2^30** | 1 GB | ~1 Billion |
-| **2^40** | 1 TB | ~1 Trillion |
-| **2^50** | 1 PB | ~1 Petabyte |
-| **10^3** | 1K (Thousand) | 1,000 |
-| **10^6** | 1M (Million) | 1,000,000 |
-| **10^9** | 1B (Billion) | 1,000,000,000 |
-| **10^12** | 1T (Trillion) | 1,000,000,000,000 |
+**PRINT THIS PAGE & PASTE ON WALL** (Fits on single page - narrow/landscape mode)
 
 ---
 
-### **TIME CALCULATIONS (Memorize!)**
+### **COLUMN 1: POWERS & TIME**
 
-| Metric | Formula | Value |
-|--------|---------|-------|
-| **Seconds/Day** | 24h × 60m × 60s | **86,400** ≈ 100K |
-| **Seconds/Year** | 365d × 86,400s | **31,536,000** ≈ 32M |
-| **Minutes/Year** | 365d × 24h × 60m | **525,600** |
+**Powers of 2 & 10:**
+| Power | Value |
+|-------|-------|
+| 2^10 | 1 KB |
+| 2^20 | 1 MB |
+| 2^30 | 1 GB |
+| 2^40 | 1 TB |
+| 10^6 | 1M |
+| 10^9 | 1B |
+| 10^12 | 1T |
 
----
+**Time (Memorize!):**
+| Metric | Value |
+|--------|-------|
+| Seconds/Day | **100K** |
+| Seconds/Year | **32M** |
 
-### **AVAILABILITY (UPTIME → DOWNTIME)**
-
-| SLA | Downtime/Year | Downtime/Month | Max Acceptable |
-|-----|---------------|--------------------|---|
-| **99%** | 3.65 days | 7.2 hours | Simple services |
-| **99.9%** | 8.76 hours | 43 min | Most services |
-| **99.99%** | 52.6 min | 4.3 min | Critical services |
-| **99.999%** | 5.26 min | 25 sec | Bank-grade |
-
----
-
-### **LATENCY REFERENCE (In Milliseconds)**
-
-| Operation | Time | Type |
-|-----------|------|------|
-| L1 Cache | 0.0005 ms | CPU |
-| Memory (RAM) | 0.1 ms | Memory |
-| SSD Read (1MB) | 0.25 ms | Disk |
-| Disk Seek | 10 ms | Disk |
-| Network (same DC) | 0.5 ms | Network |
-| Network (cross-US) | 150 ms | Network |
-| **Redis** | **2 ms** | **Cache** |
-| **Database Query** | **100 ms** | **DB** |
+**Availability:**
+| SLA | Downtime |
+|-----|----------|
+| 99% | 3.65 days |
+| 99.9% | 8.76 hours |
+| 99.99% | 53 minutes |
+| 99.999% | 5 minutes |
 
 ---
 
-### **THROUGHPUT & CAPACITY**
+### **COLUMN 2: LATENCY & THROUGHPUT**
 
-| Resource | Throughput | Notes |
-|----------|-----------|-------|
-| **Network** | 1 Gbps = 125 MB/s | Typical |
-| **Disk (HDD)** | 1-10 MB/s | Mechanical |
-| **Disk (SSD)** | 100+ MB/s | Flash |
-| **Memory** | 10+ GB/s | RAM bandwidth |
-| **QPS/Server** | 1K-10K | Depends on complexity |
+**Latency (ms):**
+| Operation | Time |
+|-----------|------|
+| L1 Cache | 0.0005 |
+| Memory | 0.1 |
+| SSD Read | 0.25 |
+| Disk Seek | 10 |
+| Network (DC) | 0.5 |
+| **Redis** | **2** |
+| **DB Query** | **100** |
+| Network (US) | 150 |
 
----
-
-### **COMMON SCALE NUMBERS**
-
-| Metric | Value | Example |
-|--------|-------|---------|
-| **1M Users** | 10^6 | Startup |
-| **100M Users** | 10^8 | Instagram scale |
-| **1B Users** | 10^9 | Facebook scale |
-| **Typical QPS** | 100-1K | Small service |
-| **High QPS** | 10K-100K | Twitter, Google |
-| **API Response** | 1-10 KB | Typical |
-| **Image Size** | 100 KB - 5 MB | Photo |
-| **1M Records** | ~1 GB | (1KB each) |
-| **1B Records** | ~1 TB | (1KB each) |
+**Throughput:**
+| Resource | Speed |
+|----------|-------|
+| Network | 125 MB/s |
+| SSD | 100+ MB/s |
+| HDD | 1-10 MB/s |
+| Memory | 10+ GB/s |
+| QPS/Server | 1K-10K |
 
 ---
 
-### **USEFUL FORMULAS (Write at Interview Start)**
+### **COLUMN 3: SCALE & FORMULAS**
 
+**Scale Numbers:**
+| Metric | Value |
+|--------|-------|
+| 1M Users | Startup |
+| 100M Users | Instagram |
+| 1B Users | Facebook |
+| 1M Records | ~1 GB |
+| 1B Records | ~1 TB |
+| Typical QPS | 100-1K |
+| High QPS | 10K-100K |
+
+**CRITICAL FORMULAS:**
 ```
-QPS = (DAU × requests/day) ÷ 86,400
-Peak QPS = avg QPS × 2.5 (peak factor)
-Servers Needed = Peak QPS ÷ (QPS per server)
-Storage = (daily generated) × 365 × years × 3 (redundancy)
-Cache Hit Rate Goal = 80%+
+QPS = (DAU × req/day) ÷ 86,400
+
+Peak QPS = avg × 2.5
+
+Servers = Peak QPS ÷ capacity
+
+Storage = daily × 365 × years × 3
+
+Cache Hit = 80%+ goal
 ```
+
+---
 
 ---
 
