@@ -859,91 +859,30 @@ This is **original content**: summaries, explanations, and real-world examples c
 
 ---
 
-## 🎯 QUICK CHEAT SHEET (Memorize These!) - Printer-Friendly 3-Column Layout
+## 🎯 QUICK CHEAT SHEET (Memorize These!) - Printer-Friendly 3-Column
 
-**PRINT THIS PAGE & PASTE ON WALL** (Fits on single page - narrow/landscape mode)
+**PRINT LANDSCAPE MODE - FITS ON 1 PAGE**
 
----
-
-### **COLUMN 1: POWERS & TIME**
-
-**Powers of 2 & 10:**
-| Power | Value |
-|-------|-------|
-| 2^10 | 1 KB |
-| 2^20 | 1 MB |
-| 2^30 | 1 GB |
-| 2^40 | 1 TB |
-| 10^6 | 1M |
-| 10^9 | 1B |
-| 10^12 | 1T |
-
-**Time (Memorize!):**
-| Metric | Value |
-|--------|-------|
-| Seconds/Day | **100K** |
-| Seconds/Year | **32M** |
-
-**Availability:**
-| SLA | Downtime |
-|-----|----------|
-| 99% | 3.65 days |
-| 99.9% | 8.76 hours |
-| 99.99% | 53 minutes |
-| 99.999% | 5 minutes |
-
----
-
-### **COLUMN 2: LATENCY & THROUGHPUT**
-
-**Latency (ms):**
-| Operation | Time |
-|-----------|------|
-| L1 Cache | 0.0005 |
-| Memory | 0.1 |
-| SSD Read | 0.25 |
-| Disk Seek | 10 |
-| Network (DC) | 0.5 |
-| **Redis** | **2** |
-| **DB Query** | **100** |
-| Network (US) | 150 |
-
-**Throughput:**
-| Resource | Speed |
-|----------|-------|
-| Network | 125 MB/s |
-| SSD | 100+ MB/s |
-| HDD | 1-10 MB/s |
-| Memory | 10+ GB/s |
-| QPS/Server | 1K-10K |
-
----
-
-### **COLUMN 3: SCALE & FORMULAS**
-
-**Scale Numbers:**
-| Metric | Value |
-|--------|-------|
-| 1M Users | Startup |
-| 100M Users | Instagram |
-| 1B Users | Facebook |
-| 1M Records | ~1 GB |
-| 1B Records | ~1 TB |
-| Typical QPS | 100-1K |
-| High QPS | 10K-100K |
-
-**CRITICAL FORMULAS:**
-```
-QPS = (DAU × req/day) ÷ 86,400
-
-Peak QPS = avg × 2.5
-
-Servers = Peak QPS ÷ capacity
-
-Storage = daily × 365 × years × 3
-
-Cache Hit = 80%+ goal
-```
+| **POWERS & TIME** | **LATENCY & THROUGHPUT** | **SCALE & FORMULAS** |
+|---|---|---|
+| **Powers of 2/10:** | **Latency (ms):** | **Scale Numbers:** |
+| 2^10 = 1 KB | L1: 0.0005 | 1M users = Startup |
+| 2^20 = 1 MB | Mem: 0.1 | 100M = Instagram |
+| 2^30 = 1 GB | SSD: 0.25 | 1B = Facebook |
+| 2^40 = 1 TB | Disk: 10 | 1M records ≈ 1 GB |
+| 10^6 = 1M | DC: 0.5 | 1B records ≈ 1 TB |
+| 10^9 = 1B | **Redis: 2** | QPS 100-1K (small) |
+| 10^12 = 1T | **DB: 100** | QPS 10K-100K (high) |
+| | US: 150 | |
+| **Time (Memorize!):** | **Throughput:** | **FORMULAS (Write First):** |
+| Sec/Day: **100K** | Network: 125 MB/s | **QPS** = (DAU × req/day) ÷ 86,400 |
+| Sec/Year: **32M** | SSD: 100+ MB/s | **Peak** = avg × 2.5 |
+| | HDD: 1-10 MB/s | **Servers** = Peak ÷ capacity |
+| **Availability (SLA→Down):** | Memory: 10+ GB/s | **Storage** = daily × 365 × yrs × 3 |
+| 99% = 3.65 days | QPS/Server: 1K-10K | **Cache Hit** = 80%+ |
+| 99.9% = 8.76 hrs | | |
+| 99.99% = 53 min | | |
+| 99.999% = 5 min | | |
 
 ---
 
