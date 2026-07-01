@@ -3487,6 +3487,24 @@ This is a step-by-step framework you can apply to **ANY** system design intervie
 
 ---
 
+## ⚡ QUICK REFERENCE TABLE (Print & Use in Interviews!)
+
+| Step | Focus | Time | Sub-Steps |
+|------|-------|------|-----------|
+| **STEP 1** | Functional Requirements | 5 min | • What features must we build?<br>• Who are the users?<br>• How do users interact? |
+| **STEP 2** | Scale & Non-Functional Req | 5 min | • DAU, read-write ratio, spike traffic<br>• Latency requirements<br>• Availability target (SLA)<br>• Consistency vs Availability |
+| **STEP 3** | Generic Blueprint | 3 min | • Load Balancer<br>• Services Layer<br>• Cache (Redis)<br>• Database (Master-Slave)<br>• Storage (S3, Kafka, Elasticsearch) |
+| **STEP 4** | Customize for System | 10 min | • What to ADD (system-specific components)<br>• What to REMOVE (not needed)<br>• What to MODIFY (adjust for requirements) |
+| **STEP 5** | Back-of-Envelope Math | 5 min | • Calculate QPS: (DAU × req/day) ÷ 86,400<br>• Peak QPS: avg × 2.5<br>• Servers needed: Peak QPS ÷ 1K-10K<br>• Storage calculation<br>• 10X growth scenario |
+| **STEP 6** | Design Deep-Dives (NFRs) | 10 min | • Resilience: failure scenarios + recovery<br>• Monitoring: metrics, alerts, SLA<br>• Consistency trade-off: Strong vs Eventual |
+| **STEP 7** | Verify Growth & Constraints | 7 min | • ✓ Scale met?<br>• ✓ Latency met?<br>• ✓ Availability met?<br>• ✓ Compliance met? |
+
+---
+
+## 📖 DETAILED GUIDE (Read below for deeper understanding & examples)
+
+---
+
 ## **STEP 1: Clarify Functional Requirements (5 min)**
 
 **Ask the interviewer these questions to understand WHAT to build:**
