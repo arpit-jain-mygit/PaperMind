@@ -23,6 +23,7 @@ A comprehensive guide covering foundational system design concepts and detailed 
 ### Chapter 2: Back-of-the-Envelope Estimation
 1. [Quick Cheat Sheet (Printer-Friendly)](#quick-cheat-sheet-memorize-these-printer-friendly-3-column)
 2. [Two Formulas Side-by-Side (Print This!)](#two-formulas---side-by-side-print-this) ⭐⭐
+2a. [QPS ↔ Data Generation Bridge (Print This!)](#qps--data-generation-bridge-print-this) ⭐⭐ FLOW
 3. [Executive Summary](#executive-summary)
 4. [Power of Two](#power-of-two)
 5. [Latency Numbers Every Programmer Should Know](#latency-numbers-every-programmer-should-know)
@@ -940,6 +941,128 @@ QPS Calculation:                   │  Storage Calculation:
   Server capacity = 1K-10K QPS     │  1 TB = 1,024 GB
   Redundancy = 2-3X                │  1 PB = 1,024 TB
                                   │  Redundancy = 2-3X
+
+═══════════════════════════════════════════════════════════════════════════════
+```
+
+---
+
+## 🎯 QPS ↔ DATA GENERATION BRIDGE (Print This!)
+
+**PRINT IN LANDSCAPE MODE - FITS ON 1 PAGE**
+
+### Left Column: QPS Formula | Right Column: Data Derivation Formula
+
+```
+═══════════════════════════════════════════════════════════════════════════════
+              QPS FORMULA ↔ DATA GENERATION BRIDGE
+═══════════════════════════════════════════════════════════════════════════════
+
+LEFT: CALCULATE QPS                    │  RIGHT: DERIVE DATA FROM QPS
+───────────────────────────────────────┼──────────────────────────────────────
+
+STEP 1: Off-peak QPS                   │  STEP 1: Split QPS by Operation
+  = (DAU × R) ÷ 86,400                 │    Read_ratio = Ratio ÷ (Ratio + 1)
+                                       │    Write_ratio = 1 ÷ (Ratio + 1)
+                                       │    Write_QPS = Peak_QPS × Write_ratio
+STEP 2: Peak QPS                       │
+  = Off-peak × P                       │  STEP 2: Calculate Data Per Second
+                                       │    Data/sec = Write_QPS × Bytes/write
+STEP 3: Total Daily Requests           │
+  = (Off × 3,600 × Avg_hrs) +          │  STEP 3: Convert to Daily Per User
+    (Peak × 3,600 × Peak_hrs)          │    Daily/user = (Data/sec × 86,400)
+                                       │                 ÷ DAU
+STEP 4: Servers Needed                 │
+  = Peak ÷ Server_capacity             │  STEP 4: Use in Storage Formula
+                                       │    (Feed derived value to Storage!)
+
+───────────────────────────────────────────────────────────────────────────────
+EXAMPLE: Twitter (300M DAU, 20 req/user/day)
+───────────────────────────────────────────────────────────────────────────────
+
+QPS CALCULATION:                       │  DATA DERIVATION:
+
+Off-peak QPS:                          │  Peak QPS: 277,776 (from QPS formula)
+  (300M × 20) ÷ 86,400                 │  Read:Write ratio: 10:1
+  = 69,444 QPS                         │    Write_ratio = 1 ÷ 11 = 0.0909
+                                       │    Write_QPS = 277,776 × 0.0909
+Peak QPS:                              │               = 25,252 writes/sec
+  69,444 × 4 = 277,776 QPS             │
+                                       │  Data per write operation:
+Daily Requests:                        │    Tweet (10%): 500 bytes
+  Off: 69K × 3,600 × 19 = 4.72B       │    Like (50%): 100 bytes
+  Peak: 277K × 3,600 × 5 = 4.97B      │    Retweet (20%): 100 bytes
+  Total: 9.69 billion requests/day    │    Other (20%): 50 bytes
+                                       │    Weighted avg: 130 bytes
+Servers (500 QPS/server):              │
+  Off-peak: 139 servers                │  Data per second:
+  Peak: 556 servers                    │    25,252 × 130 = 3,282,760 B/sec
+  With 2X redundancy: 1,112 peak       │                 = 3.28 MB/sec
+
+                                       │  Daily data per user:
+                                       │    3.28 MB/sec × 86,400 sec
+                                       │    ÷ 300M users
+                                       │    = 0.94 MB/user/day
+
+───────────────────────────────────────────────────────────────────────────────
+KEY INSIGHT: ONE INPUT DRIVES BOTH
+───────────────────────────────────────────────────────────────────────────────
+
+"Requests per user per day" = 20 requests
+
+    ↓ (QPS Formula)
+    
+Peak QPS = 277,776
+
+    ↓ (Data Derivation)
+    
+Derived Data/user = 0.94 MB/day
+
+    ↓ (Feed into Storage Formula)
+    
+Storage needed = 4,380 PB (for 5-year retention)
+
+───────────────────────────────────────────────────────────────────────────────
+COMPARISON: DERIVED vs ASSUMED DATA
+───────────────────────────────────────────────────────────────────────────────
+
+Method                 Value            │  What It Represents
+──────────────────────────────────────────────────────────────────────────────
+Derived (from writes)  0.94 MB/user     │  Actual data written to DB
+Assumed (all-in)       6 MB/user        │  Includes metadata, indexes, etc
+Ratio                  6.4X             │  84% is overhead, not raw writes!
+
+Lesson: Writes create LESS data than we assume!
+Most storage is for indexes, metadata, and replication.
+
+───────────────────────────────────────────────────────────────────────────────
+DECISION TREE: WHICH VALUE TO USE?
+───────────────────────────────────────────────────────────────────────────────
+
+┌─ Do you know read:write ratio and bytes per write?
+│
+├─ YES → Use DERIVED (0.94 MB/user)
+│        ✓ More accurate for this system
+│        ✓ Validates your assumptions
+│        ✓ Shows what's actually being written
+│
+└─ NO → Use ASSUMED (6 MB/user)
+       ✓ Conservative estimate
+       ✓ Includes all overhead
+       ✓ Safe for capacity planning
+       
+BEST PRACTICE: Calculate both, use the HIGHER value!
+
+───────────────────────────────────────────────────────────────────────────────
+MEMORY CHECKLIST
+───────────────────────────────────────────────────────────────────────────────
+
+QPS Calculation:                       │  Data Derivation:
+  86,400 = seconds per day             │  Only WRITES create storage
+  Peak factor = 2-5X (typical 4X)      │  Reads consume but don't create
+  Server capacity = 1K-10K QPS         │  Read:Write ratio is crucial
+  Redundancy = 2-3X                    │  Weight by operation type
+  Peak hours = 2-5 hours (typical 5)   │  Convert to MB/GB/TB/PB
 
 ═══════════════════════════════════════════════════════════════════════════════
 ```
