@@ -3489,15 +3489,15 @@ This is a step-by-step framework you can apply to **ANY** system design intervie
 
 ## ⚡ QUICK REFERENCE TABLE (Print & Use in Interviews!)
 
-| Step | Focus | Time | Sub-Steps |
-|------|-------|------|-----------|
-| **STEP 1** | Functional Requirements | 5 min | • What features must we build?<br>• Who are the users?<br>• How do users interact? |
-| **STEP 2** | Scale & Non-Functional Req | 5 min | • DAU, read-write ratio, spike traffic<br>• Latency requirements<br>• Availability target (SLA)<br>• Consistency vs Availability |
-| **STEP 3** | Generic Blueprint | 3 min | • Load Balancer<br>• Services Layer<br>• Cache (Redis)<br>• Database (Master-Slave)<br>• Storage (S3, Kafka, Elasticsearch) |
-| **STEP 4** | Customize for System | 10 min | • What to ADD (system-specific components)<br>• What to REMOVE (not needed)<br>• What to MODIFY (adjust for requirements) |
-| **STEP 5** | Back-of-Envelope Math | 5 min | • Calculate QPS: (DAU × req/day) ÷ 86,400<br>• Peak QPS: avg × 2.5<br>• Servers needed: Peak QPS ÷ 1K-10K<br>• Storage calculation<br>• 10X growth scenario |
-| **STEP 6** | Design Deep-Dives (NFRs) | 10 min | • Resilience: failure scenarios + recovery<br>• Monitoring: metrics, alerts, SLA<br>• Consistency trade-off: Strong vs Eventual |
-| **STEP 7** | Verify Growth & Constraints | 7 min | • ✓ Scale met?<br>• ✓ Latency met?<br>• ✓ Availability met?<br>• ✓ Compliance met? |
+| Step | Focus | Time | Sub-Steps | How to Achieve (Approaches) |
+|------|-------|------|-----------|----------------------------|
+| **STEP 1** | Functional Requirements | 5 min | • What features must we build?<br>• Who are the users?<br>• How do users interact? | 🎯 **Ask clarifying questions:**<br>• "What's the MVP?"<br>• "What should we NOT build?"<br>• Identify different user types<br>• Define primary user journey |
+| **STEP 2** | Scale & Non-Functional Req | 5 min | • DAU, read-write ratio, spike traffic<br>• Latency requirements<br>• Availability target (SLA)<br>• Consistency vs Availability | 📊 **Gather metrics from interviewer:**<br>• Ask specific numbers (100M DAU? 1B?)<br>• Peak factor (2X? 5X?)<br>• Response time SLA (<200ms?)<br>• Uptime target (99.9%? 99.99%?)<br>• Discuss CP vs AP trade-off |
+| **STEP 3** | Generic Blueprint | 3 min | • Load Balancer<br>• Services Layer<br>• Cache (Redis)<br>• Database (Master-Slave)<br>• Storage (S3, Kafka, Elasticsearch) | 🏗️ **Draw ASCII diagram:**<br>• Start with clients at top<br>• Add layers: Edge → LB → Services → Cache → DB → Storage<br>• Label each component<br>• Show data flow with arrows |
+| **STEP 4** | Customize for System | 10 min | • What to ADD (system-specific components)<br>• What to REMOVE (not needed)<br>• What to MODIFY (adjust for requirements) | ✏️ **Analyze requirements from Steps 1-2:**<br>• **ADD:** Image service? WebSocket? Geospatial DB?<br>• **REMOVE:** Search? Real-time? Analytics?<br>• **MODIFY:** Cache strategy? DB replication?<br>• Justify each change |
+| **STEP 5** | Back-of-Envelope Math | 5 min | • Calculate QPS: (DAU × req/day) ÷ 86,400<br>• Peak QPS: avg × 2.5<br>• Servers needed: Peak QPS ÷ 1K-10K<br>• Storage calculation<br>• 10X growth scenario | 🧮 **Use formulas + write on whiteboard:**<br>• QPS = (DAU × requests/day) ÷ 86,400<br>• Peak = avg QPS × 2.5<br>• Servers = Peak QPS ÷ capacity/server<br>• Storage = daily × 365 × years × 3 (redundancy)<br>• Test if 10X growth breaks design |
+| **STEP 6** | Design Deep-Dives (NFRs) | 10 min | • Resilience: failure scenarios + recovery<br>• Monitoring: metrics, alerts, SLA<br>• Consistency trade-off: Strong vs Eventual | 🛡️ **Address 3 dimensions:**<br>• **Resilience:** "What if X fails? → Use Y as backup"<br>• **Monitoring:** "Metrics: CPU%, P99 latency, error rate. Alert when > threshold"<br>• **Consistency:** "For likes: eventual OK (stale 5 sec). For payments: strong required" |
+| **STEP 7** | Verify Growth & Constraints | 7 min | • ✓ Scale met?<br>• ✓ Latency met?<br>• ✓ Availability met?<br>• ✓ Compliance met? | ✅ **Run final checklist:**<br>• Does design handle original DAU + 10X?<br>• Latency under SLA? (Show calculation)<br>• Availability achievable? (99.9% or better?)<br>• Compliance met? (GDPR, PCI, etc.)<br>• Identify trade-offs & justify |
 
 ---
 
