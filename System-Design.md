@@ -14,7 +14,7 @@ A comprehensive guide covering foundational system design concepts and detailed 
 - Availability SLA mapping
 - Scale Numbers & Critical Formulas
 
-#### [7-STEP UNIVERSAL FRAMEWORK (Use for Any Problem!)](#chapter-35-the-universal-system-design-framework)
+#### [7-STEP UNIVERSAL FRAMEWORK (Use for Any Problem!)](#chapter-35-the-universal-system-design-framework) ⭐
 - Step-by-step approach with timing
 - Technical approaches for each step
 - Generic blueprint diagram
@@ -61,13 +61,6 @@ A comprehensive guide covering foundational system design concepts and detailed 
 
 ### **Part 2: Case Studies**
 
-#### [Chapter 4: Design a Rate Limiter](#chapter-4-design-a-rate-limiter)
-- Problem statement
-- Five algorithms compared
-- Interview Q&A
-- Implementation guide
-- Distributed systems challenges
-
 #### [Chapter 8: Design a URL Shortener](#chapter-8-design-a-url-shortener)
 - Problem statement
 - Hash-based vs base 62
@@ -103,7 +96,7 @@ This is **original content**: summaries, explanations, and real-world examples c
 7. [Stateless vs Stateful Architecture](#stateless-vs-stateful-architecture)
 8. [Multiple Data Centers](#multiple-data-centers)
 9. [Message Queue](#message-queue)
-10. [Complete Architecture](#complete-architecture)
+10. [Complete Architecture](#complete-architecture-scalable-web-application-social-media-example)
 
 ---
 
@@ -848,14 +841,13 @@ This is **original content**: summaries, explanations, and real-world examples c
 ---
 
 ## Table of Contents
-0. [🎯 Quick Cheat Sheet (Print & Memorize!)](#quick-cheat-sheet-memorize-these) ← START HERE
+0. [🎯 Quick Cheat Sheet (Print & Memorize!)](#quick-cheat-sheet-memorize-these-printer-friendly-3-column) ← START HERE
 1. [Executive Summary](#executive-summary)
 2. [Power of Two](#power-of-two)
 3. [Latency Numbers](#latency-numbers-every-programmer-should-know)
 4. [Availability Numbers](#availability-numbers)
 5. [Estimation Techniques](#estimation-techniques)
-6. [Real-World Example: Twitter](#real-world-example-twitter)
-7. [Tips for Estimation](#tips-for-estimation)
+6. [Tips for Estimation](#tips-for-estimation)
 
 ---
 
@@ -2459,21 +2451,6 @@ If number seems way off:
 This is **original content**: summaries, explanations, and real-world examples created to help understand system design concepts. It does not reproduce copyrighted material from the book. All content is restructured and rewritten for clarity and educational purposes.
 
 ---
-
-## Table of Contents
-1. [Executive Summary](#executive-summary)
-2. [Understanding the Interview](#understanding-the-interview)
-3. [What Interviewers Look For](#what-interviewers-look-for)
-4. [The 4-Step Framework](#the-4-step-framework)
-5. [Step 1: Understand the Problem](#step-1-understand-the-problem-and-establish-design-scope)
-6. [Step 2: High-Level Design](#step-2-propose-high-level-design-and-get-buy-in)
-7. [Step 3: Design Deep Dive](#step-3-design-deep-dive)
-8. [Step 4: Wrap-up](#step-4-wrap-up)
-9. [Time Management](#time-management)
-10. [Dos and Don'ts](#dos-and-donts)
-
----
-
 
 # Chapter 3.5: The Universal System Design Framework
 
@@ -6261,7 +6238,7 @@ CLIENT SIDE:
 3. [Why URL Shortening Matters](#why-url-shortening-matters)
 4. [Back of Envelope Estimation](#back-of-envelope-estimation)
 5. [High-Level Design](#high-level-design)
-6. [Hash Functions & Algorithms](#hash-functions--algorithms)
+6. [Hash Functions & Algorithms](#hash-functions-algorithms)
 7. [Algorithm Decision Matrix](#algorithm-decision-matrix)
 8. [Deep Dive Design](#deep-dive-design)
 9. [Architecture Decisions](#architecture-decisions)
