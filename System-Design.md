@@ -895,11 +895,10 @@ QPS Calculation:                   │  Storage Calculation:
   Peak hours = 5                   │    Redundancy = 2X
   Avg hours = 19                   │    Compression = 1.5X
 
-Off-peak: (300M × 20) ÷ 86K       │  Daily: 300M × 6 MB = 1.8 EB
-        = 69,444 QPS              │  Retention: 1.8 EB × 1,825 = 3.3 ZB
-                                  │  Redundancy: 3.3 ZB × 2 = 6.6 ZB
-Peak: 69,444 × 4 = 277,776 QPS   │  Final: 6.6 ZB ÷ 1.5 = 4.4 ZB
-                                  │         = 4,400 PB
+Off-peak: (300M × 20) ÷ 86K       │  Daily: 300M × 6 MB = 1.8 PB
+        = 69,444 QPS              │  Retention: 1.8 PB × 1,825 = 3,285 PB
+                                  │  Redundancy: 3,285 PB × 2 = 6,570 PB
+Peak: 69,444 × 4 = 277,776 QPS   │  Final: 6,570 PB ÷ 1.5 = 4,380 PB
 Servers (500 QPS/server):          │
   Off-peak: 69K ÷ 500 = 139       │  Tiered Storage (cost-optimized):
   Peak: 277K ÷ 500 = 556          │    Hot (1 yr, SSD): 700 PB
@@ -958,7 +957,7 @@ QPS Calculation:                   │  Storage Calculation:
 
 INPUT: Requests/user = 20/day (DAU = 300M)  →  QPS FORMULA  →  Peak QPS = 277,776
 
-      SERVERS (556)           BANDWIDTH (44 Gbps)         CACHING (500 PB)      STORAGE (4.4 ZB)      DATABASE (1.2 PB)
+      SERVERS (556)           BANDWIDTH (44 Gbps)         CACHING (500 PB)      STORAGE (4,380 PB)      DATABASE (1.2 PB)
       Peak/500 QPS            QPS × 2KB × 8 ÷ 10⁹ × 10X   80% hit from cache    0.94 MB × retention   Records × size
       + 2X redundancy         = 555 MB/s × 10X            Working set 240PB      + 2X + compress       + 1.5X indexes
       = 1,112 peak            = 44 Gbps needed            + 2X = 480 PB          = 4,380 PB total      + 2X replica
@@ -1088,17 +1087,17 @@ Step 1: Daily Data Generation
 Step 2: Apply Retention (tweets kept for 5 years)
   Daily_data × Retention_days
   1.8 EB × 1,825 days (5 years)
-  = 3.285 Zettabytes (ZB)
+  = 3,285 Petabytes (PB)
 
 Step 3: Apply Redundancy (2X for master-slave)
   Total_data × Redundancy_factor
-  3.285 ZB × 2
-  = 6.57 ZB
+  3,285 PB × 2
+  = 6,570 PB
 
 Step 4: Apply Compression (gzip ~1.5X for text)
   With_redundancy ÷ Compression_ratio
-  6.57 ZB ÷ 1.5
-  = 4.38 ZB ≈ 4,380 Petabytes (PB)
+  6,570 PB ÷ 1.5
+  = 4,380 Petabytes (PB)
 
 TIERED STORAGE STRATEGY (cost optimization):
   Hot storage (current 1 year, SSD, expensive):
@@ -1264,10 +1263,10 @@ MONITORING:
 ║  DAU = 300M, Data/user = 6 MB, Retention = 5 years    ║
 ║  Redundancy = 2X, Compression = 1.5X                  ║
 ║                                                        ║
-║  Daily = 300M × 6 MB = 1.8 EB                         ║
-║  Retention = 1.8 EB × 1,825 days = 3.3 ZB            ║
-║  Redundancy = 3.3 ZB × 2 = 6.6 ZB                    ║
-║  Compression = 6.6 ZB ÷ 1.5 = 4.4 ZB ≈ 4,400 PB      ║
+║  Daily = 300M × 6 MB = 1.8 PB                         ║
+║  Retention = 1.8 PB × 1,825 days = 3,285 PB         ║
+║  Redundancy = 3,285 PB × 2 = 6,570 PB                ║
+║  Compression = 6,570 PB ÷ 1.5 = 4,380 PB      ║
 ║                                                        ║
 ╚════════════════════════════════════════════════════════╝
 ```
@@ -2916,7 +2915,7 @@ Given:
   Compression = 1.5X (gzip for text)
 
 Calculation:
-  Step 1: Daily = 300M × 6 MB = 1.8 EB (exabytes)
+  Step 1: Daily = 300M × 6 MB = 1.8 PB (petabytes)
   Step 2: Retention = 1.8 EB × 1,825 = 3.285 ZB
   Step 3: Redundancy = 3.285 ZB × 2 = 6.57 ZB
   Step 4: Compression = 6.57 ZB ÷ 1.5 = 4.38 ZB
