@@ -21,12 +21,12 @@
 
 | System | DAU | Req/Day | Resp Size | Read:Write | Peak×hrs | Retention | Redundancy | **QPS: (DAU×Req/Day)÷100K × Peak_mult** | **Storage: DAU×data/user×retention×redundancy÷compression** |
 |:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| **Twitter** | 300M | 20 | 2 KB | 10:1 | 4×4h | 5 yrs | 2x | 60K avg → 240K peak | 10MB/user → 3PB/day → 5.1PB DB |
-| **YouTube** | 500M | 50 | 20 KB | 100:1 | 5×4h | 2 yrs | 3x | 250K avg → 1.25M peak | 100MB/user → 50PB/day → 500PB DB |
-| **Uber** | 100M | 100 | 5 KB | 5:1 | 3×4h | 3mo | 2x | 100K avg → 300K peak | 50MB/day → 25TB → 50PB total |
-| **Netflix** | 300M | 30 | 50 KB | 100:1 | 5×6h | 2 yrs | 3x | 90K avg → 450K peak | 200MB/user → 60PB/day → 500PB DB |
-| **Instagram** | 500M | 100 | 10 KB | 20:1 | 4×4h | 10 yrs | 3x | 500K avg → 2M peak | 50MB/user → 25PB/day → 1-2EB DB |
-| **Stripe** | 1M* | 1000 | 2 KB | 2:1 | 2×8h | 10 yrs | 3x | 100K avg → 200K peak | 10MB/txn → 10TB/day → 10PB total |
+| **Twitter** | 300M | 20 | 2 KB | 10:1 | 4×4h | 5 yrs | 2x | 60K avg → 240K peak | 3PB/day × 1,825 × 2x = **10.95 PB** |
+| **YouTube** | 500M | 50 | 20 KB | 100:1 | 5×4h | 2 yrs | 3x | 250K avg → 1.25M peak | 50PB/day × 730 × 3x = **109.5 PB** |
+| **Uber** | 100M | 100 | 5 KB | 5:1 | 3×4h | 3mo | 2x | 100K avg → 300K peak | 5TB/day × 90 × 2x = **0.9 PB** |
+| **Netflix** | 300M | 30 | 50 KB | 100:1 | 5×6h | 2 yrs | 3x | 90K avg → 450K peak | 15PB/day × 730 × 3x = **32.85 PB** |
+| **Instagram** | 500M | 100 | 10 KB | 20:1 | 4×4h | 10 yrs | 3x | 500K avg → 2M peak | 5PB/day × 3,650 × 3x = **54.75 PB** |
+| **Stripe** | 1M* | 1000 | 2 KB | 2:1 | 2×8h | 10 yrs | 3x | 100K avg → 200K peak | 10TB/day × 3,650 × 3x = **109.5 PB** |
 
 **Key Notes:**
 - *Stripe DAU = business accounts (not end users)
