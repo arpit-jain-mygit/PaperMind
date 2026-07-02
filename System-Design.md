@@ -898,12 +898,12 @@ QPS Calculation:                   │  Storage Calculation:
 Off-peak: (300M × 20) ÷ 86K       │  Daily: 300M × 6 MB = 1.8 PB
         = 60,000 QPS              │  Retention: 1.8 PB × 1,825 = 3,285 PB
                                   │  Redundancy: 3,285 PB × 2 = 6,570 PB
-Peak: 69,444 × 4 = 240,000 QPS   │  Final: 6,570 PB ÷ 1.5 = 4,380 PB
+Peak: 60,000 × 4 = 240,000 QPS   │  Final: 6,570 PB ÷ 1.5 = 4,380 PB
 Servers (500 QPS/server):          │
-  Off-peak: 60K ÷ 500 = 139       │  Tiered Storage (cost-optimized):
-  Peak: 240K ÷ 500 = 556          │    Hot (1 yr, SSD): 700 PB
+  Off-peak: 60K ÷ 500 = 120       │  Tiered Storage (cost-optimized):
+  Peak: 240K ÷ 500 = 480          │    Hot (1 yr, SSD): 700 PB
   Auto-scale: +360 servers         │    Warm (4 yrs, HDD): 3,700 PB
-                                  │    Total: 4,400 PB
+                                  │    Total: 4,380 PB
 
 ───────────────────────────────────────────────────────────────────────────────
 QUICK REFERENCE TABLE
