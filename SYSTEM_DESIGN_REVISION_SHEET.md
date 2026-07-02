@@ -78,12 +78,16 @@
 | | QPS/Server: 1K-10K | DB_Size = Write_QPS × record_size × | **Z**=Zero-Downtime Updates |
 | **Cost Baseline:** | | retention × index × redundancy | Downtime: 5 minutes/year |
 | Servers: $50K/yr | | | **Only for critical systems!** |
-| Cache (RAM): $1.5/GB | | **Caching Formula:** | Cost: $5M+/year |
-| SSD Storage: $276K/TB | | Cache = DB_size × hot_ratio × redundancy | |
-| HDD Storage: $36K/TB | | Hit_rate reduces DB_QPS by 80%+ | **RLF → AHM → PRZ** |
-| | | | Each adds resilience layer |
-| | | | Most systems use AHM (4 nines) |
-| | | | Ask "Why" before over-building |
+| **Hot Storage (SSD):** | | **Caching Formula:** | Cost: $5M+/year |
+| • $276K/TB/yr | | Cache = DB_size × hot_ratio × redundancy | |
+| • $0.023/GB/mo | | Hit_rate reduces DB_QPS by 80%+ | **RLF → AHM → PRZ** |
+| **Warm Storage (HDD):** | | | Each adds resilience layer |
+| • $36K/TB/yr | | | Most systems use AHM (4 nines) |
+| • $0.003/GB/mo | | | Ask "Why" before over-building |
+| Cache (RAM): $1.5/GB | | | **Twitter Cost Example:** |
+| | | | Hot: 1,095PB → $303M/yr |
+| | | | Warm: 4,380PB → $158M/yr |
+| | | | **Total: $461M/year** |
 
 ---
 
