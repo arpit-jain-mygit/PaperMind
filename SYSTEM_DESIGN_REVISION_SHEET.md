@@ -21,14 +21,16 @@
 
 **Storage Formula:** (Daily_data × retention_days × redundancy) ÷ compression
 
-| System | DAU | Req | Size | R:W | Peak | Ret | Red | Cmp | QPS Calculation | Storage Calculation |
+**Bandwidth Formula (Gbps):** (Peak_QPS × Response_size × 8 bits) ÷ 10^9 × bw_redundancy
+
+| System | DAU | Req | Size | R:W | Peak | Ret | Red | Cmp | QPS Calculation | Storage Calculation | Bandwidth Calculation |
 |:---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|
-| **Twitter** | 300M | 20 | 2K | 10:1 | 4×4h | 5y | 2x | 1.5x | (300M×20)÷100K=60K avg, ×4=**240K peak** | (3PB×1,825×2)÷1.5=**7.3EB** |
-| **YouTube** | 500M | 50 | 20K | 100:1 | 5×4h | 2y | 3x | 1.1x | (500M×50)÷100K=250K avg, ×5=**1.25M peak** | (50PB×730×3)÷1.1=**99.5EB** |
-| **Uber** | 100M | 100 | 5K | 5:1 | 3×4h | 3mo | 2x | 1.3x | (100M×100)÷100K=100K avg, ×3=**300K peak** | (5TB×90×2)÷1.3=**0.7PB** |
-| **Netflix** | 300M | 30 | 50K | 100:1 | 5×6h | 2y | 3x | 1.1x | (300M×30)÷100K=90K avg, ×5=**450K peak** | (15PB×730×3)÷1.1=**29.8EB** |
-| **Instagram** | 500M | 100 | 10K | 20:1 | 4×4h | 10y | 3x | 1.05x | (500M×100)÷100K=500K avg, ×4=**2M peak** | (5PB×3,650×3)÷1.05=**52.1EB** |
-| **Stripe** | 1M* | 1000 | 2K | 2:1 | 2×8h | 10y | 3x | 1.5x | (1M×1000)÷100K=100K avg, ×2=**200K peak** | (10TB×3,650×3)÷1.5=**0.73EB** |
+| **Twitter** | 300M | 20 | 2K | 10:1 | 4×4h | 5y | 2x | 1.5x | (300M×20)÷100K=60K avg, ×4=**240K peak** | (3PB×1,825×2)÷1.5=**7.3EB** | (240K×2K×8)÷10^9×10=**38.4 Gbps** |
+| **YouTube** | 500M | 50 | 20K | 100:1 | 5×4h | 2y | 3x | 1.1x | (500M×50)÷100K=250K avg, ×5=**1.25M peak** | (50PB×730×3)÷1.1=**99.5EB** | (1.25M×20K×8)÷10^9×10=**2,000 Gbps** |
+| **Uber** | 100M | 100 | 5K | 5:1 | 3×4h | 3mo | 2x | 1.3x | (100M×100)÷100K=100K avg, ×3=**300K peak** | (5TB×90×2)÷1.3=**0.7PB** | (300K×5K×8)÷10^9×10=**120 Gbps** |
+| **Netflix** | 300M | 30 | 50K | 100:1 | 5×6h | 2y | 3x | 1.1x | (300M×30)÷100K=90K avg, ×5=**450K peak** | (15PB×730×3)÷1.1=**29.8EB** | (450K×50K×8)÷10^9×10=**1,800 Gbps** |
+| **Instagram** | 500M | 100 | 10K | 20:1 | 4×4h | 10y | 3x | 1.05x | (500M×100)÷100K=500K avg, ×4=**2M peak** | (5PB×3,650×3)÷1.05=**52.1EB** | (2M×10K×8)÷10^9×10=**1,600 Gbps** |
+| **Stripe** | 1M* | 1000 | 2K | 2:1 | 2×8h | 10y | 3x | 1.5x | (1M×1000)÷100K=100K avg, ×2=**200K peak** | (10TB×3,650×3)÷1.5=**0.73EB** | (200K×2K×8)÷10^9×10=**32 Gbps** |
 
 **Column Legend:**
 - **Req** = Requests/user/day
