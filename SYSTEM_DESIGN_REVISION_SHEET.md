@@ -19,14 +19,14 @@
 
 **How to derive QPS, Storage, and Costs from base metrics:**
 
-| System | DAU | Req/Day | Resp Size | Read:Write | Peak×hrs | Retention | QPS Calc | Storage Calc |
+| System | DAU | Req/Day | Resp Size | Read:Write | Peak×hrs | Retention | **QPS: (DAU×Req/Day)÷100K × Peak_mult** | **Storage: DAU×data/user×retention×redundancy÷compression** |
 |:---|---:|---:|---:|---:|---:|---:|---:|---:|
-| **Twitter** | 300M | 20 | 2 KB | 10:1 | 4×4h | 5 yrs | (300M×20)÷100K=60K avg, ×4=240K peak | 10MB/user → 3PB/day → 5.1PB DB |
-| **YouTube** | 500M | 50 | 20 KB | 100:1 | 5×4h | 2 yrs | (500M×50)÷100K=250K avg, ×5=1.25M peak | 100MB/user → 50PB/day → 500PB DB |
-| **Uber** | 100M | 100 | 5 KB | 5:1 | 3×4h | 3mo | (100M×100)÷100K=100K avg, ×3=300K peak | 50MB/day → 25TB → 50PB total |
-| **Netflix** | 300M | 30 | 50 KB | 100:1 | 5×6h | 2 yrs | (300M×30)÷100K=90K avg, ×5=450K peak | 200MB/user → 60PB/day → 500PB DB |
-| **Instagram** | 500M | 100 | 10 KB | 20:1 | 4×4h | 10 yrs | (500M×100)÷100K=500K avg, ×4=2M peak | 50MB/user → 25PB/day → 1-2EB DB |
-| **Stripe** | 1M* | 1000 | 2 KB | 2:1 | 2×8h | 10 yrs | (1M×1000)÷100K=100K avg, ×2=200K peak | 10MB/txn → 10TB/day → 10PB total |
+| **Twitter** | 300M | 20 | 2 KB | 10:1 | 4×4h | 5 yrs | 60K avg → 240K peak | 10MB/user → 3PB/day → 5.1PB DB |
+| **YouTube** | 500M | 50 | 20 KB | 100:1 | 5×4h | 2 yrs | 250K avg → 1.25M peak | 100MB/user → 50PB/day → 500PB DB |
+| **Uber** | 100M | 100 | 5 KB | 5:1 | 3×4h | 3mo | 100K avg → 300K peak | 50MB/day → 25TB → 50PB total |
+| **Netflix** | 300M | 30 | 50 KB | 100:1 | 5×6h | 2 yrs | 90K avg → 450K peak | 200MB/user → 60PB/day → 500PB DB |
+| **Instagram** | 500M | 100 | 10 KB | 20:1 | 4×4h | 10 yrs | 500K avg → 2M peak | 50MB/user → 25PB/day → 1-2EB DB |
+| **Stripe** | 1M* | 1000 | 2 KB | 2:1 | 2×8h | 10 yrs | 100K avg → 200K peak | 10MB/txn → 10TB/day → 10PB total |
 
 **Key Notes:**
 - *Stripe DAU = business accounts (not end users)
