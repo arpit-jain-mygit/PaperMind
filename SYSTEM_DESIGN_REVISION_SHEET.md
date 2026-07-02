@@ -23,19 +23,21 @@
 
 **Bandwidth Formula (Gbps):** (Peak_QPS × Response_size × 8 bits) ÷ 10^9 × bw_redundancy
 
-| System | DAU | Req | Size | R:W | Peak | Ret | Red | Cmp | QPS Calculation | Storage Calculation | Bandwidth Calculation |
-|:---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---|
-| **Twitter** | 300M | 20 | 2K | 10:1 | 4×4h | 5y | 2x | 1.5x | (300M×20)÷100K=60K avg, ×4=**240K peak** | (3PB×1,825×2)÷1.5=**7.3EB** | (240K×2K×8)÷10^9×10=**38.4 Gbps** |
-| **YouTube** | 500M | 50 | 20K | 100:1 | 5×4h | 2y | 3x | 1.1x | (500M×50)÷100K=250K avg, ×5=**1.25M peak** | (50PB×730×3)÷1.1=**99.5EB** | (1.25M×20K×8)÷10^9×10=**2,000 Gbps** |
-| **Uber** | 100M | 100 | 5K | 5:1 | 3×4h | 3mo | 2x | 1.3x | (100M×100)÷100K=100K avg, ×3=**300K peak** | (5TB×90×2)÷1.3=**0.7PB** | (300K×5K×8)÷10^9×10=**120 Gbps** |
-| **Netflix** | 300M | 30 | 50K | 100:1 | 5×6h | 2y | 3x | 1.1x | (300M×30)÷100K=90K avg, ×5=**450K peak** | (15PB×730×3)÷1.1=**29.8EB** | (450K×50K×8)÷10^9×10=**1,800 Gbps** |
-| **Instagram** | 500M | 100 | 10K | 20:1 | 4×4h | 10y | 3x | 1.05x | (500M×100)÷100K=500K avg, ×4=**2M peak** | (5PB×3,650×3)÷1.05=**52.1EB** | (2M×10K×8)÷10^9×10=**1,600 Gbps** |
-| **Stripe** | 1M* | 1000 | 2K | 2:1 | 2×8h | 10y | 3x | 1.5x | (1M×1000)÷100K=100K avg, ×2=**200K peak** | (10TB×3,650×3)÷1.5=**0.73EB** | (200K×2K×8)÷10^9×10=**32 Gbps** |
+**Database Formula:** (Peak_QPS ÷ R:W_ratio) × 86.4K sec × Rec_size × Ret_days × 1.5idx × Red
+
+| System | DAU | Req | Size | R:W | Peak | Ret | Red | Cmp | QPS Calculation | Storage Calculation | Bandwidth Calculation | Database Calculation |
+|:---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---|---|
+| **Twitter** | 300M | 20 | 2K | 9:1 | 4×4h | 5y | 2x | 1.5x | (300M×20)÷100K=60K avg, ×4=**240K peak** | (3PB×1,825×2)÷1.5=**7.3EB** | (240K×2K×8)÷10^9×10=**38.4 Gbps** | (240K÷10)×86.4K×500B×1,825×1.5×2=**5.4PB** |
+| **YouTube** | 500M | 50 | 20K | 99:1 | 5×4h | 2y | 3x | 1.1x | (500M×50)÷100K=250K avg, ×5=**1.25M peak** | (50PB×730×3)÷1.1=**99.5EB** | (1.25M×20K×8)÷10^9×10=**2,000 Gbps** | (1.25M÷100)×86.4K×1K×730×1.5×3=**47.5PB** |
+| **Uber** | 100M | 100 | 5K | 4:1 | 3×4h | 3mo | 2x | 1.3x | (100M×100)÷100K=100K avg, ×3=**300K peak** | (5TB×90×2)÷1.3=**0.7PB** | (300K×5K×8)÷10^9×10=**120 Gbps** | (300K÷5)×86.4K×5K×90×1.5×2=**1.17PB** |
+| **Netflix** | 300M | 30 | 50K | 99:1 | 5×6h | 2y | 3x | 1.1x | (300M×30)÷100K=90K avg, ×5=**450K peak** | (15PB×730×3)÷1.1=**29.8EB** | (450K×50K×8)÷10^9×10=**1,800 Gbps** | (450K÷100)×86.4K×1K×730×1.5×3=**14.2PB** |
+| **Instagram** | 500M | 100 | 10K | 9:1 | 4×4h | 10y | 3x | 1.05x | (500M×100)÷100K=500K avg, ×4=**2M peak** | (5PB×3,650×3)÷1.05=**52.1EB** | (2M×10K×8)÷10^9×10=**1,600 Gbps** | (2M÷10)×86.4K×2K×3,650×1.5×3=**190.6PB** |
+| **Stripe** | 1M* | 1000 | 2K | 1:1 | 2×8h | 10y | 3x | 1.5x | (1M×1000)÷100K=100K avg, ×2=**200K peak** | (10TB×3,650×3)÷1.5=**0.73EB** | (200K×2K×8)÷10^9×10=**32 Gbps** | (200K÷2)×86.4K×10K×3,650×1.5×3=**47.5PB** |
 
 **Column Legend:**
 - **Req** = Requests/user/day
 - **Size** = Response size (K=KB)
-- **R:W** = Read:Write ratio
+- **R:W** = Read:Write ratio (using 9:1, 99:1, etc. for clean mental math)
 - **Peak** = Multiplier × hours (e.g., 4×4h = 4X for 4 hours)
 - **Ret** = Retention (y=years, mo=months)
 - **Red** = Redundancy factor (2x or 3x)
@@ -43,15 +45,24 @@
 - **QPS** = Calculation showing average → peak QPS
 - **Storage** = Calculation showing total for entire retention period
 - **Bandwidth** = Calculation showing required Gbps capacity
+- **Database** = Database capacity with indexes (1.5x) and replication (×Red)
 
 **Key Notes:**
 - *Stripe DAU = business accounts (not end users)
 - R:W ratio (reads:writes) impacts database design - more reads = more scalable
+  - Use 9:1, 99:1, etc. for clean mental math (÷10, ÷100) in interviews
+- **Database = ONLY WRITES** (metadata/records, not media files like photos/videos)
+  - Twitter: 5.4 PB = tweets + metadata (2.7 PB master + 2.7 PB replica)
+  - YouTube: 47.5 PB = watch history + video metadata
+  - Instagram: 190.6 PB = posts + comments + likes metadata
 - Redundancy: 2x for standard, 3x for critical systems requiring multi-region HA
 - Compression reduces by: 1.5x (text) = 33%, 1.1x (video) = 9%, 1.05x (photos) = 5%
 - **Storage = TOTAL for entire retention**, not daily!
-  - Twitter: 7.3 EB = 5 years of data with redundancy & compression
-  - YouTube: 99.5 EB = 2 years of data with redundancy & compression
+  - Twitter: 7.3 EB = 5 years of all data (photos, videos, metadata) with redundancy & compression
+  - YouTube: 99.5 EB = 2 years of all data with redundancy & compression
+- **Database vs Storage:**
+  - Database holds indexed write records only (much smaller)
+  - Storage holds all user content + backups (1,000x+ larger)
 
 **Derived Formulas:**
 - **Peak QPS** = (DAU × Req/Day) ÷ 100K × Peak_mult
