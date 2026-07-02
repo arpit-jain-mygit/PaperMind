@@ -892,8 +892,8 @@ QPS Calculation:                   │  Storage Calculation:
   DAU = 300M                       │    DAU = 300M
   Requests/user = 20/day           │    Data/user = 10 MB/day
   Peak multiplier = 4X             │    Retention = 5 years (1,825 days)
-  Peak hours = 5                   │    Redundancy = 2X
-  Avg hours = 19                   │    Compression = 1.5X
+  Peak hours = 4                   │    Redundancy = 2X
+  Avg hours = 20                   │    Compression = 1.5X
 
 Off-peak: (300M × 20) ÷ 86K       │  Daily: 300M × 10 MB = 3 PB
         = 60,000 QPS              │  Retention: 3 PB × 1,825 = 5,475 PB
@@ -971,7 +971,7 @@ QPS FORMULA                               DATA DERIVATION (from Write QPS)      
 ─────────────────────────────────────     ──────────────────────────────────────    ─────────────────────────
 (300M × 20) ÷ 100K = 60K avg QPS         Write_QPS = 240K × (1÷11) = 21.8K writes  Servers: 240K ÷ 500 = 480
 60K × 4 = 240K peak QPS                  Data = 21.8K × 130B = 2.83 MB/sec         BW: 240K × 2KB = 480MB/s
-Daily: 6B requests                        Daily/user: (2.83M × 100K) ÷ 300M         Cache: 300PB × 2 = 600PB
+Daily: 7.8B requests                        Daily/user: (2.83M × 100K) ÷ 300M         Cache: 300PB × 2 = 600PB
                                           = 10 MB/user/day ← DATA METRIC             DB: 1.5PB (+ indexes)
                                                                                       Storage: 7,300PB (5yr)
 
@@ -992,7 +992,7 @@ DATABASE             │ Records/user × Size        │ Records × 500B × 1.5 
 
 COMPLETE INFRASTRUCTURE (One Input → Complete System):
 
-QPS Path:        240K peak → 480 servers → 38.4 Gbps → 960 servers (2X) → Auto-scale +360 for 5 hours
+QPS Path:        240K peak → 480 servers → 38.4 Gbps → 960 servers (2X) → Auto-scale +360 for 4 hours
 
 Data Path:       240K → 21.8K writes → 10 MB/user → 7,300 PB storage → ~$145M/year
                                                    → 1.5 PB main DB
@@ -1060,8 +1060,8 @@ Step 2: Peak QPS (evening hours)
   = 240,000 QPS (peak)
 
 Step 3: Total Daily Requests
-  Off-peak hours (19 hrs): 69,444 × 3,600 × 19 = 4.72 billion
-  Peak hours (5 hrs): 277,776 × 3,600 × 5 = 4.97 billion
+  Off-peak hours (20 hrs): 69,444 × 3,600 × 19 = 4.72 billion
+  Peak hours (4 hrs): 277,776 × 3,600 × 5 = 4.97 billion
   Total daily requests = 9.69 billion
 
 Step 4: Server Capacity
