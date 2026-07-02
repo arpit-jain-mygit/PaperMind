@@ -21,31 +21,34 @@
 
 **Storage Formula:** (Daily_data × retention_days × redundancy) ÷ compression
 
-| System | DAU | Req/Day | Resp Size | Read:Write | Peak×hrs | Retention | Redundancy | Compression | QPS Result | Storage Result |
+| System | DAU | Req | Size | R:W | Peak | Ret | Red | Cmp | QPS | Storage |
 |:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| **Twitter** | 300M | 20 | 2 KB | 10:1 | 4×4h | 5 yrs | 2x | 1.5x | 60K → 240K | 7.3 EB |
-| **YouTube** | 500M | 50 | 20 KB | 100:1 | 5×4h | 2 yrs | 3x | 1.1x | 250K → 1.25M | 99.5 EB |
-| **Uber** | 100M | 100 | 5 KB | 5:1 | 3×4h | 3mo | 2x | 1.3x | 100K → 300K | 0.7 PB |
-| **Netflix** | 300M | 30 | 50 KB | 100:1 | 5×6h | 2 yrs | 3x | 1.1x | 90K → 450K | 29.8 EB |
-| **Instagram** | 500M | 100 | 10 KB | 20:1 | 4×4h | 10 yrs | 3x | 1.05x | 500K → 2M | 52.1 EB |
-| **Stripe** | 1M* | 1000 | 2 KB | 2:1 | 2×8h | 10 yrs | 3x | 1.5x | 100K → 200K | 0.73 EB |
+| **Twitter** | 300M | 20 | 2K | 10:1 | 4×4h | 5y | 2x | 1.5x | 60K→240K | 7.3EB |
+| **YouTube** | 500M | 50 | 20K | 100:1 | 5×4h | 2y | 3x | 1.1x | 250K→1.25M | 99.5EB |
+| **Uber** | 100M | 100 | 5K | 5:1 | 3×4h | 3mo | 2x | 1.3x | 100K→300K | 0.7PB |
+| **Netflix** | 300M | 30 | 50K | 100:1 | 5×6h | 2y | 3x | 1.1x | 90K→450K | 29.8EB |
+| **Instagram** | 500M | 100 | 10K | 20:1 | 4×4h | 10y | 3x | 1.05x | 500K→2M | 52.1EB |
+| **Stripe** | 1M* | 1000 | 2K | 2:1 | 2×8h | 10y | 3x | 1.5x | 100K→200K | 0.73EB |
+
+**Column Legend:**
+- **Req** = Requests/user/day
+- **Size** = Response size (K=KB)
+- **R:W** = Read:Write ratio
+- **Peak** = Multiplier × hours (e.g., 4×4h = 4X for 4 hours)
+- **Ret** = Retention (y=years, mo=months)
+- **Red** = Redundancy factor (2x or 3x)
+- **Cmp** = Compression ratio
+- **QPS** = Average → Peak queries per second
+- **Storage** = Total for entire retention period
 
 **Key Notes:**
 - *Stripe DAU = business accounts (not end users)
-- Req/Day = requests per user per day (heavy usage systems have higher numbers)
-- Resp Size = average response size in bytes
-- Read:Write = ratio (more reads = more scalable, fewer writes = smaller DB)
-- Peak = multiplier × hours of peak (e.g., 4×4h = 4X traffic for 4 hours)
-- Retention = how long data kept (longer = bigger storage costs)
-- Redundancy = 2x (master-slave) for standard systems, 3x for critical systems requiring multi-region HA
-- Compression = ratio of original size ÷ compressed size (1.5x = reduces by 33%, 1.1x = reduces by 9%)
-  - Text (Twitter, Stripe): 1.5x (gzip good for JSON/text)
-  - Video (YouTube, Netflix): 1.05-1.1x (already compressed with H.264/VP9)
-  - Photos (Instagram): 1.05x (JPEG/WebP already optimized)
-  - Location data (Uber): 1.3x (structured, compresses well)
-- **Storage column = TOTAL storage for entire retention period** (not per day!)
-  - Twitter: 7.3 EB = 5 years of 3PB/day with 2x redundancy & compression
-  - YouTube: 99.5 EB = 2 years of 50PB/day with 3x redundancy & compression
+- R:W ratio (reads:writes) impacts database design - more reads = more scalable
+- Redundancy: 2x for standard, 3x for critical systems requiring multi-region HA
+- Compression reduces by: 1.5x (text) = 33%, 1.1x (video) = 9%, 1.05x (photos) = 5%
+- **Storage = TOTAL for entire retention**, not daily!
+  - Twitter: 7.3 EB = 5 years of data with redundancy & compression
+  - YouTube: 99.5 EB = 2 years of data with redundancy & compression
 
 **Derived Formulas:**
 - **Peak QPS** = (DAU × Req/Day) ÷ 100K × Peak_mult
