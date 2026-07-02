@@ -51,36 +51,30 @@
 
 | **POWERS OF 10 & TIME** | **LATENCY & SYSTEMS** | **SCALE & FORMULAS** | **UPTIME MNEMONICS** |
 |:---|:---|:---|:---|
-| **Data Sizes (10^X):** | **Latency (ms):** | **Popular Systems:** | **3 NINES (99.9%) = RLF** |
-| 10^3 = 1 KB | L1: 0.0005 | **Twitter** | **R**=Replication (DB, Cache) |
-| 10^6 = 1 MB | Mem: 0.1 | • QPS: 240K peak | **L**=Load Balancing (Web, DB) |
-| 10^9 = 1 GB | SSD: 0.25 | • Servers: 960 | **F**=Failover (manual, 5-10m) |
-| 10^12 = 1 TB | Disk: 10 | • Storage: 5-100 PB | Downtime: 8.76 hours/year |
-| 10^15 = 1 PB | DC: 0.5 | • Cost: $455M/yr | |
-| 10^18 = 1 EB | Redis: 2 | **YouTube** | **4 NINES (99.99%) = AHM** |
-| 10^21 = 1 ZB | DB: 100 | • QPS: 1M+ peak | **A**=Automation (failover, scale) |
-| 10^24 = 1 YB | US: 150 | • Storage: 500 PB+ | **H**=Health Checks (10s freq) |
-| | | • Retention: 1-2 yrs | **M**=Multi-Region (US/EU/Asia) |
-| **Time Constants:** | **Throughput:** | **Uber** | Downtime: 53 minutes/year |
-| Sec/Day: **100K** | Network: 125 MB/s | • QPS: 50-100K | |
-| Sec/Year: **32M** | SSD: 100+ MB/s | • Servers: 100-200 | **5 NINES (99.999%) = PRZ** |
-| Hour/Year: **8.76K** | HDD: 1-10 MB/s | • Storage: 50 PB | **P**=Prediction (ML, anomaly) |
-| Min/Year: **525.6K** | Memory: 10+ GB/s | • Retention: 3 months | **R**=Redundant ISPs (dual) |
-| | QPS/Server: 1K-10K | **Netflix** | **Z**=Zero-Downtime Updates |
-| **Cost Baseline:** | | • QPS: 200-500K | Downtime: 5 minutes/year |
-| Servers: $50K/yr | | • Servers: 400-1K | **Only for critical systems!** |
-| Cache (RAM): $1.5/GB | | • Storage: 100-500 PB | Cost: $5M+/year |
-| SSD Storage: $276K/TB | | • Retention: 2 years | |
-| HDD Storage: $36K/TB | | **Instagram** | **RLF → AHM → PRZ** |
-| | | • QPS: 500K-1M | Each adds resilience layer |
-| | | • Servers: 1K-2K | Most systems use AHM (4 nines) |
-| | | • Storage: 1-2 EB | Ask "Why" before over-building |
-| | | • Retention: 10 years | |
-| | | **Stripe** | |
-| | | • QPS: 10-100K | |
-| | | • Servers: 20-200 | |
-| | | • Storage: 10 PB | |
-| | | • Retention: 10 years | |
+| **Data Sizes (10^X):** | **Latency (ms):** | **QPS Formula:** | **3 NINES (99.9%) = RLF** |
+| 10^3 = 1 KB | L1: 0.0005 | QPS = (DAU × Req/day) ÷ 100K | **R**=Replication (DB, Cache) |
+| 10^6 = 1 MB | Mem: 0.1 | Peak_QPS = Avg_QPS × Peak_mult | **L**=Load Balancing (Web, DB) |
+| 10^9 = 1 GB | SSD: 0.25 | Servers = Peak ÷ capacity | **F**=Failover (manual, 5-10m) |
+| 10^12 = 1 TB | Disk: 10 | Daily_Req = Off×3.6K×avg_hrs + Peak×3.6K×peak_hrs | Downtime: 8.76 hours/year |
+| 10^15 = 1 PB | DC: 0.5 | | |
+| 10^18 = 1 EB | Redis: 2 | **Storage Formula:** | **4 NINES (99.99%) = AHM** |
+| 10^21 = 1 ZB | DB: 100 | Storage = DAU × data_per_user × retention | **A**=Automation (failover, scale) |
+| 10^24 = 1 YB | US: 150 | × redundancy ÷ compression | **H**=Health Checks (10s freq) |
+| | | | **M**=Multi-Region (US/EU/Asia) |
+| **Time Constants:** | **Throughput:** | **Bandwidth Formula:** | Downtime: 53 minutes/year |
+| Sec/Day: **100K** | Network: 125 MB/s | BW = Peak × Resp_size × 8 ÷ 10^9 × redundancy | |
+| Sec/Year: **32M** | SSD: 100+ MB/s | | **5 NINES (99.999%) = PRZ** |
+| Hour/Year: **8.76K** | HDD: 1-10 MB/s | **Database Formula:** | **P**=Prediction (ML, anomaly) |
+| Min/Year: **525.6K** | Memory: 10+ GB/s | Write_QPS = Peak ÷ read_write_ratio | **R**=Redundant ISPs (dual) |
+| | QPS/Server: 1K-10K | DB_Size = Write_QPS × record_size × | **Z**=Zero-Downtime Updates |
+| **Cost Baseline:** | | retention × index × redundancy | Downtime: 5 minutes/year |
+| Servers: $50K/yr | | | **Only for critical systems!** |
+| Cache (RAM): $1.5/GB | | **Caching Formula:** | Cost: $5M+/year |
+| SSD Storage: $276K/TB | | Cache = DB_size × hot_ratio × redundancy | |
+| HDD Storage: $36K/TB | | Hit_rate reduces DB_QPS by 80%+ | **RLF → AHM → PRZ** |
+| | | | Each adds resilience layer |
+| | | | Most systems use AHM (4 nines) |
+| | | | Ask "Why" before over-building |
 
 ---
 
