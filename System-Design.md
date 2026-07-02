@@ -901,9 +901,9 @@ Off-peak: (300M × 20) ÷ 86K       │  Daily: 300M × 10 MB = 3 PB
 Peak: 60,000 × 4 = 240,000 QPS   │  Final: 10,950 PB ÷ 1.5 = 7,300 PB
 Servers (500 QPS/server):          │
   Off-peak: 60K ÷ 500 = 120       │  Tiered Storage (cost-optimized):
-  Peak: 240K ÷ 500 = 480          │    Hot (1 yr, SSD): 1,095 PB
-  Auto-scale: +360 servers         │    Warm (4 yrs, HDD): 4,380 PB
-                                  │    Total: 7,300 PB
+  Peak: 240K ÷ 500 = 480          │    Hot (1 yr, SSD): 1,095 PB @ $0.023/GB/mo
+  Auto-scale: +360 servers         │    Warm (4 yrs, HDD): 4,380 PB @ $0.003/GB/mo
+                                  │    Total: 7,300 PB ≈ $462M/year
 
 ───────────────────────────────────────────────────────────────────────────────
 QUICK REFERENCE TABLE
@@ -940,6 +940,11 @@ QPS Calculation:                   │  Storage Calculation:
   Server capacity = 1K-10K QPS     │  1 TB = 1,024 GB
   Redundancy = 2-3X                │  1 PB = 1,024 TB
                                   │  Redundancy = 2-3X
+  Peak hours = 2-4 hours (typ 4)   │
+                                  │  Storage Cost (per GB/month):
+                                  │  SSD (Hot): $0.023/GB/mo ($276K/TB/yr)
+                                  │  HDD (Warm): $0.003/GB/mo ($36K/TB/yr)
+                                  │  Archive: $0.004/GB/year ($4.8K/TB/yr)
 
 ═══════════════════════════════════════════════════════════════════════════════
 ```
@@ -994,9 +999,12 @@ COMPLETE INFRASTRUCTURE (One Input → Complete System):
 
 QPS Path:        240K peak → 480 servers → 38.4 Gbps → 960 servers (2X) → Auto-scale +360 for 4 hours
 
-Data Path:       240K → 21.8K writes → 10 MB/user → 7,300 PB storage → ~$145M/year
+Data Path:       240K → 21.8K writes → 10 MB/user → 7,300 PB storage → ~$462M/year
                                                    → 1.5 PB main DB
                                                    → 600 PB cache (80% hit rate saves 80% DB load)
+                 Storage Cost Breakdown:
+                   ├─ Hot (SSD, 1 yr): 1,095 PB × $0.023/GB/mo × 12 = $303M/year
+                   └─ Warm (HDD, 4 yr): 4,380 PB × $0.003/GB/mo × 12 = $158M/year
 
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
