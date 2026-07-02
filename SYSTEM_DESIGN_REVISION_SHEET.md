@@ -76,8 +76,8 @@
 | 10^21 = 1 ZB | DB: 100 | Storage = DAU × data_per_user × retention | **A**=Automation (failover, scale) |
 | 10^24 = 1 YB | US: 150 | × redundancy ÷ compression | **H**=Health Checks (10s freq) |
 | | | | **M**=Multi-Region (US/EU/Asia) |
-| **Time Constants:** | **Throughput:** | **Bandwidth Formula:** | Downtime: 53 minutes/year |
-| Sec/Day: **100K** | Network: 125 MB/s | BW = Peak × Resp_size × 8 ÷ 10^9 × redundancy | |
+| **Time Constants:** | **Throughput:** | **Bandwidth Formula (Gbps):** | Downtime: 53 minutes/year |
+| Sec/Day: **100K** | Network: 125 MB/s | BW = Peak × Resp_size × 8 bits ÷ 10^9 | |
 | Sec/Year: **32M** | SSD: 100+ MB/s | | **5 NINES (99.999%) = PRZ** |
 | Hour/Year: **8.76K** | HDD: 1-10 MB/s | **Database Formula:** | **P**=Prediction (ML, anomaly) |
 | Min/Year: **525.6K** | Memory: 10+ GB/s | Write_QPS = Peak ÷ read_write_ratio | **R**=Redundant ISPs (dual) |
@@ -142,7 +142,7 @@
 | Formula | Twitter Calculation |
 |---------|-------------------|
 | **Bytes Per Second** = Peak_QPS × response_size | 240K × 2 KB = **480 MB/sec** |
-| **Gbps** = (Bytes/sec × 8) ÷ 10^9 | (480 × 8) ÷ 10^9 = **3.84 Gbps** |
+| **Gbps (Gigabits/sec)** = (Bytes/sec × 8 bits) ÷ 10^9 | (480 × 8) ÷ 10^9 = **3.84 Gbps** |
 | **With Redundancy** = Gbps × bw_redundancy | 3.84 × 10 = **38.4 Gbps** |
 | **Annual Cost** | 38.4 Gbps × $50K/Gbps = **~$2M/year** |
 
