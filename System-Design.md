@@ -848,7 +848,7 @@ This is **original content**: summaries, explanations, and real-world examples c
 | 10^12 = 1T | **DB: 100** | QPS 10K-100K (high) |
 | | US: 150 | |
 | **Time (Memorize!):** | **Throughput:** | **FORMULAS (Write First):** |
-| Sec/Day: **100K** | Network: 125 MB/s | **QPS** = (DAU × req/day) ÷ 86,400 |
+| Sec/Day: **100K** | Network: 125 MB/s | **QPS** = (DAU × req/day) ÷ 100K |
 | Sec/Year: **32M** | SSD: 100+ MB/s | **Peak** = avg × 2.5 |
 | | HDD: 1-10 MB/s | **Servers** = Peak ÷ capacity |
 | **Availability (SLA→Down):** | Memory: 10+ GB/s | **Storage** = daily × 365 × yrs × 3 |
@@ -871,7 +871,7 @@ This is **original content**: summaries, explanations, and real-world examples c
 ═══════════════════════════════════════════════════════════════════════════════
 
 STEP 1: Off-peak QPS              │  STEP 1: Daily Data Generation
-  = (DAU × R) ÷ 86,400            │    = DAU × Data_per_user_per_day
+  = (DAU × R) ÷ 100K            │    = DAU × Data_per_user_per_day
 
 STEP 2: Peak QPS                  │  STEP 2: Apply Retention
   = Off-peak × P                  │    = Daily_data × Retention_days
@@ -896,13 +896,13 @@ QPS Calculation:                   │  Storage Calculation:
   Avg hours = 19                   │    Compression = 1.5X
 
 Off-peak: (300M × 20) ÷ 86K       │  Daily: 300M × 6 MB = 1.8 PB
-        = 69,444 QPS              │  Retention: 1.8 PB × 1,825 = 3,285 PB
+        = 60,000 QPS              │  Retention: 1.8 PB × 1,825 = 3,285 PB
                                   │  Redundancy: 3,285 PB × 2 = 6,570 PB
-Peak: 69,444 × 4 = 277,776 QPS   │  Final: 6,570 PB ÷ 1.5 = 4,380 PB
+Peak: 69,444 × 4 = 240,000 QPS   │  Final: 6,570 PB ÷ 1.5 = 4,380 PB
 Servers (500 QPS/server):          │
-  Off-peak: 69K ÷ 500 = 139       │  Tiered Storage (cost-optimized):
-  Peak: 277K ÷ 500 = 556          │    Hot (1 yr, SSD): 700 PB
-  Auto-scale: +417 servers         │    Warm (4 yrs, HDD): 3,700 PB
+  Off-peak: 60K ÷ 500 = 139       │  Tiered Storage (cost-optimized):
+  Peak: 240K ÷ 500 = 556          │    Hot (1 yr, SSD): 700 PB
+  Auto-scale: +360 servers         │    Warm (4 yrs, HDD): 3,700 PB
                                   │    Total: 4,400 PB
 
 ───────────────────────────────────────────────────────────────────────────────
@@ -934,7 +934,7 @@ MEMORY CHECKLIST - Memorize these constants!
 ───────────────────────────────────────────────────────────────────────────────
 
 QPS Calculation:                   │  Storage Calculation:
-  86,400 = seconds per day         │  1 KB = 1,024 bytes
+  100K = seconds per day         │  1 KB = 1,024 bytes
   3,600 = seconds per hour         │  1 MB = 1,024 KB
   Peak factor = 2-5X typical       │  1 GB = 1,024 MB
   Server capacity = 1K-10K QPS     │  1 TB = 1,024 GB
@@ -957,10 +957,10 @@ QPS Calculation:                   │  Storage Calculation:
 
 INPUT: Requests/user = 20/day (DAU = 300M)  →  QPS FORMULA  →  Peak QPS = 277,776
 
-      SERVERS (556)           BANDWIDTH (44 Gbps)         CACHING (500 PB)      STORAGE (4,380 PB)      DATABASE (1.2 PB)
+      SERVERS (556)           BANDWIDTH (38.4 Gbps)         CACHING (500 PB)      STORAGE (4,380 PB)      DATABASE (1.2 PB)
       Peak/500 QPS            QPS × 2KB × 8 ÷ 10⁹ × 10X   80% hit from cache    0.94 MB × retention   Records × size
-      + 2X redundancy         = 555 MB/s × 10X            Working set 240PB      + 2X + compress       + 1.5X indexes
-      = 1,112 peak            = 44 Gbps needed            + 2X = 480 PB          = 4,380 PB total      + 2X replica
+      + 2X redundancy         = 480 MB/s × 10X            Working set 240PB      + 2X + compress       + 1.5X indexes
+      = 960 peak            = 38.4 Gbps needed            + 2X = 480 PB          = 4,380 PB total      + 2X replica
                                                                                                          = 410 PB
 
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -969,8 +969,8 @@ CALCULATION FLOW (Twitter Example):
 
 QPS FORMULA                               DATA DERIVATION (from Write QPS)           DEPENDENT FORMULAS
 ─────────────────────────────────────     ──────────────────────────────────────    ─────────────────────────
-(300M × 20) ÷ 86K = 69K avg QPS          Write_QPS = 277K × (1÷11) = 25K writes    Servers: 277K ÷ 500 = 556
-69K × 4 = 277K peak QPS                  Data = 25K × 130B = 3.28 MB/sec           BW: 277K × 2KB = 555MB/s
+(300M × 20) ÷ 86K = 60K avg QPS          Write_QPS = 240K × (1÷11) = 25K writes    Servers: 240K ÷ 500 = 556
+60K × 4 = 240K peak QPS                  Data = 25K × 130B = 2.84 MB/sec           BW: 240K × 2KB = 555MB/s
 Daily: 9.69B requests                     Daily/user: (3.28M × 86.4K) ÷ 300M        Cache: 240PB × 2 = 480PB
                                           = 0.94 MB/user/day ← DATA METRIC           DB: 410PB (+ indexes)
                                                                                       Storage: 4,380PB (5yr)
@@ -981,10 +981,10 @@ QUICK REFERENCE TABLE: How Each Formula Uses QPS
 
 Formula              │ Input                      │ Calculation                              │ Output
 ─────────────────────┼────────────────────────────┼──────────────────────────────────────────┼─────────────────────
-SERVERS              │ Peak QPS (277K)            │ Peak ÷ 500 QPS/server × 2 redundancy    │ 1,112 servers peak
-BANDWIDTH            │ Peak QPS × Response (2KB)  │ (277K × 2KB × 8) ÷ 10⁹ × 10X redundancy │ 44 Gbps
+SERVERS              │ Peak QPS (240K)            │ Peak ÷ 500 QPS/server × 2 redundancy    │ 1,112 servers peak
+BANDWIDTH            │ Peak QPS × Response (2KB)  │ (240K × 2KB × 8) ÷ 10⁹ × 10X redundancy │ 38.4 Gbps
 CACHING              │ Peak QPS × Hit% × Working% │ Working_set × 2 redundancy              │ 480 PB cache
-DATA DERIVATION      │ Write_QPS × Bytes/write    │ (277K ÷ 11) × 130B × 86.4K ÷ 300M      │ 0.94 MB/user
+DATA DERIVATION      │ Write_QPS × Bytes/write    │ (240K ÷ 11) × 130B × 86.4K ÷ 300M      │ 0.94 MB/user
 STORAGE              │ Data/user × Retention      │ 0.94M × 1,825 × 2 ÷ 1.5 (compress)     │ 4,380 PB total
 DATABASE             │ Records/user × Size        │ Records × 500B × 1.5 × 2                │ 410 PB main DB
 
@@ -992,9 +992,9 @@ DATABASE             │ Records/user × Size        │ Records × 500B × 1.5 
 
 COMPLETE INFRASTRUCTURE (One Input → Complete System):
 
-QPS Path:        277K peak → 556 servers → 44 Gbps → 1,112 servers (2X) → Auto-scale +417 for 5 hours
+QPS Path:        240K peak → 480 servers → 38.4 Gbps → 1,112 servers (2X) → Auto-scale +417 for 5 hours
 
-Data Path:       277K → 25K writes → 0.94 MB/user → 4,380 PB storage → $85M/year
+Data Path:       240K → 25K writes → 0.94 MB/user → 4,380 PB storage → $85M/year
                                                    → 410 PB main DB
                                                    → 480 PB cache (80% hit rate saves 80% DB load)
 
@@ -1049,15 +1049,15 @@ TOTAL DATA PER USER PER DAY:
 
 ```
 Step 1: Off-peak QPS (average throughout day)
-  (DAU × Requests_per_user) ÷ 86,400
-  (300M × 20 requests) ÷ 86,400
-  = 6,000,000,000 ÷ 86,400
-  = 69,444 QPS (off-peak average)
+  (DAU × Requests_per_user) ÷ 100K
+  (300M × 20 requests) ÷ 100K
+  = 6,000,000,000 ÷ 100K
+  = 60,000 QPS (off-peak average)
 
 Step 2: Peak QPS (evening hours)
   Off-peak × Peak_multiplier
   69,444 × 4 (evening traffic is 4X higher)
-  = 277,776 QPS (peak)
+  = 240,000 QPS (peak)
 
 Step 3: Total Daily Requests
   Off-peak hours (19 hrs): 69,444 × 3,600 × 19 = 4.72 billion
@@ -1067,8 +1067,8 @@ Step 3: Total Daily Requests
 Step 4: Server Capacity
   Assuming 500 QPS per server (typical web server):
   
-  Off-peak servers needed: 69,444 ÷ 500 = 139 servers
-  Peak servers needed: 277,776 ÷ 500 = 556 servers
+  Off-peak servers needed: 69,444 ÷ 500 = 120 servers
+  Peak servers needed: 277,776 ÷ 500 = 480 servers
   
   WITH 2X REDUNDANCY (master-slave replication):
     Off-peak: 139 × 2 = 278 servers (always running)
@@ -1119,11 +1119,11 @@ TIERED STORAGE STRATEGY (cost optimization):
 ├──────────────────────────────────────────────────────┤
 │                                                      │
 │ COMPUTATION (QPS Formula):                           │
-│   Off-peak QPS:          69,444 QPS                 │
-│   Peak QPS:              277,776 QPS                │
+│   Off-peak QPS:          60,000 QPS                 │
+│   Peak QPS:              240,000 QPS                │
 │   Off-peak servers:      139 (no redundancy)        │
 │   Peak servers:          556 (no redundancy)        │
-│   With 2X redundancy:    278 base + 1,112 peak     │
+│   With 2X redundancy:    278 base + 960 peak     │
 │   Auto-scaling needed:   +834 servers (5 hours)    │
 │                                                      │
 │ STORAGE (Storage Formula):                           │
@@ -1136,7 +1136,7 @@ TIERED STORAGE STRATEGY (cost optimization):
 │   Annual storage cost:   ~$85 million              │
 │                                                      │
 │ BANDWIDTH:                                           │
-│   Peak bandwidth:        277,776 QPS × 2 KB/req    │
+│   Peak bandwidth:        240,000 QPS × 2 KB/req    │
 │                        = 555 GB/sec                 │
 │   Network capacity:      Need 10X = 5.5 TB/sec     │
 │                        = 44 Pbps (petabits/sec!)   │
@@ -1150,7 +1150,7 @@ TIERED STORAGE STRATEGY (cost optimization):
 │ CACHING LAYER (Redis/Memcached):                    │
 │   Cache hit rate: 80% (80% of reads from cache)    │
 │   Cache miss rate: 20% (20% hit database)          │
-│   DB load if uncached: 277K QPS → 55K after cache │
+│   DB load if uncached: 240K QPS → 55K after cache │
 │   Cache size needed: 200-500 PB (hot data only)   │
 │                                                      │
 └──────────────────────────────────────────────────────┘
@@ -1217,7 +1217,7 @@ MONITORING:
 ║  Avg_hrs = Hours at average rate (24 - Peak_hrs)     ║
 ║                                                        ║
 ║ STEP 1: Calculate Off-Peak QPS                        ║
-║  Off-peak QPS = (DAU × R) ÷ 86,400                   ║
+║  Off-peak QPS = (DAU × R) ÷ 100K                   ║
 ║                                                        ║
 ║ STEP 2: Calculate Peak QPS                            ║
 ║  Peak QPS = Off-peak QPS × P                         ║
@@ -2612,7 +2612,7 @@ Write them down!
 ```
 1 billion seconds ≈ 31 years
 1 year = 365 days
-1 day = 24 hours × 60 minutes × 60 seconds = 86,400 seconds
+1 day = 24 hours × 60 minutes × 60 seconds = 100K seconds
 ```
 
 **4. Use Approximation**
@@ -2654,7 +2654,7 @@ Daily Active Users (DAU):
 
 Tweets per second:
   150M DAU × 2 tweets/day ÷ 24 hours ÷ 3600 seconds
-  = 300M ÷ 86,400
+  = 300M ÷ 100K
   ≈ 3,500 tweets/second
 
 Peak QPS (usually 2× average):
@@ -2731,7 +2731,7 @@ A universal formula to calculate system requirements for any service with users 
 ║  Avg_hrs = Hours at average rate (24 - Peak_hrs)     ║
 ║                                                        ║
 ║ STEP 1: Calculate Off-Peak QPS                        ║
-║  Off-peak QPS = (DAU × R) ÷ 86,400                   ║
+║  Off-peak QPS = (DAU × R) ÷ 100K                   ║
 ║                                                        ║
 ║ STEP 2: Calculate Peak QPS                            ║
 ║  Peak QPS = Off-peak QPS × P                         ║
@@ -2762,10 +2762,10 @@ Given:
 Calculation:
 
 Step 1: Off-peak QPS
-  (300M × 20) ÷ 86,400 = 69,444 QPS
+  (300M × 20) ÷ 100K = 60,000 QPS
 
 Step 2: Peak QPS
-  69,444 × 4 = 277,776 QPS
+  69,444 × 4 = 240,000 QPS
 
 Step 3: Total daily requests
   (69,444 × 3,600 × 19) + (277,776 × 3,600 × 5)
@@ -2773,9 +2773,9 @@ Step 3: Total daily requests
   = 9,687,600,000 requests/day
 
 Step 4: Servers needed
-  Off-peak: 69,444 ÷ 500 = 139 servers
-  Peak: 277,776 ÷ 500 = 556 servers
-  With 2X redundancy: 278 base, 1,112 peak
+  Off-peak: 69,444 ÷ 500 = 120 servers
+  Peak: 277,776 ÷ 500 = 480 servers
+  With 2X redundancy: 278 base, 960 peak
   Auto-scale: +834 servers during peak hours
 ```
 
@@ -2783,7 +2783,7 @@ Step 4: Servers needed
 
 | System | DAU | Requests/User | Peak Factor | Peak Hours | Example |
 |--------|-----|---------------|-----------  |------------|---------|
-| Twitter | 300M | 20 | 4X | 5 | 556 servers peak |
+| Twitter | 300M | 20 | 4X | 5 | 480 servers peak |
 | Instagram | 500M | 30 | 4X | 5 | 926 servers peak |
 | Uber | 10M | 2 | 5X | 3 | 116 servers peak |
 | Netflix | 300M | 5 | 3X | 4 | 52 servers peak |
@@ -2804,8 +2804,8 @@ Conclusion: Longer peaks require more infrastructure!
 
 **2. Peak and average QPS are NOT added**
 ```
-Off-peak:  69,444 QPS  (occurs 19 hours/day)
-Peak:      277,776 QPS (occurs 5 hours/day)
+Off-peak:  60,000 QPS  (occurs 19 hours/day)
+Peak:      240,000 QPS (occurs 5 hours/day)
 
 WRONG: 69,444 + 277,776 = 347,220 total
 RIGHT: Peak is 4X multiplication, not addition
@@ -3163,7 +3163,7 @@ Financial/medical:     3.0X minimum
 ║  Data_per_second = Write_QPS × Avg_data_per_write    ║
 ║                                                        ║
 ║ STEP 3: Convert to Daily Data Per User                ║
-║  Daily_data_per_user = (Data_per_second × 86,400)    ║
+║  Daily_data_per_user = (Data_per_second × 100K)    ║
 ║                        ÷ DAU                           ║
 ║                                                        ║
 ║ STEP 4: Feed into Storage Formula                     ║
@@ -3195,12 +3195,12 @@ Calculation:
     Read_QPS = 277,776 - 25,252 = 252,524 QPS (reads only)
 
   Step 2: Data per second at peak
-    Data/sec = 25,252 writes/sec × 130 bytes
+    Data/sec = 21,818 writes/sec × 130 bytes
              = 3,282,760 bytes/sec
-             = 3.28 MB/sec
+             = 2.84 MB/sec
 
   Step 3: Daily data per user
-    Daily total = 3.28 MB/sec × 86,400 sec
+    Daily total = 2.84 MB/sec × 100K sec
                = 283 TB/day
     Per user = 283 TB ÷ 300M users
              = 0.94 MB/user/day
@@ -3277,15 +3277,15 @@ USE BOTH:
 INPUT: Requests per user per day = 20
 
 STEP 1: QPS FORMULA
-  (20 requests/user × 300M users) ÷ 86,400
-  = 69,444 QPS average
-  = 277,776 QPS peak (× 4)
+  (20 requests/user × 300M users) ÷ 100K
+  = 60,000 QPS average
+  = 240,000 QPS peak (× 4)
 
 STEP 2: DATA DERIVATION (NEW!)
   Peak_QPS = 277,776
   Read:Write = 10:1 → Write_QPS = 25,252
   Data/write = 130 bytes
-  Daily_data = 25,252 × 130 × 86,400 ÷ 300M
+  Daily_data = 25,252 × 130 × 100K ÷ 300M
              = 0.94 MB/user/day
 
 STEP 3: STORAGE FORMULA
@@ -3352,7 +3352,7 @@ Given:
   Redundancy multiplier = 10X (for safety + DR)
 
 Calculation:
-  Step 1: Bytes/sec = 277,776 QPS × 2 KB
+  Step 1: Bytes/sec = 240,000 QPS × 2 KB
                     = 555,552 KB/sec
                     = 555.552 MB/sec
 
@@ -3361,11 +3361,11 @@ Calculation:
                 = 4.4 Gbps
 
   Step 3: With redundancy = 4.4 Gbps × 10
-                          = 44 Gbps (peak capacity needed)
+                          = 38.4 Gbps (peak capacity needed)
 
   Infrastructure:
-    Primary network: 44 Gbps (10GbE cards × 5 servers)
-    Backup network: 44 Gbps (redundant path)
+    Primary network: 38.4 Gbps (10GbE cards × 5 servers)
+    Backup network: 38.4 Gbps (redundant path)
     CDN capacity: 100 Gbps (handle spikes)
     Cost: ~$1-2 million/year for this capacity
 ```
@@ -3591,7 +3591,7 @@ Calculation:
     Total cache layer: ~510 TB to 500 PB
 
   Impact:
-    Without cache: 277K QPS hits DB
+    Without cache: 240K QPS hits DB
     With cache: 55K QPS hits DB
     DB load reduction: 80% ✓
     Cost savings: ~$100M/year (fewer DB servers)
@@ -3688,16 +3688,16 @@ Write down explicitly:
 Memorize these:
 ```
 1 year = 365 days
-1 day = 86,400 seconds (≈ 100,000 seconds)
+1 day = 100K seconds (≈ 100,000 seconds)
 1 hour = 3,600 seconds
 1 minute = 60 seconds
 
 QPS for N days of data:
-  N × 86,400 seconds per day
+  N × 100K seconds per day
   
 Example:
   1 billion records in 1 year
-  = 1 billion ÷ (365 × 86,400)
+  = 1 billion ÷ (365 × 100K)
   ≈ 31 records per second
 ```
 
@@ -3810,7 +3810,7 @@ This is a step-by-step framework you can apply to **ANY** system design intervie
 | **STEP 1** | Functional Requirements | 5 min | • What features must we build?<br>• Who are the users?<br>• How do users interact? | 🏛️ **Architecture Patterns:**<br>• Monolithic vs Microservices<br>• Event-driven architecture<br>• API gateway pattern<br>• Service-oriented architecture (SOA) |
 | **STEP 2** | Scale & Non-Functional Req | 5 min | • DAU, read-write ratio, spike traffic<br>• Latency requirements<br>• Availability target (SLA)<br>• Consistency vs Availability | 📈 **Scaling & Data Strategies:**<br>• Replication: Master-Slave, Master-Master<br>• Sharding: Range, Hash, Geospatial<br>• Read-Write Separation<br>• Database type: SQL vs NoSQL<br>• Consistency model: Strong vs Eventual (CAP theorem) |
 | **STEP 3** | Generic Blueprint | 3 min | • Load Balancer<br>• Services Layer<br>• Cache (Redis)<br>• Database (Master-Slave)<br>• Storage (S3, Kafka, Elasticsearch) | 🔧 **Core Components & Tech:**<br>• LB: Round-robin, Consistent hashing<br>• Cache: Redis, Memcached (2ms latency)<br>• DB: Master-Slave replication, Read replicas<br>• Storage: S3, Object store<br>• Queue: Kafka, RabbitMQ (async)<br>• Search: Elasticsearch, Algolia |
-| **STEP 5** | Back-of-Envelope Math | 5 min | • Calculate QPS: (DAU × req/day) ÷ 86,400<br>• Peak QPS: avg × 2.5<br>• Servers needed: Peak QPS ÷ 1K-10K<br>• Storage calculation<br>• 10X growth scenario | 📊 **Scaling Tactics:**<br>• Horizontal scaling: Add more servers<br>• Vertical scaling: Bigger servers<br>• Auto-scaling: Scale based on metrics<br>• Database partitioning/sharding<br>• Read replicas for scaling reads<br>• Write sharding for scaling writes |
+| **STEP 5** | Back-of-Envelope Math | 5 min | • Calculate QPS: (DAU × req/day) ÷ 100K<br>• Peak QPS: avg × 2.5<br>• Servers needed: Peak QPS ÷ 1K-10K<br>• Storage calculation<br>• 10X growth scenario | 📊 **Scaling Tactics:**<br>• Horizontal scaling: Add more servers<br>• Vertical scaling: Bigger servers<br>• Auto-scaling: Scale based on metrics<br>• Database partitioning/sharding<br>• Read replicas for scaling reads<br>• Write sharding for scaling writes |
 | **STEP 4** | Customize for System | 10 min | • What to ADD (system-specific components)<br>• What to REMOVE (not needed)<br>• What to MODIFY (adjust for requirements) | ⚙️ **Specialized Components:**<br>• **ADD:** Search (Elasticsearch), Real-time (WebSocket, gRPC), Geospatial (PostGIS)<br>• **ADD:** Time-series DB (InfluxDB), Graph DB (Neo4j), Full-text search<br>• **ADD:** Service mesh (Istio), API gateway (Kong)<br>• **REMOVE:** Components not in MVP |
 | **STEP 6** | Design Deep-Dives (NFRs) | 10 min | • Resilience: failure scenarios + recovery<br>• Monitoring: metrics, alerts, SLA<br>• Consistency trade-off: Strong vs Eventual | 🛡️ **Resilience & Operations:**<br>• **Resilience:** Circuit breaker, Bulkhead, Retry (exponential backoff), Failover<br>• **Monitoring:** Distributed tracing (Jaeger, DataDog), Metrics (Prometheus), Logs (ELK)<br>• **Consistency:** Transaction logs, Event sourcing, CQRS, Consensus (Raft) |
 | **STEP 7** | Verify Growth & Constraints | 7 min | • ✓ Scale met?<br>• ✓ Latency met?<br>• ✓ Availability met?<br>• ✓ Compliance met? | ✅ **Validation & Deployment:**<br>• Load testing, Stress testing<br>• Chaos engineering (fail components)<br>• Canary deployment, Blue-green deployment<br>• Rollback strategy<br>• Performance benchmarking |
@@ -4186,17 +4186,17 @@ KEPT:
 
 ```
 Formula:
-  (DAU × average requests per day) ÷ 86,400 seconds = avg QPS
+  (DAU × average requests per day) ÷ 100K seconds = avg QPS
   Peak QPS = avg QPS × 2.5 (typical peak factor)
 
 Example - Instagram:
   100M DAU × 5 requests/day = 500M requests/day
-  500M ÷ 86,400 = 5,787 QPS average
+  500M ÷ 100K = 5,787 QPS average
   5,787 × 2.5 = 14,467 QPS peak
 
 Example - Twitter:
   200M DAU × 10 requests/day = 2B requests/day
-  2B ÷ 86,400 = 23,148 QPS average
+  2B ÷ 100K = 23,148 QPS average
   23,148 × 2.5 = 57,870 QPS peak (100K QPS to be safe)
 ```
 
@@ -4470,7 +4470,7 @@ MODIFY:
 ### **STEP 5: Back-of-Envelope**
 ```
 16M rides/day × 10 updates per ride = 160M events/day
-160M events ÷ 86,400 sec = 1,852 events/sec average
+160M events ÷ 100K sec = 1,852 events/sec average
 Peak: 1,852 × 3 = 5,556 events/sec
 
 Servers needed:
@@ -9163,11 +9163,11 @@ Starting point:
   Total codes: 62^6 = 56.8 billion
 
 At 1000 codes/sec:
-  56.8B ÷ 1000/sec ÷ 86400 sec/day = 657 days
+  56.8B ÷ 1000/sec ÷ 100K sec/day = 657 days
   ≈ 1.8 YEARS
 
 At 100K codes/sec (peak):
-  56.8B ÷ 100K/sec ÷ 86400 = 6.5 days
+  56.8B ÷ 100K/sec ÷ 100K = 6.5 days
 ```
 
 ### Solution: Expand Code Length
