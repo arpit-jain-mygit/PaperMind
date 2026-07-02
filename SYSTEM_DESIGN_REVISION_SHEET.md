@@ -20,35 +20,35 @@
 
 | **POWERS OF 10 & TIME** | **LATENCY & SYSTEMS** | **SCALE & FORMULAS** | **UPTIME MNEMONICS** |
 |:---|:---|:---|:---|
-| **Data Sizes (10^X):** | **Latency (ms):** | **Popular Systems:** | **Availability → Downtime/Year:** |
-| 10^3 = 1 KB | L1: 0.0005 | **Twitter** | **RLF = Rule of 3 Fives** |
-| 10^6 = 1 MB | Mem: 0.1 | • QPS: 240K peak | 99% = 3.65 **days** |
-| 10^9 = 1 GB | SSD: 0.25 | • Servers: 960 | 99.9% = 8.76 **hours** |
-| 10^12 = 1 TB | Disk: 10 | • Storage: 5-100 PB | 99.99% = 53 **minutes** |
-| 10^15 = 1 PB | DC: 0.5 | • Cost: $455M/yr | 99.999% = 5 **minutes** |
-| 10^18 = 1 EB | Redis: 2 | **YouTube** | **AHM = Add Hours, Multiply Days** |
-| 10^21 = 1 ZB | DB: 100 | • QPS: 1M+ peak | 99% → 3.65d (3.65×24h) |
-| 10^24 = 1 YB | US: 150 | • Storage: 500 PB+ | 99.9% → 8.76h (9h/yr max) |
-| | | • Retention: 1-2 yrs | 99.99% → 53m (1h/yr max) |
-| **Time Constants:** | **Throughput:** | **Uber** | **PRZ = Percentage Rule** |
-| Sec/Day: **100K** | Network: 125 MB/s | • QPS: 50-100K | 99%: 1 nines = 36.5d |
-| Sec/Year: **32M** | SSD: 100+ MB/s | • Servers: 100-200 | 99.9%: 2 nines = 8.7h |
-| Hour/Year: **8.76K** | HDD: 1-10 MB/s | • Storage: 50 PB | 99.99%: 3 nines = 52m |
-| Minutes/Year: **525.6K** | Memory: 10+ GB/s | • Retention: 3 months | 99.999%: 4 nines = 5m |
-| | QPS/Server: 1K-10K | **Netflix** | |
-| **Cost Baseline:** | | • QPS: 200-500K | **Cost Baseline (Annual):** |
-| Servers: $50K/yr | | • Servers: 400-1K | Servers: $50K (500 QPS) |
-| Cache (RAM): $1.5/GB | | • Storage: 100-500 PB | Cache: $1.5/GB/yr (RAM) |
-| SSD Storage: $276K/TB | | • Retention: 2 years | SSD Storage: $276K/TB/yr |
-| HDD Storage: $36K/TB | | **Instagram** | HDD Storage: $36K/TB/yr |
-| | | • QPS: 500K-1M | **Twitter Math Example:** |
-| | | • Servers: 1K-2K | 300M DAU × 20 req/day |
-| | | • Storage: 1-2 EB | ÷ 100K sec = 60K avg |
-| | | • Retention: 10 years | × 4X peak = 240K peak |
-| | | **Stripe** | Cost: $455M/year total |
-| | | • QPS: 10-100K | Breakdown: Server $50M + |
-| | | • Servers: 20-200 | Storage $300M + BW $2M + |
-| | | • Storage: 10 PB | Cache $3M + Ops $100M |
+| **Data Sizes (10^X):** | **Latency (ms):** | **Popular Systems:** | **3 NINES (99.9%) = RLF** |
+| 10^3 = 1 KB | L1: 0.0005 | **Twitter** | **R**=Replication (DB, Cache) |
+| 10^6 = 1 MB | Mem: 0.1 | • QPS: 240K peak | **L**=Load Balancing (Web, DB) |
+| 10^9 = 1 GB | SSD: 0.25 | • Servers: 960 | **F**=Failover (manual, 5-10m) |
+| 10^12 = 1 TB | Disk: 10 | • Storage: 5-100 PB | Downtime: 8.76 hours/year |
+| 10^15 = 1 PB | DC: 0.5 | • Cost: $455M/yr | |
+| 10^18 = 1 EB | Redis: 2 | **YouTube** | **4 NINES (99.99%) = AHM** |
+| 10^21 = 1 ZB | DB: 100 | • QPS: 1M+ peak | **A**=Automation (failover, scale) |
+| 10^24 = 1 YB | US: 150 | • Storage: 500 PB+ | **H**=Health Checks (10s freq) |
+| | | • Retention: 1-2 yrs | **M**=Multi-Region (US/EU/Asia) |
+| **Time Constants:** | **Throughput:** | **Uber** | Downtime: 53 minutes/year |
+| Sec/Day: **100K** | Network: 125 MB/s | • QPS: 50-100K | |
+| Sec/Year: **32M** | SSD: 100+ MB/s | • Servers: 100-200 | **5 NINES (99.999%) = PRZ** |
+| Hour/Year: **8.76K** | HDD: 1-10 MB/s | • Storage: 50 PB | **P**=Prediction (ML, anomaly) |
+| Min/Year: **525.6K** | Memory: 10+ GB/s | • Retention: 3 months | **R**=Redundant ISPs (dual) |
+| | QPS/Server: 1K-10K | **Netflix** | **Z**=Zero-Downtime Updates |
+| **Cost Baseline:** | | • QPS: 200-500K | Downtime: 5 minutes/year |
+| Servers: $50K/yr | | • Servers: 400-1K | **Only for critical systems!** |
+| Cache (RAM): $1.5/GB | | • Storage: 100-500 PB | Cost: $5M+/year |
+| SSD Storage: $276K/TB | | • Retention: 2 years | |
+| HDD Storage: $36K/TB | | **Instagram** | **RLF → AHM → PRZ** |
+| | | • QPS: 500K-1M | Each adds resilience layer |
+| | | • Servers: 1K-2K | Most systems use AHM (4 nines) |
+| | | • Storage: 1-2 EB | Ask "Why" before over-building |
+| | | • Retention: 10 years | |
+| | | **Stripe** | |
+| | | • QPS: 10-100K | |
+| | | • Servers: 20-200 | |
+| | | • Storage: 10 PB | |
 | | | • Retention: 10 years | |
 
 ---
