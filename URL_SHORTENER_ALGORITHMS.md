@@ -250,6 +250,161 @@ Day 43:   Complete failure (service down)
 This is NOT theoretical—it's guaranteed math!
 ```
 
+### CRC32 Process Flow (Request → Response)
+
+**URL Shortening Flow (from Alex Xu Chapter 8 - Hash + Collision Resolution):**
+
+```
+Client Request:
+  POST /api/v1/data/shorten
+  { "longUrl": "https://en.wikipedia.org/wiki/Systems_design" }
+           ↓
+   ┌──────────────────────────────────┐
+   │   Load Balancer                  │
+   │   Routes to Web Server           │
+   └──────────────┬───────────────────┘
+                  ↓
+   ┌──────────────────────────────────┐
+   │   Step 1: Check if exists        │
+   │   Query: SELECT short_url        │
+   │           WHERE long_url = ?     │
+   │                                  │
+   │   If YES: Return existing code   │
+   │   If NO:  Proceed to Step 2      │
+   └──────────────┬───────────────────┘
+                  ↓
+   ┌──────────────────────────────────┐
+   │   Step 2: Hash long URL          │
+   │   hash_value = CRC32(longUrl)    │
+   │   = 5eb63bbbe01eeed093cb22...    │
+   └──────────────┬───────────────────┘
+                  ↓
+   ┌──────────────────────────────────┐
+   │   Step 3: Take first 7 chars     │
+   │   short_url = hash[0:7]          │
+   │   = "5eb63bb"                    │
+   └──────────────┬───────────────────┘
+                  ↓
+   ┌──────────────────────────────────────────┐
+   │   Step 4: Check collision (Loop)         │
+   │   Query: SELECT * FROM url_mapping      │
+   │           WHERE short_url = ?           │
+   │                                         │
+   │   ╔══════════════════════════════════╗  │
+   │   ║ If collision found:              ║  │
+   │   ║  1. Append counter (1,2,3...)    ║  │
+   │   ║  2. Hash again                   ║  │
+   │   ║  3. Take first 7 chars           ║  │
+   │   ║  4. Check again (Loop!)          ║  │
+   │   ║                                  ║  │
+   │   ║ This repeats until NO collision ║  │
+   │   ╚══════════════════════════════════╝  │
+   │                                         │
+   │   If NO collision: Proceed to Step 5    │
+   └──────────────┬──────────────────────────┘
+                  ↓
+   ┌──────────────────────────────────────┐
+   │   Step 5: Save to Database          │
+   │   INSERT INTO url_mapping (         │
+   │     id, short_url, long_url, ...    │
+   │   )                                 │
+   └──────────────┬──────────────────────┘
+                  ↓
+   ┌──────────────────────────────────────┐
+   │   Step 6: Return Response            │
+   │   {                                  │
+   │     "shortUrl": "tinyurl.com/5eb63bb"│
+   │   }                                  │
+   └──────────────────────────────────────┘
+```
+
+**Step-by-Step Timeline:**
+
+```
+Time  Operation                      Latency  Cumulative
+────────────────────────────────────────────────────────
+0ms   Load balancer routes           1ms      1ms
+1ms   Check if exists (DB query)     10ms     11ms
+11ms  Hash URL (CRC32)               0.1ms    11.1ms
+11.1ms Take first 7 chars            0.1ms    11.2ms
+11.2ms Check collision (DB query)    10ms     21.2ms
+       ├─ No collision? Continue
+       ├─ Collision? Retry (multiple times!)
+       │  └─ Append counter
+       │  └─ Hash again (0.1ms)
+       │  └─ Check collision (10ms)
+       │  └─ Loop again if needed...
+       │
+21.2ms Save to database              15ms     36.2ms
+36.2ms Return response               1ms      37.2ms
+────────────────────────────────────────────────────────
+                    TOTAL: ~37-50ms (or 150-500ms if collisions!)
+```
+
+**Real-World Collision Scenario:**
+
+```
+Input: https://en.wikipedia.org/wiki/Systems_design
+
+Step 1: Check if exists in DB
+        Query result: Not found ✓
+
+Step 2: Hash (CRC32)
+        Result: 5eb63bbbe01eeed093cb22bb8f5acdc3
+
+Step 3: Take first 7
+        Result: "5eb63bb"
+
+Step 4a: Check collision
+         Query: SELECT * WHERE short_url = '5eb63bb'
+         Result: FOUND! (collision with another URL!) ✗
+         
+Step 4b: Collision detected! Retry with counter=1
+         New input: 5eb63bbbe01eeed093cb22bb8f5acdc31
+         Hash: abc123... 
+         Take first 7: "abc1234"
+         Check collision: FOUND AGAIN! ✗
+         
+Step 4c: Counter=2, retry again
+         New input: 5eb63bbbe01eeed093cb22bb8f5acdc32
+         Hash: xyz789...
+         Take first 7: "xyz7890"
+         Check collision: NOT FOUND! ✓
+
+Step 5: Save "xyz7890" to database
+        Total latency: 50-100ms (multiple DB round-trips!)
+```
+
+**Why This Process Gets Slower Over Time:**
+
+```
+Day 1 (100M URLs):
+  Collisions: Rare
+  Avg retries: 1.0
+  Avg latency: 37ms
+  
+Day 10 (1B URLs):
+  Collisions: Common
+  Avg retries: 2-3
+  Avg latency: 75-100ms
+  
+Day 20 (2B URLs):
+  Collisions: Very common
+  Avg retries: 5-10
+  Avg latency: 150-300ms
+  
+Day 30 (3B URLs):
+  Collisions: Everywhere
+  Avg retries: 20+
+  Avg latency: 500ms+
+  Database CPU: 100%!
+  
+Day 43 (4.3B URLs):
+  All slots taken!
+  No solution possible
+  System CRASHES
+```
+
 ---
 
 ## Algorithm 1: Hash + Collision Resolution ⚠️
