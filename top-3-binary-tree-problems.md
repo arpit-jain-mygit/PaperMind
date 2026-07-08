@@ -11,9 +11,9 @@
 4. [LeetCode 94 - Binary Tree Inorder Traversal [78%]](#4-leetcode-94---binary-tree-inorder-traversal-78) ✅
 5. [LeetCode 144 - Binary Tree Preorder Traversal [75%]](#5-leetcode-144---binary-tree-preorder-traversal-75) ✅
 6. [LeetCode 145 - Binary Tree Postorder Traversal [72%]](#6-leetcode-145---binary-tree-postorder-traversal-72) ✅
+7. [LeetCode 230 - Kth Smallest Element in BST [75%]](#7-leetcode-230---kth-smallest-element-in-bst-75) ✅
 
 #### Additional Problems (To Be Added)
-7. LeetCode 230 - Kth Smallest Element in BST [75%]
 8. LeetCode 99 - Recover Binary Search Tree [75%]
 9. LeetCode 427 - Serialize & Deserialize BST [75%]
 10. LeetCode 215 - Kth Largest Element in BST [70%]
@@ -917,6 +917,149 @@ public class BSTPostOrderTraversal {
 
 ---
 
+## 7. LeetCode 230 - Kth Smallest Element in BST [75%]
+
+### Problem Statement
+Given the root of a Binary Search Tree, return the kth smallest value (1-indexed) in the tree.
+
+**Input:** BST root, integer k
+**Output:** Kth smallest value in BST
+
+### Example
+```
+Input BST:
+    4
+   / \
+  2   6
+ / \ / \
+1 3 5  7
+
+k = 1: Expected Output: 1 (smallest)
+k = 2: Expected Output: 2 (second smallest)
+k = 3: Expected Output: 3
+k = 4: Expected Output: 4
+```
+
+### Follow-up Problems (in the 17)
+- **#10: LeetCode 215 - Kth Largest Element in BST [70%]** - Use reverse in-order
+- **#12: LeetCode 285 - Inorder Successor in BST [65%]** - Similar navigation
+
+### Code Solution - Naive Approach
+
+```java
+import java.util.*;
+
+class Node {
+    int value;
+    Node left;
+    Node right;
+
+    public Node(int value) {
+        this.value = value;
+    }
+    public String toString() {
+        return "" + value;
+    }
+}
+
+public class KthSmallestNaive {
+    // ============ VALID BST TEST CASES ============
+    public static Node validBalancedBST() {
+        /*
+              4
+             / \
+            2   6
+           / \ / \
+          1 3 5  7
+        */
+        Node root = new Node(4);
+        root.left = new Node(2);
+        root.right = new Node(6);
+        root.left.left = new Node(1);
+        root.left.right = new Node(3);
+        root.right.left = new Node(5);
+        root.right.right = new Node(7);
+        return root;
+    }
+
+    // ============ TEST RUNNER ============
+
+    public static void main(String[] args) {
+        Node root = validBalancedBST();
+        
+        for (int k = 1; k <= 7; k++) {
+            List<Integer> list = new ArrayList<Integer>();
+            in_order_traversal(root, list);
+            System.out.println("k = " + k + ": " + list.get(k-1));
+        }
+    }
+
+    public static Node in_order_traversal(Node root, List<Integer> list){
+        if (root == null) return null;
+        in_order_traversal(root.left, list);
+        list.add(root.value);
+        in_order_traversal(root.right, list);
+        return null;
+    }
+}
+```
+
+**Output:**
+```
+k = 1: 1
+k = 2: 2
+k = 3: 3
+k = 4: 4
+k = 5: 5
+k = 6: 6
+k = 7: 7
+```
+
+### Complexity Analysis - Naive Approach
+
+| Metric | Complexity | Explanation |
+|--------|-----------|-------------|
+| **Time** | O(n) | Must traverse ALL nodes to build complete sorted list |
+| **Space** | O(n) | Store all n values in ArrayList + O(h) recursion stack |
+
+### Why is this Naive?
+
+❌ **Problems:**
+- Visits **every node** even if k is small (k=1 only needs 1 node!)
+- Creates a **full list** of n elements when only kth is needed
+- Wastes memory and time on unnecessary nodes
+
+✅ **Better approach:**
+- Use early termination: Stop after finding kth element
+- Time: O(k) best case, O(n) worst case
+- Space: O(h) recursion stack only (no list)
+
+### MAANG Interview Questions
+1. "Why is the naive approach inefficient?" → Visits all nodes when only k needed
+2. "How to optimize with early termination?" → Stop inorder traversal after kth element
+3. "What if k is close to 1?" → Naive: O(n), Optimized: O(k)
+4. "How to find kth largest?" → Use reverse in-order (right → root → left)
+5. "Can you do it iteratively?" → Yes, with explicit stack and counter
+
+### Real-World Business Applications
+
+**1. Database Query Optimization**
+- **Use Case:** Find kth smallest value in sorted index without loading all data
+- **Business Impact:** Reduces memory usage and query time for large datasets
+- **Example:** SQL LIMIT/OFFSET with WHERE clause on B-tree index
+
+**2. Median Finding in Streams**
+- **Use Case:** Find median of continuously arriving numbers
+- **Business Impact:** Efficient statistical analysis without storing all values
+- **Example:** Real-time analytics, sensor data processing
+
+**3. Percentile Calculations**
+- **Use Case:** Find 95th percentile value in performance metrics
+- **Business Impact:** Monitor SLA compliance and service health
+- **Example:** Web server latency analysis, user engagement metrics
+
+---
+
 ## Summary
 
 | # | Problem | Frequency | Type | Status |
@@ -927,7 +1070,7 @@ public class BSTPostOrderTraversal {
 | 4 | Inorder Traversal | 78% | Traversal | ✅ |
 | 5 | Preorder Traversal | 75% | Traversal | ✅ |
 | 6 | Postorder Traversal | 72% | Traversal | ✅ |
-| 7 | Kth Smallest | 75% | Traversal | - |
+| 7 | Kth Smallest (Naive) | 75% | Traversal | ✅ |
 | 8 | Recover BST | 75% | Fixing | - |
 | 9 | Serialize & Deserialize BST | 75% | Design | - |
 | 10 | Kth Largest | 70% | Traversal | - |
