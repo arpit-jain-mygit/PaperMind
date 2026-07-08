@@ -2,214 +2,75 @@
 
 **Author:** Arpit Jain  
 **Target:** MAANG System Design Interview  
-**Status:** Revision 1 - Initial Design with Feedback  
+**Status:** Revision 1  
 **Last Updated:** 2026-07-08
 
 ---
 
-## Table of Contents
+## Revision 1: Initial Design
 
-1. [Revision 1: Initial Design](#revision-1-initial-design)
-   - [Functional Requirements](#functional-requirements)
-   - [Non-Functional Requirements](#non-functional-requirements)
-   - [Design Decisions](#design-decisions)
-   - [Your Diagrams](#your-diagrams)
-   - [Feedback on Revision 1](#feedback-on-revision-1)
+### 1. Functional Requirements
 
----
+a) Generated short URLs should be collision free.
 
-# Revision 1: Initial Design
+b) User should be able to provide a long URL and get short URL
 
-## Functional Requirements
-
-1. **Generated short URLs should be collision free**
-   - Every long URL gets a unique short code
-   - No two different URLs can map to the same short code
-
-2. **User should be able to provide a long URL and get short URL**
-   - Simple API to convert long URL → short URL
-   - Simple API to redirect short URL → long URL
-
-3. **Read:Write ratio is 9:1**
-   - Most traffic is redirects (clicks), not new shortenings
-   - Design must optimize for read performance
+c) Read:Write ratio is 9:1
 
 ---
 
-## Non-Functional Requirements
+### 2. Non-Functional Requirements
 
-1. **System should support 100M URL creation per day**
-   - 100M URLs/day ÷ 86,400 seconds = **1,160 writes/sec**
-   - With 9:1 ratio: 1,160 × 10 = **11,600 reads/sec**
-   - Peak traffic could be 2-3x higher
+a) System should support 100M URL creation per day
 
-2. **System should respond within 2 seconds**
-   - **Write latency:** <2 sec for shortening requests
-   - **Read latency:** <200ms for redirect requests (critical!)
-   - **Target:** <100ms for reads (normal case)
+b) System should respond within 2 secs
 
-3. **High availability**
-   - System must be operational 24/7
-   - Single component failure shouldn't bring down the system
+c) uptime, collision free, latency
 
 ---
 
-## Design Decisions
+### 3. DB Choice and Tables Design, Storage Requirements
 
-### 1. Database Choice: Key-Value Store (Cassandra/DynamoDB)
+**Choice of DB:** Key value store - Cassandra or DynamoDB. DB should store longURL as key and ShortURL as value with created_on as timestamp.
 
-**Your Choice:** Cassandra or DynamoDB
-
-**Rationale:**
-- Key-value lookup is ideal for this workload
-- Simple mapping: `short_url → long_url`
-- Scales horizontally for high throughput
-- Handles high read ratio efficiently
-
-**Table Schema:**
+**Storage Calculation:**
 ```
-Table: url_mapping
-
-Columns:
-  short_url      (Primary Key) - VARCHAR(20)  ← 20 bytes
-  long_url       (Clustering Key) - VARCHAR(2048) ← 70 bytes (avg)
-  created_on     (Timestamp) - 10 bytes
-  [optional] user_id - 8 bytes
-  [optional] expires_at - 10 bytes
-
-Total per row: ~100 bytes (average)
+Daily write request: 100M per day => 100*1000000 requests
+Each write request will take longURL (70bytes), short URL (20 bytes), created_on (10 bytes)
+Approximately: 100 bytes per request
+In a day: 10 GB storage
+Per year: 3650 GB
+For 5 years: 18TB
+With 3x redundancy: 54TB total
 ```
 
 ---
 
-### 2. Storage Requirements Calculation
+### 4. APIs Design
 
-**Your Calculation:**
-```
-Daily write requests:     100M URLs/day
-Storage per request:      ~100 bytes
-Daily storage:            10 GB
+API1 - `/createURL`
 
-Per year:                 3,650 GB (~3.65 TB)
-For 5 years:              18 TB
-With 3x redundancy:       54 TB
-```
-
-**This is correct!** ✅
-
-**Additional considerations:**
-- Network bandwidth: 100M × 100 bytes = 10 GB/day = ~1 MB/sec
-- Read bandwidth (9:1 ratio): ~9 MB/sec
-- Both easily manageable
+API2 - `/getLongURL`
 
 ---
 
-### 3. API Design
+### 5. Algorithm to Generate Unique ID - Batch Design to Manage Unique IDs
 
-**API 1: Create Short URL**
-```
-POST /api/v1/data/shorten
+This has multiple faces:
 
-Request:
-{
-  "longUrl": "https://en.wikipedia.org/wiki/Systems_design",
-  [optional] "customAlias": "system-design",
-  [optional] "ttl": 86400,
-  [optional] "userId": "user-123"
-}
+**a) Generate short URLs and store in file:**
 
-Response (Success - 201):
-{
-  "shortUrl": "https://tinyurl.com/y7keocwj",
-  "longUrl": "https://en.wikipedia.org/wiki/Systems_design",
-  "createdAt": "2026-07-08T10:30:00Z",
-  "expiresAt": "2026-07-09T10:30:00Z"
-}
+System needs to generate 100M short URLs everyday. Our approach is to use 62 chars (A-Z, a-z, 0-9) in all possible combinations for alpha numeric ID with length 6. This can generate 62^6 (~56 Billion) unique URLs. To randomise/shuffle, unix sort job can be used and output containing these 56B IDs can be written in set of files. Each ID will require 6 bytes and to write 56B IDs, it will require 360GB size of files. IDs can be written in a file of 1 GB each and these files can be stored in Cloud buckets like AWS S3.
 
-Response (Error):
-  400: Invalid URL format
-  409: Custom alias already exists
-  429: Rate limit exceeded
-  500: Server error
-```
+**b) Loading short URLs:**
 
-**API 2: Redirect Short URL**
-```
-GET /api/v1/shortUrl/{shortCode}
-
-Response (Success - 302):
-  Status: 302 Temporary Redirect
-  Location: https://en.wikipedia.org/wiki/Systems_design
-  [Cache-Control headers]
-
-Response (Error):
-  404: Short URL not found
-  410: Short URL expired
-  500: Server error
-```
+Load these IDs from each of the S3 files to Kafka via a publisher (Python/Java program), Spark can be used to load all these files parallely and load to multiple kafka partitions for faster loading.
 
 ---
 
-### 4. Algorithm: Batch Pre-Generation with Randomization
+### 6. Logical Block Architecture
 
-**Your Approach:**
-
-#### Phase 1: Generate Codes
-
-```
-Code format:        6 characters (alphanumeric)
-Character set:      62 symbols (0-9, a-z, A-Z)
-Total combinations: 62^6 = 56.8 BILLION codes
-
-Generation:
-  Sequential: 000000 → 000001 → ... → zzzzzz
-  Time: ~1 hour (one-time job)
-  Output: sequential-ref-code.txt (400 GB)
-  Storage: AWS S3 (360 GB for 56B codes @ 6 bytes each)
-```
-
-**Storage breakdown:**
-- 56 billion codes × 6 bytes = 336 GB
-- With compression (gzip): ~100-150 GB
-- Spread across multiple 1GB files in S3
-
-#### Phase 2: Randomize Codes
-
-```
-Command: $ sort -R sequential-codes.txt > randomized-codes.txt
-
-Why shuffle?
-  WITHOUT: 000000, 000001, 000002 (sequential, predictable!)
-  WITH:    xYz9aB, 2kLmOp, Q7rWvX (random, unpredictable!)
-
-Benefits:
-  - Prevents code guessing
-  - Better security
-  - Looks more professional
-```
-
-#### Phase 3: Load into Kafka
-
-```
-Kafka Topic: url-shortener-codes
-Partitions:  10-100 (based on throughput needs)
-
-Distribution:
-  ├─ Partition 0: [xYz9aB, 2kLmOp, Q7rWvX, ...]
-  ├─ Partition 1: [abc123, def456, ghi789, ...]
-  ├─ Partition 2: [jkl012, mno345, pqr678, ...]
-  └─ ...
-
-Each partition holds: ~5.6 billion codes (56B ÷ 10)
-Load rate: ~1M codes/sec
-Total load time: ~15-20 hours
-```
-
----
-
-## Your Diagrams
-
-### Diagram 1: Batch Design - Short URLs Generation, Randomization, and Ready to be Mapped
+**a) Batch design to manage unique IDs:**
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -230,7 +91,7 @@ Total load time: ~15-20 hours
 │             │                                                       │
 │             ▼                                                       │
 │  ┌─────────────────────────────────────┐                           │
-│  │ Write a Spark program to load these  │                          │
+│  │ Write a spark program to load these  │                          │
 │  │ files and for each, call Unix sort   │                          │
 │  │ command to shuffle                  │                          │
 │  └──────────┬──────────────────────────┘                           │
@@ -262,16 +123,7 @@ Total load time: ~15-20 hours
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-**Your design captures:** ✅
-- Sequential generation (1 GB files, 360 files total)
-- Randomization via Unix sort
-- S3 storage
-- Spark parallel loading
-- Kafka partitioning
-
----
-
-### Diagram 2: User Request Flow - Write (Long to Short URL) / Read (Redirect Short to Long URL)
+**b) User request to convert long to short and redirect short URL to long URL:**
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -323,423 +175,62 @@ Total load time: ~15-20 hours
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-**Your design captures:** ✅
-- API Gateway
-- Load Balancer
-- Microservices on Kubernetes
-- Database (Cassandra/DynamoDB)
-- Cache (Redis)
-- Kafka (for fallback)
-- Separation of Write and Read paths
-
 ---
 
 ## Feedback on Revision 1
 
-### ✅ Strengths (Good Decisions)
+### ✅ Strengths
 
-1. **Batch Pre-Generation Approach** - Excellent!
-   - Avoids collision checks at runtime
-   - Eliminates database bottleneck for code generation
-   - Pre-shuffling ensures unpredictability
-
-2. **Capacity Planning** - Correct Math
-   - 100 bytes per entry
-   - 54 TB with 3x redundancy (accurate)
-   - Proper baseline for storage
-
-3. **NoSQL Choice** - Good for this workload
-   - Cassandra/DynamoDB suitable for key-value
-   - Handles high write/read throughput
-   - Scales horizontally
-
-4. **Microservices Architecture** - Scalable design
-   - Kubernetes for orchestration
-   - Separate write/read paths
-   - Stateless services (easy to scale)
-
-5. **High-Level Components** - All present
-   - API Gateway ✓
-   - Load Balancer ✓
-   - Database ✓
-   - Cache ✓
+| Aspect | Your Approach | Assessment |
+|--------|---------------|------------|
+| Batch pre-generation | Sequential generation → shuffle → Kafka | Excellent! Avoids collisions and DB bottleneck |
+| Capacity planning | 100 bytes/entry × 100M/day = 10GB/day = 54TB (5yr, 3x redundancy) | Math is correct ✓ |
+| NoSQL choice | Cassandra or DynamoDB | Good for key-value workload ✓ |
+| Architecture | Microservices on Kubernetes | Scalable design ✓ |
+| Components | API Gateway, Load Balancer, Cache, DB, Kafka | All essential parts present ✓ |
 
 ---
 
-### ❌ Critical Gaps (Missing for MAANG)
+### ❌ Critical Gaps (Missing for MAANG Interview)
 
-#### 1. Code Length Decision Not Justified
-
-**Current:** 62^6 = 56.8 billion codes
-**Problem:** Only covers ~1.8 years at 100M/day
-
-```
-Your calculation:
-  56B codes ÷ 100M/day = 560 days ≈ 1.8 years
-
-MAANG interviewer will ask:
-  "What happens after 1.8 years? System crashes?"
-
-Missing:
-  - Why 6 chars? (should explain capacity planning)
-  - Alternative: 62^7 = 3.5 trillion (covers 96 years)
-  - Regeneration strategy (when to move from 62^6 to 62^7)
-```
-
-**Add to next revision:**
-```
-Code length strategy:
-  Phase 1: 62^6 (covers 1.8 years)
-  At 80% exhaustion: Trigger regeneration
-  Phase 2: 62^7 (covers 96 years)
-  Transition: Gradual switchover (no service interruption)
-```
+| # | Gap | Why It Matters | Add to Next Revision |
+|---|-----|---|---|
+| 1 | **Code length decision (62^6 = 56B)** | 56B only covers 1.8 years at 100M/day. Interviewer asks "then what?" | Justify 6 chars OR upgrade to 62^7 (3.5T = 96 years). Plan for regeneration at 80% |
+| 2 | **Cache strategy missing** | 9:1 read ratio demands caching! No TTL, hit rate, or layer strategy mentioned | Redis with LRU, 1-hour TTL, 99% hit target, multi-layer (browser→CDN→Redis→DB) |
+| 3 | **Rate limiting not detailed** | No protection against abuse (100M URLs in 1 day from 1 user?) | API Gateway: 100 URLs/hour/IP, return 429 if exceeded |
+| 4 | **No deduplication logic** | If User A and B shorten same URL, do they get different codes? | Check if long_url exists BEFORE assigning code |
+| 5 | **301 vs 302 trade-off missing** | Classic MAANG question: which redirect type? Why? | Use 302 (track analytics). Explain why cache layer makes load acceptable |
+| 6 | **Failure handling absent** | What if Kafka fails? Batch crashes? Cache down? | Add recovery plans: Kafka replicas, idempotent batch, DB fallback |
+| 7 | **Sharding strategy unclear** | How to scale DB horizontally when codes run out? | Shard by short_url first character → distribute across nodes |
+| 8 | **Monitoring/alerting missing** | No mention of KPIs, thresholds, or exhaustion alerts | Monitor queue depth, alert at 80%, trigger regeneration |
+| 9 | **Batch job details vague** | How long does generation take? What if shuffle fails? | Specify SLA (6-10 hours), checkpoint for restarts, monitoring |
+| 10 | **API specs incomplete** | Only endpoint names mentioned | Full specs: request/response format, error codes (400, 404, 429), headers |
 
 ---
 
-#### 2. Missing Cache Strategy (Critical for 9:1 Read Ratio!)
+### Summary Score
 
-**Current Design:** Shows Redis but doesn't explain strategy
-
-**Missing Details:**
-```
-❌ No TTL mentioned
-❌ No cache hit rate target
-❌ No LRU/eviction policy
-❌ No multi-layer caching strategy
-❌ No cache invalidation logic
-```
-
-**Add to next revision:**
-```
-Caching Strategy:
-  - Cache type: Redis with LRU eviction
-  - TTL: 1 hour (normal URLs), 24 hours (popular URLs)
-  - Cache size: 1-10 million entries
-  - Hit rate target: 99%
-  - Multi-layer:
-      L1: Browser cache (via 301 redirect for some URLs)
-      L2: CDN cache (geo-distributed)
-      L3: Redis (in-memory)
-      L4: Database (last resort)
-```
-
----
-
-#### 3. No Rate Limiting / API Gateway Protection
-
-**Current:** Shows "API Gateway" but no details
-
-**Missing:**
-```
-❌ Rate limiting rules not specified
-❌ Protection against abuse not mentioned
-❌ Error codes (429) not defined
-❌ Request validation not detailed
-```
-
-**Add to next revision:**
-```
-API Gateway Features:
-  - Rate limiting: 100 URLs/hour per IP address
-  - Return 429 Too Many Requests if exceeded
-  - Authentication/authorization checks
-  - Request validation (URL format, length)
-  - Logging and monitoring
-```
-
----
-
-#### 4. No Deduplication Strategy
-
-**Current:** No mention of checking existing URLs
-
-**Problem:**
-```
-User 1: Shortens https://google.com → gets "abc123"
-User 2: Shortens https://google.com → gets "def456"?
-
-Should be: User 2 gets "abc123" (same URL = same code)
-```
-
-**Add to next revision:**
-```
-Deduplication Logic:
-  1. Before assigning new code:
-     SELECT short_url FROM url_mapping WHERE long_url = ?
-  
-  2. If exists: Return cached short_url
-  
-  3. If new: 
-     - Get code from Kafka queue
-     - Save to database
-     - Return new short_url
-  
-  Benefits:
-    - Conserves codes (extends 56B runway)
-    - Prevents duplicate work
-    - Users get same URL on repeat requests
-```
-
----
-
-#### 5. Missing 301 vs 302 Trade-off Discussion
-
-**Current:** No mention in your design
-
-**Critical Interview Question:**
-```
-Interviewer: "Should you use 301 or 302 redirect?"
-
-301 (Permanent):
-  ✓ Browser caches → reduces load
-  ✗ Can't track clicks for analytics
-  ✗ Can't change destination URL
-  
-302 (Temporary):
-  ✓ Every click hits your server (analytics possible)
-  ✗ Higher server load
-  ✗ Browser doesn't cache
-```
-
-**Add to next revision:**
-```
-Redirect Strategy: 302 (Temporary Redirect)
-
-Reasoning:
-  - Analytics tracking is important for business
-  - Cache layer (Redis) handles load anyway
-  - Every click captured in logs
-  - Flexibility to change destination if needed
-
-Performance consideration:
-  - Browser doesn't cache (on surface)
-  - But our Redis cache handles it (5ms response)
-  - So latency is still low despite 302
-```
-
----
-
-#### 6. No Failure Handling / Recovery
-
-**Current:** No mention of failures
-
-**Missing:**
-```
-❌ What if Kafka broker fails?
-❌ What if Cassandra goes down?
-❌ What if Spark shuffle job crashes?
-❌ What if cache layer fails?
-```
-
-**Add to next revision:**
-```
-Failure Handling:
-  
-  Kafka Consumer Failure:
-    - Multiple consumers in group
-    - Checkpointing (resume from offset)
-    - Replication factor 3 for fault tolerance
-    - Alert if queue depth drops
-  
-  Batch Job Failure:
-    - Idempotent generation (restart from checkpoint)
-    - Alert and retry with exponential backoff
-    - Fallback: on-demand ID generation
-  
-  Database Failure:
-    - Read replicas (3-5 copies)
-    - Automatic failover to replica
-    - Backup + restore SLA
-  
-  Cache Failure:
-    - Graceful fallback to database
-    - Database latency increases (but OK)
-    - System keeps working (degraded)
-```
-
----
-
-#### 7. No Sharding/Partitioning Strategy
-
-**Current:** Database is shown but no mention of scaling
-
-**Missing:**
-```
-❌ How data is distributed across nodes
-❌ Partition key strategy not mentioned
-❌ No discussion of scaling beyond single cluster
-```
-
-**Add to next revision:**
-```
-Sharding Strategy:
-  
-  Partition Key: short_url (first character)
-  
-  Shard 0: short_url starts with [0-9]  → Cassandra Node 1
-  Shard 1: short_url starts with [a-m]  → Cassandra Node 2
-  Shard 2: short_url starts with [n-z]  → Cassandra Node 3
-  
-  Benefits:
-    - Even distribution (each shard ~1/3 of data)
-    - Query: Get first char → route to correct shard
-    - Scales horizontally (add more nodes)
-    - Supports read replicas per shard
-```
-
----
-
-#### 8. No Monitoring / Alerting
-
-**Current:** No mention of monitoring
-
-**Missing:**
-```
-❌ No KPIs defined
-❌ No alert thresholds
-❌ No monitoring dashboard mentions
-❌ No exhaustion monitoring
-```
-
-**Add to next revision:**
-```
-Monitoring & Alerting:
-
-  Key Metrics:
-    - Kafka queue depth (alert if <50% capacity)
-    - Cache hit rate (target 99%, alert if <95%)
-    - Database CPU (alert if >80%)
-    - API latency (p50, p99)
-    - Error rate (alert if >0.1%)
-  
-  Exhaustion Monitoring:
-    - Track: remaining codes in Kafka queue
-    - Calculate: % of 56B used
-    - Alert at 80%: Trigger regeneration
-    - Start Phase 2 (62^7) before Phase 1 exhausts
-  
-  Dashboard:
-    - Real-time metrics
-    - Historical trends
-    - Alert status
-```
-
----
-
-#### 9. Missing Batch Job Details
-
-**Current:** Shows batch flow but lacks specifics
-
-**Missing:**
-```
-❌ Performance metrics (speed of generation, shuffle, load)
-❌ Storage efficiency (compression ratio)
-❌ Failure recovery steps
-❌ Scheduled vs on-demand
-❌ Monitoring during batch execution
-```
-
-**Add to next revision:**
-```
-Batch Job Specifications:
-
-  Generation Phase:
-    - Time: ~1-3 hours
-    - Input: Sequentially generate 0 to 62^6-1
-    - Output: 360 × 1GB files in S3
-    - Compression: gzip (reduces to ~100GB)
-  
-  Shuffle Phase:
-    - Time: ~1-2 hours per 1GB file
-    - Method: Unix sort -R (randomize)
-    - Parallelization: Spark (100+ executors)
-    - Output: Shuffled files back to S3
-  
-  Load Phase:
-    - Time: ~2-4 hours
-    - Method: Spark → Kafka producer
-    - Partition count: 10-100
-    - Rate: ~1M codes/sec
-  
-  Total Batch Time: ~6-10 hours
-  Frequency: Once per 1.8 years (when 80% exhausted)
-  SLA: Must complete before codes run out
-```
-
----
-
-#### 10. API Specifications Incomplete
-
-**Current:** Mentions /createURL and /getLongURL
-
-**Missing:**
-```
-❌ No request/response format
-❌ No error codes
-❌ No optional parameters
-❌ No authentication mentioned
-❌ No headers (cache control, etc)
-```
-
-**Add to next revision:**
-```
-Complete API Specification:
-
-  POST /api/v1/data/shorten
-    Input: { longUrl, [customAlias], [ttl], [userId] }
-    Success: 201 { shortUrl, createdAt, expiresAt }
-    Errors: 400, 409, 429, 500
-    Rate limit: 100/hour/IP
-  
-  GET /api/v1/shortUrl/{shortCode}
-    Response: 302 redirect (Location: {longUrl})
-    Cache-Control: no-cache (force revalidation)
-    Errors: 404, 410, 500
-    Latency SLA: <100ms
-```
-
----
-
-## Summary: Revision 1 Grade
-
-| Aspect | Grade | Comment |
-|--------|-------|---------|
-| Problem understanding | A | Clear on requirements |
-| Batch pre-generation | A | Excellent approach |
-| Architecture diagram | A | Good component layout |
-| Capacity planning | A | Math is correct |
-| Database choice | A | Appropriate for workload |
-| **Cache strategy** | D | Only mentioned, not detailed |
+| Aspect | Score | Status |
+|--------|-------|--------|
+| Requirements understanding | A | Clear ✓ |
+| Batch pre-generation | A | Solid approach ✓ |
+| Diagrams & architecture | A | Good layout ✓ |
+| Capacity math | A | Correct ✓ |
+| Database & storage | A | Appropriate ✓ |
+| **Caching strategy** | D | Only mentioned, not detailed |
 | **Rate limiting** | D | Not explained |
-| **Code length decision** | D | No justification |
+| **Code length justification** | D | No reasoning given |
 | **Deduplication** | D | Missing entirely |
-| **301 vs 302** | F | Not mentioned |
+| **301 vs 302** | F | Not discussed |
 | **Failure handling** | F | Not addressed |
-| **Monitoring** | F | No alerting strategy |
-| **API specs** | C | Mentioned but incomplete |
+| **Monitoring** | F | No strategy |
+| **API specifications** | C | Names only, no details |
 | **Sharding** | D | Not detailed |
 
-**Overall Score:** 65-70% for MAANG  
-**With fixes:** 85-90% ✅
+**Overall: 65-70% for MAANG → 85-90% with fixes**
 
 ---
 
-## Next Steps for Revision 2
+## Ready for Revision 2
 
-To improve this design for MAANG interviews:
-
-1. ✅ Add code length justification (62^6 vs 62^7)
-2. ✅ Detail cache strategy (TTL, hit rate, layers)
-3. ✅ Add rate limiting rules (100/hour/IP)
-4. ✅ Include deduplication logic (check before assign)
-5. ✅ Discuss 301 vs 302 (pick 302, explain why)
-6. ✅ Add failure recovery (Kafka, Batch, DB, Cache)
-7. ✅ Define monitoring/alerting (KPIs, thresholds)
-8. ✅ Explain sharding strategy (by first char)
-9. ✅ Detail batch job SLAs (time, frequency, recovery)
-10. ✅ Complete API specifications (all endpoints, errors)
-
----
-
-**Ready for Revision 2?** Let me know what to add or modify! 🚀
+Address these 10 gaps in your next revision. Keep your design, add details! 🚀
