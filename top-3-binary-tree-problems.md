@@ -9,9 +9,9 @@
 2. [LeetCode 235 - LCA of Binary Search Tree [75%]](#2-leetcode-235---lca-of-binary-search-tree-75) ✅
 3. [LeetCode 102 - Binary Tree Level Order Traversal [80%]](#3-leetcode-102---binary-tree-level-order-traversal-80) ✅
 4. [LeetCode 94 - Binary Tree Inorder Traversal [78%]](#4-leetcode-94---binary-tree-inorder-traversal-78) ✅
+5. [LeetCode 144 - Binary Tree Preorder Traversal [75%]](#5-leetcode-144---binary-tree-preorder-traversal-75) ✅
 
 #### Additional Problems (To Be Added)
-5. LeetCode 144 - Binary Tree Preorder Traversal [75%]
 6. LeetCode 145 - Binary Tree Postorder Traversal [72%]
 7. LeetCode 230 - Kth Smallest Element in BST [75%]
 8. LeetCode 99 - Recover Binary Search Tree [75%]
@@ -675,6 +675,127 @@ public class BSTInOrderTraversal {
 
 ---
 
+## 5. LeetCode 144 - Binary Tree Preorder Traversal [75%]
+
+### Problem Statement
+Given the root of a binary tree, return the preorder traversal of its nodes' values.
+
+**Input:** Binary tree root node
+**Output:** List of node values in preorder sequence
+
+### Example
+```
+Input Tree:
+    4
+   / \
+  2   6
+ / \ / \
+1 3 5  7
+
+Preorder Traversal: [4, 2, 1, 3, 6, 5, 7]
+(Root → Left → Right)
+```
+
+### Follow-up Problems (in the 17)
+- **#4: LeetCode 94 - Binary Tree Inorder Traversal [78%]** - Left → Root → Right
+- **#6: LeetCode 145 - Binary Tree Postorder Traversal [72%]** - Left → Right → Root
+
+### Code Solution
+
+```java
+import java.util.*;
+
+class Node {
+    int value;
+    Node left;
+    Node right;
+
+    public Node(int value) {
+        this.value = value;
+    }
+    public String toString() {
+        return "" + value;
+    }
+}
+
+public class BSTPreOrderTraversal {
+    // ============ VALID BST TEST CASES ============
+    public static Node validBalancedBST() {
+        /*
+              4
+             / \
+            2   6
+           / \ / \
+          1 3 5  7
+        */
+        Node root = new Node(4);
+        root.left = new Node(2);
+        root.right = new Node(6);
+        root.left.left = new Node(1);
+        root.left.right = new Node(3);
+        root.right.left = new Node(5);
+        root.right.right = new Node(7);
+        return root;
+    }
+
+    // ============ TEST RUNNER ============
+
+    public static void main(String[] args) {
+        Node root = validBalancedBST();
+        pre_order_traversal(root);
+    }
+
+    public static Node pre_order_traversal(Node root){
+        if (root == null) return null;
+        System.out.println(root.value+",");
+        pre_order_traversal(root.left);
+        pre_order_traversal(root.right);
+        return null;
+    }
+}
+```
+
+**Output:**
+```
+4,
+2,
+1,
+3,
+6,
+5,
+7,
+```
+
+### Complexity Analysis
+- **Time Complexity:** O(n) - visit each node exactly once
+- **Space Complexity:** O(h) - where h is height (recursion stack)
+
+### MAANG Interview Questions
+1. "What's the difference between preorder and inorder?" → Order of visiting node vs children
+2. "Why preorder for serialization?" → Can reconstruct tree uniquely with preorder + inorder
+3. "Can you do it iteratively?" → Yes, use explicit stack (push right then left)
+4. "Where is preorder used?" → Tree copying, expression evaluation, XML/JSON parsing
+5. "How to identify preorder from output?" → First element is always root
+
+### Real-World Business Applications
+
+**1. Tree Copying & Cloning**
+- **Use Case:** File system or DOM tree cloning operations
+- **Business Impact:** Efficient deep copy of hierarchical structures
+- **Example:** JavaScript DOM cloning (React virtual DOM)
+
+**2. Expression Tree Evaluation**
+- **Use Case:** Mathematical expression parsing and evaluation
+- **Business Impact:** Prefix notation (Polish notation) for calculators
+- **Example:** Compiler parsing of arithmetic expressions
+
+**3. Serialization & Deserialization**
+- **Use Case:** Convert tree to string format for storage/transmission
+- **Business Impact:** Combined with inorder to uniquely reconstruct tree
+- **Example:** Database tree indexing, microservices communication
+
+---
+
 ## Summary
 
 | # | Problem | Frequency | Type | Status |
@@ -683,7 +804,7 @@ public class BSTInOrderTraversal {
 | 2 | LCA BST | 75% | Traversal | ✅ |
 | 3 | Level Order Traversal | 80% | Traversal | ✅ |
 | 4 | Inorder Traversal | 78% | Traversal | ✅ |
-| 5 | Preorder Traversal | 75% | Traversal | - |
+| 5 | Preorder Traversal | 75% | Traversal | ✅ |
 | 6 | Postorder Traversal | 72% | Traversal | - |
 | 7 | Kth Smallest | 75% | Traversal | - |
 | 8 | Recover BST | 75% | Fixing | - |
