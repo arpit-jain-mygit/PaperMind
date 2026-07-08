@@ -5,6 +5,10 @@ RAG is a technique that enhances Large Language Models by retrieving relevant in
 
 ## Reference Materials
 
+### Articles & Resources
+- **Pinecone - Vector Database Learning** - https://www.pinecone.io/learn/vector-database/
+  - Comprehensive guide to vector databases and their role in modern AI applications
+
 ### Videos
 - **RAG Explained in 12 Minutes** by Aishwarya Srinivasan
   - https://www.youtube.com/watch?v=v0ynfDPpe4E
