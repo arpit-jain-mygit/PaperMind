@@ -14,6 +14,10 @@ RAG is a technique that enhances Large Language Models by retrieving relevant in
   - https://www.youtube.com/watch?v=MpMjB_fSGUA
   - In-depth exploration of AI agents and agentic patterns with RAG context
 
+- **Model Context Protocol Clearly Explained | MCP Beyond the Hype** by codebasics
+  - https://youtu.be/tzrwxLNHtRY?si=_hB6b8kpTt4_StW1
+  - Understanding MCP for integrating external tools and resources with LLMs
+
 ## Key Concepts
 - Retrieval component for fetching relevant documents
 - Augmentation of prompts with retrieved context
