@@ -70,17 +70,13 @@ Load these IDs from each of the S3 files to Kafka via a publisher (Python/Java p
 
 ### 6. Logical Block Architecture
 
-**a) Batch design to manage unique IDs:**
+![URL Shortener Architecture Diagrams](./diagrams/url-shortener-diagrams.png)
 
-![Batch Design Diagram](./diagrams/batch-design-diagram.png)
+**a) Batch design to manage unique IDs (Top):**
+Python program generates 56B IDs in 360 files (1GB each) → Store in S3 → Spark loads and shuffles via Unix sort → Reload to S3 → Load with Spark → Load into Kafka partitions → Ready to map
 
-*Diagram: Python program generates 56B IDs in 360 files (1GB each) → Store in S3 → Spark loads and shuffles via Unix sort → Reload to S3 → Load with Spark → Load into Kafka partitions → Ready to map*
-
-**b) User request to convert long to short and redirect short URL to long URL:**
-
-![User Request Flow Diagram](./diagrams/user-request-flow-diagram.png)
-
-*Diagram: User → API Gateway → Load Balancer → splits into Write path (Create Short URLs App Server) and Read path (Redirect Short URL to Long URL App Server) → NoSQL Database (Cassandra/DynamoDB) and Cache (Redis) and Kafka*
+**b) User request to convert long to short and redirect short URL to long URL (Bottom):**
+User → API Gateway → Load Balancer → splits into Write path (Create Short URLs App Server) and Read path (Redirect Short URL to Long URL App Server) → NoSQL Database (Cassandra/DynamoDB) and Cache (Redis) and Kafka
 
 ---
 
