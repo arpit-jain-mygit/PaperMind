@@ -10,9 +10,9 @@
 3. [LeetCode 102 - Binary Tree Level Order Traversal [80%]](#3-leetcode-102---binary-tree-level-order-traversal-80) ✅
 4. [LeetCode 94 - Binary Tree Inorder Traversal [78%]](#4-leetcode-94---binary-tree-inorder-traversal-78) ✅
 5. [LeetCode 144 - Binary Tree Preorder Traversal [75%]](#5-leetcode-144---binary-tree-preorder-traversal-75) ✅
+6. [LeetCode 145 - Binary Tree Postorder Traversal [72%]](#6-leetcode-145---binary-tree-postorder-traversal-72) ✅
 
 #### Additional Problems (To Be Added)
-6. LeetCode 145 - Binary Tree Postorder Traversal [72%]
 7. LeetCode 230 - Kth Smallest Element in BST [75%]
 8. LeetCode 99 - Recover Binary Search Tree [75%]
 9. LeetCode 427 - Serialize & Deserialize BST [75%]
@@ -796,6 +796,127 @@ public class BSTPreOrderTraversal {
 
 ---
 
+## 6. LeetCode 145 - Binary Tree Postorder Traversal [72%]
+
+### Problem Statement
+Given the root of a binary tree, return the postorder traversal of its nodes' values.
+
+**Input:** Binary tree root node
+**Output:** List of node values in postorder sequence
+
+### Example
+```
+Input Tree:
+    4
+   / \
+  2   6
+ / \ / \
+1 3 5  7
+
+Postorder Traversal: [1, 3, 2, 5, 7, 6, 4]
+(Left → Right → Root)
+```
+
+### Follow-up Problems (in the 17)
+- **#4: LeetCode 94 - Binary Tree Inorder Traversal [78%]** - Left → Root → Right
+- **#5: LeetCode 144 - Binary Tree Preorder Traversal [75%]** - Root → Left → Right
+
+### Code Solution
+
+```java
+import java.util.*;
+
+class Node {
+    int value;
+    Node left;
+    Node right;
+
+    public Node(int value) {
+        this.value = value;
+    }
+    public String toString() {
+        return "" + value;
+    }
+}
+
+public class BSTPostOrderTraversal {
+    // ============ VALID BST TEST CASES ============
+    public static Node validBalancedBST() {
+        /*
+              4
+             / \
+            2   6
+           / \ / \
+          1 3 5  7
+        */
+        Node root = new Node(4);
+        root.left = new Node(2);
+        root.right = new Node(6);
+        root.left.left = new Node(1);
+        root.left.right = new Node(3);
+        root.right.left = new Node(5);
+        root.right.right = new Node(7);
+        return root;
+    }
+
+    // ============ TEST RUNNER ============
+
+    public static void main(String[] args) {
+        Node root = validBalancedBST();
+        post_order_traversal(root);
+    }
+
+    public static Node post_order_traversal(Node root){
+        if (root == null) return null;
+        post_order_traversal(root.left);
+        post_order_traversal(root.right);
+        System.out.println(root.value+",");
+        return null;
+    }
+}
+```
+
+**Output:**
+```
+1,
+3,
+2,
+5,
+7,
+6,
+4,
+```
+
+### Complexity Analysis
+- **Time Complexity:** O(n) - visit each node exactly once
+- **Space Complexity:** O(h) - where h is height (recursion stack)
+
+### MAANG Interview Questions
+1. "When is postorder used?" → Tree deletion, dependency resolution, bottom-up computation
+2. "How to convert to iterative?" → Two stacks or one stack with tracking
+3. "Why postorder for deletion?" → Child nodes deleted before parent (no dangling pointers)
+4. "Postorder vs others?" → Postorder processes data from bottom-up
+5. "Real-world use cases?" → Undo/redo stacks, expression evaluation with operands first
+
+### Real-World Business Applications
+
+**1. Tree/Graph Deletion & Resource Cleanup**
+- **Use Case:** Safely delete entire tree structure bottom-up
+- **Business Impact:** Prevents memory leaks and dangling pointers
+- **Example:** File system directory deletion, DOM cleanup in browsers
+
+**2. Dependency Resolution & Build Systems**
+- **Use Case:** Build projects in correct order (dependencies before dependents)
+- **Business Impact:** Ensures correct compilation order, avoids circular dependencies
+- **Example:** Maven/Gradle dependency resolution, build systems
+
+**3. Postfix Notation & RPN Calculators**
+- **Use Case:** Convert infix expressions to postfix for evaluation
+- **Business Impact:** Efficient expression evaluation without parentheses
+- **Example:** Scientific calculators, stack-based computation engines
+
+---
+
 ## Summary
 
 | # | Problem | Frequency | Type | Status |
@@ -805,7 +926,7 @@ public class BSTPreOrderTraversal {
 | 3 | Level Order Traversal | 80% | Traversal | ✅ |
 | 4 | Inorder Traversal | 78% | Traversal | ✅ |
 | 5 | Preorder Traversal | 75% | Traversal | ✅ |
-| 6 | Postorder Traversal | 72% | Traversal | - |
+| 6 | Postorder Traversal | 72% | Traversal | ✅ |
 | 7 | Kth Smallest | 75% | Traversal | - |
 | 8 | Recover BST | 75% | Fixing | - |
 | 9 | Serialize & Deserialize BST | 75% | Design | - |
