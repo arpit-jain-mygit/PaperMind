@@ -5,6 +5,30 @@
 **Status:** Revision 2 (with critical feedback)  
 **Last Updated:** 2026-07-08
 
+## Table of Contents
+
+### [Revision 1: Initial Design](#revision-1-initial-design)
+1. [Functional Requirements](#1-functional-requirements)
+2. [Non-Functional Requirements](#2-non-functional-requirements)
+3. [DB Choice & Storage](#3-db-choice-and-tables-design-storage-requirements)
+4. [APIs Design](#4-apis-design)
+5. [Algorithm & Batch Design](#5-algorithm-to-generate-unique-id---batch-design-to-manage-unique-ids)
+6. [Logical Block Architecture](#6-logical-block-architecture)
+7. [Feedback on Revision 1](#feedback-on-revision-1)
+
+### [Revision 2: Detailed Design](#revision-2-detailed-design-with-explanations)
+1. [Functional Requirements](#1-functional-requirements-1)
+2. [Non-Functional Requirements](#2-non-functional-requirements-1)
+3. [DB Choice & Storage](#3-db-choice-and-tables-design-storage-requirements-1)
+4. [APIs Design](#4-apis-design-1)
+5. [Algorithm & Batch Design](#5-algorithm-to-generate-unique-id---batch-design-to-manage-unique-ids-1)
+6. [Logical Block Architecture](#6-logical-block-architecture-1)
+7. [Feedback on Revision 2](#feedback-on-revision-2)
+   - [What Improved](#-what-improved)
+   - [Critical Technical Issues](#-critical-technical-issues)
+   - [Missing Details](#-missing-but-important-details)
+   - [Must-Fix for Revision 3](#-must-fix-for-revision-3)
+
 ---
 
 ## Revision 1: Initial Design
