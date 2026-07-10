@@ -11,7 +11,7 @@
 
 | # | Problem | Frequency | Companies | Key Concepts |
 |---|---------|-----------|-----------|--------------|
-| [1](#1-design-cache-system-lru--lfu-cache) | Cache System | 76% | Google • Meta • Amazon • Apple • Netflix | Hash Map • Linked List • LRU/LFU • TTL |
+| [1](#1-design-localin-process-cache-system-lru--lfu-cache) | Local Cache (LRU/LFU) | 76% | Google • Meta • Amazon • Apple • Netflix | Hash Map • Linked List • LRU/LFU • TTL |
 | [2](#2-design-recommendation-system) | Recommendation System | 73% | Netflix • Amazon • Google • Meta • Apple | Collaborative Filtering • Content-Based • ML |
 | [3](#3-design-netflix--video-on-demand-vod) | Netflix/VOD | 72% | Netflix • Amazon • Google | Video Encoding • ABR • CDN • HLS/DASH |
 | [4](#4-design-youtube--video-streaming) | YouTube Streaming | 70% | Google • Netflix • Meta • Amazon | Video Transcoding • ABR • CDN • Sharding |
@@ -23,12 +23,12 @@
 
 | # | Problem | Frequency | Companies | Key Concepts |
 |---|---------|-----------|-----------|--------------|
-| [8](#8-design-twitter--social-media-feed) | Twitter Feed | 65% | Meta • Google • Amazon | Fan-Out • Denormalization • Timeline Ranking |
-| [9](#9-design-distributed-cache-redis-like) | Redis Cache | 65% | Google • Amazon • Meta • Netflix • Apple | In-Memory DS • Eviction • Persistence • Pub/Sub |
-| [10](#10-design-database-sql--nosql) | Database | 65% | Google • Amazon • Meta • Apple • Netflix | ACID • CAP • Indexing • Replication • Sharding |
+| [8](#8-design-twitter--social-media-feed) | Twitter/Social Feed | 65% | Meta • Google • Amazon | Fan-Out • Denormalization • Timeline Ranking |
+| [9](#9-design-distributed-cache-system-redis-like) | Distributed Cache (Redis) | 65% | Google • Amazon • Meta • Netflix • Apple | In-Memory DS • Persistence • Replication • Pub/Sub |
+| [10](#10-design-database-sql--nosql) | Distributed Database System | 65% | Google • Amazon • Meta • Apple • Netflix | ACID • CAP • Indexing • Replication • Sharding |
 | [11](#11-design-content-delivery-network-cdn) | CDN | 62% | Google • Netflix • Amazon • Meta • Apple | DNS Routing • Edge Servers • Cache Invalidation |
 | [12](#12-design-notification-system) | Notifications | 62% | Amazon • Google • Meta • Apple • Netflix | Message Queues • Pub/Sub • Delivery Semantics |
-| [13](#13-design-news-feed--timeline) | News Feed | 62% | Meta • Google • Amazon • Apple | Fan-Out • Timeline Ranking • Cache-Aside |
+| [13](#13-design-news-feed--timeline) | News Feed/Timeline | 62% | Meta • Google • Amazon • Apple | Fan-Out • Timeline Ranking • Cache-Aside |
 | [14](#14-design-metrics--analytics-system) | Metrics/Analytics | 58% | Google • Amazon • Meta • Netflix • Apple | Time-Series DB • Aggregation • Compression |
 | [15](#15-design-messaging-system-whatsapp--facebook-messenger) | Messaging | 58% | Meta • Apple • Amazon • Google | Message Ordering • Encryption • Persistence |
 | [16](#16-design-rate-limiter) | Rate Limiter | 58% | Google • Amazon • Meta • Apple | Token Bucket • Sliding Window • Redis |
@@ -45,7 +45,7 @@
 | [22](#22-design-payment-system) | Payment System | 52% | Amazon • Apple • Google • Meta | ACID • Idempotency • Encryption • Reconciliation |
 | [23](#23-design-distributed-job-queue--task-scheduler) | Job Queue | 52% | Google • Amazon • Meta • Netflix • Apple | Queues • Priority • Retry Logic • Scheduling |
 | [24](#24-design-uber--ride-sharing) | Uber | 48% | Amazon • Google • Meta | Geospatial Indexing • Real-Time Tracking • ETA |
-| [25](#25-design-api-gateway--load-balancer) | API Gateway | 48% | Google • Amazon • Meta • Apple | Routing • Load Balancing • Circuit Breaker |
+| [25](#25-design-api-gateway--load-balancer) | API Gateway & Load Balancer | 48% | Google • Amazon • Meta • Apple | Routing • Load Balancing • Circuit Breaker |
 | [26](#26-design-booking-system-hotel--airbnb--flight) | Booking System | 48% | Amazon • Google • Meta • Apple | Inventory • Concurrency Control • Strong Consistency |
 | [27](#27-design-chat-system-slack-like) | Chat System | 48% | Meta • Apple • Amazon • Google | Message Ordering • Encryption • WebSocket |
 
@@ -59,7 +59,7 @@
 
 ---
 
-## 1. Design Cache System (LRU / LFU Cache)
+## 1. Design Local/In-Process Cache System (LRU / LFU Cache)
 
 **Frequency:** 76% | **Asked by:** Google (90%) • Meta (80%) • Amazon (75%) • Apple (70%) • Netflix (60%)
 
@@ -272,7 +272,7 @@ Push vs. Pull Architecture (Fan-out) • Denormalization • Cache-Aside Pattern
 
 ---
 
-## 9. Design Distributed Cache (Redis-like)
+## 9. Design Distributed Cache System (Redis-like)
 
 **Frequency:** 65% | **Asked by:** Google (85%) • Amazon (75%) • Meta (70%) • Netflix (60%) • Apple (55%)
 
@@ -298,7 +298,7 @@ In-Memory Data Structures • Eviction Policies (LRU, LFU) • Persistence (RDB,
 
 ---
 
-## 10. Design Database (SQL / NoSQL)
+## 10. Design Distributed Database System (SQL / NoSQL)
 
 **Frequency:** 65% | **Asked by:** Google (80%) • Amazon (75%) • Meta (65%) • Apple (60%) • Netflix (50%)
 
@@ -701,7 +701,7 @@ Geospatial Indexing (Quadtree, R-tree) • Real-Time Location Tracking • Match
 
 ---
 
-## 25. Design API Gateway / Load Balancer
+## 25. Design API Gateway & Load Balancer
 
 **Frequency:** 48% | **Asked by:** Google (65%) • Amazon (55%) • Meta (40%) • Apple (35%)
 
