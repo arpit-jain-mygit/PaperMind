@@ -1,0 +1,662 @@
+# MAANG System Design Problems List
+
+> Ordered by frequency (high to low) | Backlog for system design practice
+
+---
+
+## 1. URL Shortener
+
+**Functional Requirements:**
+- Convert long URLs to short, unique URLs
+- Redirect users from short URL to original long URL
+- Allow users to customize short URLs (optional)
+- Track expiration for shortened URLs (optional)
+- Allow users to delete their shortened URLs
+
+**Non-Functional Requirements:**
+- High availability and low latency (< 100ms redirects)
+- Highly scalable (billions of short URLs)
+- Short URL should be unique and collision-free
+- Backward compatibility (once created, short URL cannot change)
+- Analytics tracking (click counts, geographic data)
+
+---
+
+## 2. Design Twitter / Social Media Feed
+
+**Functional Requirements:**
+- Users can post tweets (create, update, delete)
+- Users can view their timeline/feed
+- Users can follow/unfollow other users
+- Support likes, retweets, replies to tweets
+- Users can search tweets
+- Display trending topics/hashtags
+- Support user profiles with follower/following counts
+
+**Non-Functional Requirements:**
+- High availability and fault tolerance
+- Ultra-low latency for feed rendering (< 200ms)
+- Highly scalable (millions of concurrent users)
+- Eventual consistency acceptable for feed
+- Real-time notifications for interactions
+- Efficient storage for billions of tweets
+
+---
+
+## 3. Design Uber / Ride Sharing
+
+**Functional Requirements:**
+- Users can request rides from location A to B
+- Driver can accept/reject ride requests
+- Real-time tracking of driver location
+- Calculate fare based on distance and time
+- User can rate driver and driver can rate user
+- Support for ride history and trip details
+- Cancellation policies and handling
+
+**Non-Functional Requirements:**
+- Real-time location updates (< 5s latency)
+- High availability for critical operations
+- Highly scalable (millions of concurrent rides)
+- Reliable geolocation matching algorithm
+- Support for surge pricing during peak hours
+- Accurate ETA calculation
+
+---
+
+## 4. Design Messaging System (WhatsApp / Facebook Messenger)
+
+**Functional Requirements:**
+- Users can send and receive one-to-one messages
+- Support group messaging (up to N members)
+- Messages should be delivered and read receipts
+- Support media sharing (images, videos, files)
+- Search message history
+- Block/unblock users
+- Delete messages (for user/all)
+- End-to-end encryption support
+
+**Non-Functional Requirements:**
+- Real-time message delivery (< 1s)
+- High availability and reliability
+- Offline message storage and sync when online
+- End-to-end encryption for privacy
+- Support billions of messages per day
+- Efficient bandwidth usage
+- Support push notifications
+
+---
+
+## 5. Design YouTube / Video Streaming
+
+**Functional Requirements:**
+- Users can upload, view, and delete videos
+- Stream videos with adaptive bitrate (different quality levels)
+- Support for playlists and channels
+- Search and filter videos by metadata
+- Like, comment, share videos
+- Video recommendations based on watch history
+- Subscribe to channels
+- Autoplay and watch history
+
+**Non-Functional Requirements:**
+- High availability and fault tolerance
+- Support millions of concurrent video streams
+- Low video start time (< 2s)
+- Adaptive bitrate streaming for variable network conditions
+- CDN optimization for global distribution
+- Efficient video compression
+- Support for real-time transcoding
+
+---
+
+## 6. Design Instagram / Photo Sharing Social Network
+
+**Functional Requirements:**
+- Users can upload, delete photos/images
+- Users can browse feed from followed users
+- Like, comment on photos
+- Direct messaging between users
+- Search users and hashtags
+- User profiles with follower counts
+- Stories feature (temporary content)
+- Follow/unfollow functionality
+
+**Non-Functional Requirements:**
+- High availability and low latency (< 200ms)
+- Highly scalable (millions of concurrent users)
+- Efficient image storage and compression
+- Fast feed generation
+- Real-time notifications
+- Support for billions of images
+- CDN optimization for image delivery
+
+---
+
+## 7. Design File Storage System (Dropbox / Google Drive)
+
+**Functional Requirements:**
+- Users can upload, download, delete files
+- Support file versioning (keep previous versions)
+- Share files/folders with other users with permissions
+- Support folder hierarchy
+- File sync across devices
+- Search files by name and metadata
+- Trash/recycle bin with restore
+- Collaborative editing (optional)
+
+**Non-Functional Requirements:**
+- High availability and reliability
+- Data durability (data should not be lost)
+- Support large files (up to multiple GB)
+- Efficient bandwidth usage (delta sync)
+- Low latency for file operations
+- Scalable to handle billions of files
+- Support for concurrent access
+- Strong consistency for file operations
+
+---
+
+## 8. Design Netflix / Video on Demand (VOD)
+
+**Functional Requirements:**
+- Users can browse and search for movies/shows
+- Stream content with multiple quality options
+- Track watch history and resume from last position
+- Personalized recommendations
+- Support multiple user profiles in one account
+- Allow downloads for offline viewing
+- Support ratings and reviews
+- Subscription management
+
+**Non-Functional Requirements:**
+- High availability and fault tolerance
+- Support millions of concurrent streams
+- Low buffering and fast start time (< 2s)
+- Adaptive bitrate streaming
+- Global CDN distribution
+- Efficient video compression
+- Strong license compliance
+- Support offline content expiry
+
+---
+
+## 9. Design TikTok / Short Form Video Platform
+
+**Functional Requirements:**
+- Users can create, upload short videos
+- Infinite feed with video recommendations
+- Like, comment, share, duet, stitch features
+- Search and discover content
+- Follow creators
+- Direct messaging
+- Support hashtags and trending content
+- Creator monetization (tips, ads)
+
+**Non-Functional Requirements:**
+- Ultra-low latency for feed (< 200ms)
+- Support billions of videos and concurrent users
+- AI-driven recommendation engine
+- Real-time engagement tracking
+- Global CDN distribution
+- Video processing and compression
+- High throughput for uploads
+
+---
+
+## 10. Design Notification System
+
+**Functional Requirements:**
+- Send notifications to users via multiple channels (push, email, SMS)
+- Schedule notifications for future delivery
+- Support notification templates and personalization
+- Track notification delivery and read status
+- Support notification preferences/unsubscribe
+- Handle different notification types (alerts, promotions, transactional)
+- Retry mechanism for failed notifications
+
+**Non-Functional Requirements:**
+- High availability and reliability
+- Extremely high throughput (millions of notifications/sec)
+- Low latency for real-time notifications (< 5s)
+- Scalability to support billions of users
+- Exactly-once delivery semantics (or at-least-once with idempotency)
+- Support multiple notification channels
+- Fault tolerance and graceful degradation
+
+---
+
+## 11. Design Parking Lot System
+
+**Functional Requirements:**
+- Users can search available parking spots
+- Users can reserve/book parking spots
+- Real-time availability of parking spaces
+- Support multiple parking rates (hourly, daily, monthly)
+- Process payments for parking
+- Generate parking tickets/receipts
+- Support multi-level parking structures
+- Notifications for expiration reminders
+
+**Non-Functional Requirements:**
+- High availability for booking operations
+- Real-time availability updates
+- Highly scalable (support large parking lots)
+- Support concurrent bookings
+- Fair distribution of parking spaces
+- Low latency for spot availability queries
+- Support transaction consistency for payments
+
+---
+
+## 12. Design Rate Limiter
+
+**Functional Requirements:**
+- Limit number of requests per user/IP in time window
+- Support multiple rate limiting algorithms (token bucket, sliding window, etc.)
+- Return clear error responses when limit exceeded
+- Support different rate limits for different API endpoints/users
+- Allow whitelist/blacklist of users or IPs
+- Support rate limit quota information in response headers
+
+**Non-Functional Requirements:**
+- High availability and low latency (< 10ms decision)
+- Highly scalable (billions of requests/sec)
+- Distributed rate limiting across multiple servers
+- Support for various time windows (sec, min, hour, day)
+- Memory efficient
+- Support for multiple data centers
+
+---
+
+## 13. Design Cache System (LRU / LFU Cache)
+
+**Functional Requirements:**
+- Get and put operations for cache
+- Eviction policy when cache is full (LRU, LFU, FIFO)
+- Support TTL (time-to-live) for cache entries
+- Clear cache operation
+- Cache statistics (hit/miss rate)
+
+**Non-Functional Requirements:**
+- O(1) time complexity for get and put operations
+- Memory efficient
+- Highly concurrent access
+- Support for multi-threading/distributed cache
+- Scalable to millions of entries
+
+---
+
+## 14. Design Search Autocomplete (Typeahead)
+
+**Functional Requirements:**
+- Return top N suggestions as user types
+- Support for typo correction (fuzzy matching)
+- Personalized suggestions based on user history
+- Popular/trending suggestions
+- Support multiple languages
+- Fast response time for suggestions
+
+**Non-Functional Requirements:**
+- Ultra-low latency (< 100ms for suggestions)
+- Highly scalable (support millions of concurrent searches)
+- High throughput for suggestion requests
+- Support billion-scale keyword database
+- Memory efficient trie/prefix tree
+- Real-time updates to trending keywords
+
+---
+
+## 15. Design Distributed Web Crawler
+
+**Functional Requirements:**
+- Crawl web pages starting from seed URLs
+- Follow links and crawl pages recursively
+- Respect robots.txt and crawl delays
+- Support for multiple concurrent downloads
+- Store crawled content in database
+- Support URL filtering and deduplication
+- Extract metadata from pages
+
+**Non-Functional Requirements:**
+- High throughput (pages per second)
+- Distributed crawling across multiple nodes
+- Fault tolerance and recovery
+- Efficient memory usage for URL frontier
+- Support for very large scale (billions of pages)
+- Politeness to target websites
+- Scalable storage for crawled content
+
+---
+
+## 16. Design API Gateway / Load Balancer
+
+**Functional Requirements:**
+- Route requests to appropriate backend services
+- Support various routing strategies (round-robin, least connections, IP hash)
+- Rate limiting at gateway level
+- Request/response transformation
+- Support authentication and authorization
+- API versioning support
+- Logging and monitoring of requests
+- Support for weighted routing and canary deployments
+
+**Non-Functional Requirements:**
+- Ultra-high availability (no single point of failure)
+- Ultra-low latency (< 50ms overhead)
+- Support millions of concurrent connections
+- Highly scalable across multiple data centers
+- Efficient resource utilization
+- Support for both HTTP and non-HTTP protocols
+- Graceful handling of slow/failing backends
+
+---
+
+## 17. Design News Feed / Timeline
+
+**Functional Requirements:**
+- Display posts from users you follow
+- Sort posts by relevance/recency
+- Support infinite scroll/pagination
+- Like, comment, share on posts
+- Support for trending content
+- Personalized feed based on user preferences
+- Filter feed by type (all, photos, videos)
+- Mute/hide posts from specific users
+
+**Non-Functional Requirements:**
+- Low latency feed generation (< 200ms)
+- High availability
+- Highly scalable for millions of users
+- Support billions of posts
+- Real-time updates to feed
+- Support for ranking/personalization algorithms
+- Efficient caching strategies
+
+---
+
+## 18. Design Booking System (Hotel / Airbnb / Flight)
+
+**Functional Requirements:**
+- Search available rooms/properties by dates and location
+- Display room details, pricing, availability
+- Book a room with payment processing
+- Cancel bookings with refund policies
+- View booking history and reservations
+- Support reviews and ratings
+- Support for waitlisting (optional)
+- Overbooking handling
+
+**Non-Functional Requirements:**
+- High consistency for inventory management
+- Support concurrent bookings without double-booking
+- Highly available for search and booking
+- High throughput during peak times (surge booking)
+- Low latency for availability queries (< 200ms)
+- Support for large scale (millions of properties)
+- Transaction support for booking + payment
+
+---
+
+## 19. Design Payment System
+
+**Functional Requirements:**
+- Process payments from user to merchant
+- Support multiple payment methods (credit card, UPI, wallet)
+- Refund and transaction reversal
+- Support subscription/recurring payments
+- Transaction history and statements
+- Receipt generation
+- Support for multi-currency transactions
+- PCI compliance and security
+
+**Non-Functional Requirements:**
+- High availability and reliability (payment critical)
+- Extremely high consistency (ACID transactions)
+- Support very high transaction throughput
+- Low latency for payment processing (< 2s)
+- Fraud detection and prevention
+- Encryption for sensitive data
+- Support for audit trails and compliance
+- Idempotency to prevent duplicate charges
+
+---
+
+## 20. Design Recommendation System
+
+**Functional Requirements:**
+- Generate personalized recommendations for users
+- Support collaborative filtering (user-user, item-item)
+- Support content-based recommendations
+- Support hybrid recommendations
+- Allow users to rate items and give feedback
+- Real-time or batch recommendations
+- Support for cold-start problem (new users/items)
+- A/B testing support
+
+**Non-Functional Requirements:**
+- Low latency for recommendation generation (< 500ms)
+- Scalable to millions of users and items
+- High throughput for model training
+- Efficient feature computation
+- Support for real-time feedback
+- Support for multiple recommendation algorithms
+- Memory and computation efficient
+
+---
+
+## 21. Design Chat System (Slack-like)
+
+**Functional Requirements:**
+- One-to-one and group chats
+- Message history and search
+- Support reactions/emojis on messages
+- Media sharing (images, files)
+- Threading/nested conversations
+- Mentions and notifications
+- Read receipts and typing indicators
+- Channel management (create, delete, archive)
+
+**Non-Functional Requirements:**
+- Real-time message delivery (< 1s)
+- High availability and fault tolerance
+- Support millions of concurrent users
+- Efficient message storage and retrieval
+- Support for offline messages
+- Push notifications with low latency
+- Strong consistency for message ordering
+
+---
+
+## 22. Design E-commerce Platform
+
+**Functional Requirements:**
+- Product catalog with search and filtering
+- Shopping cart and checkout process
+- Order management (create, cancel, track)
+- Payment processing
+- Inventory management and updates
+- User reviews and ratings
+- Wishlist/favorites
+- Order history and returns
+
+**Non-Functional Requirements:**
+- High availability for browsing and checkout
+- Consistent inventory across multiple locations
+- Support millions of concurrent users
+- Low latency for product searches (< 200ms)
+- High transaction throughput during sales
+- Secure payment processing
+- Scalable inventory system
+
+---
+
+## 23. Design Distributed Job Queue / Task Scheduler
+
+**Functional Requirements:**
+- Submit jobs/tasks for asynchronous execution
+- Schedule jobs to run at specific times
+- Support job priorities
+- Retry failed jobs with exponential backoff
+- Support job cancellation
+- Track job status and results
+- Support for cron-like scheduling
+- Distributed execution across multiple workers
+
+**Non-Functional Requirements:**
+- High throughput (millions of jobs/sec)
+- Low latency for job submission
+- High availability and fault tolerance
+- Scalability to support large number of jobs
+- Exactly-once or at-least-once job execution
+- Efficient resource utilization across workers
+- Support for job dependencies
+
+---
+
+## 24. Design Metrics / Analytics System
+
+**Functional Requirements:**
+- Collect metrics and events from applications
+- Store metrics in time-series format
+- Query metrics for dashboarding and alerting
+- Support aggregations (sum, avg, percentile)
+- Support alerting on metric thresholds
+- Retention policies for historical data
+- Export metrics data
+
+**Non-Functional Requirements:**
+- Ultra-high throughput (millions of metrics/sec)
+- Low latency for metric ingestion
+- Efficient storage for time-series data
+- Fast query performance for dashboards (< 1s)
+- High availability and fault tolerance
+- Support for high cardinality metrics
+- Multi-tenancy support
+
+---
+
+## 25. Design Distributed Unique ID Generator (UUID / Snowflake)
+
+**Functional Requirements:**
+- Generate globally unique IDs
+- IDs should be sortable by timestamp
+- Support for multiple ID generation services
+- Thread-safe and process-safe generation
+- No central point of failure
+
+**Non-Functional Requirements:**
+- Ultra-high throughput (millions of IDs/sec)
+- Very low latency (< 1ms)
+- Guaranteed uniqueness across all generators
+- Support for distributed generation
+- Scalable to handle datacenter replication
+- Efficient in ID format (64-bit or similar)
+
+---
+
+## 26. Design Distributed Cache (Redis-like)
+
+**Functional Requirements:**
+- Get, set, delete operations
+- Support data types (string, list, set, hash, sorted set)
+- Expiration/TTL support
+- Pub/sub messaging
+- Transactions (MULTI/EXEC)
+- Persistence options
+
+**Non-Functional Requirements:**
+- Ultra-high throughput (millions of ops/sec)
+- Ultra-low latency (< 5ms)
+- High availability with replication
+- Fault tolerance and recovery
+- Memory efficient
+- Support for sharding/partitioning
+- Atomic operations
+
+---
+
+## 27. Design Content Delivery Network (CDN)
+
+**Functional Requirements:**
+- Store content at geographically distributed edge servers
+- Route users to nearest edge server
+- Support cache invalidation
+- Support streaming content
+- Monitor origin server health
+- Support multiple content types
+
+**Non-Functional Requirements:**
+- Ultra-low latency for content delivery
+- High availability across global infrastructure
+- Efficient bandwidth utilization
+- Support for terabytes of content
+- Fast content propagation to edges
+- Support for both pull and push models
+- Scalability across hundreds of edge servers
+
+---
+
+## 28. Design Database (SQL / NoSQL)
+
+**Functional Requirements:**
+- Create, read, update, delete operations
+- Query language support (SQL for RDBMS)
+- Indexing support
+- Transaction support (ACID)
+- Backup and recovery
+- User authentication and authorization
+- Replication support
+
+**Non-Functional Requirements:**
+- High availability and fault tolerance
+- Scalability (horizontal or vertical)
+- Consistency levels (strong, eventual)
+- Query performance optimization
+- Support for large datasets
+- Concurrent access support
+- Data durability
+
+---
+
+## 29. Design Search Engine (Elasticsearch-like)
+
+**Functional Requirements:**
+- Index documents for fast searching
+- Full-text search with relevance ranking
+- Support complex queries (boolean, phrases, ranges)
+- Near real-time indexing
+- Support faceted search
+- Auto-suggest/autocomplete
+- Search aggregations (grouping, counting)
+
+**Non-Functional Requirements:**
+- High throughput for indexing (docs/sec)
+- Low latency for search queries (< 500ms)
+- Support for billions of documents
+- Scalable across multiple nodes
+- High availability and fault tolerance
+- Memory and disk efficient
+- Support for distributed search
+
+---
+
+## 30. Design Real-time Analytics Dashboard
+
+**Functional Requirements:**
+- Display real-time metrics and statistics
+- Support multiple visualization types (charts, graphs, tables)
+- Support filtering and drilling down
+- Custom dashboard creation
+- Alert on anomalies
+- Export data in multiple formats
+- Support for historical data comparison
+
+**Non-Functional Requirements:**
+- Real-time or near real-time updates (< 5s delay)
+- Low latency for dashboard rendering (< 2s)
+- High availability
+- Support millions of concurrent viewers
+- Efficient data aggregation
+- Scalable storage for metrics history
+- Support for multiple data sources
