@@ -532,3 +532,216 @@ For everything:
 ```
 
 **Golden rule:** Use cache busting for static assets. It's the fastest and most reliable way to ensure users get updates without waiting for TTL expiration.
+
+## Time & Space Complexity Analysis
+
+### What is Complexity?
+
+**Complexity = How much time/memory does code use as input size (n) grows?**
+
+### Time Complexity - How to Calculate
+
+Count operations as input grows.
+
+#### Example 1: Single Loop
+
+```python
+def print_all(arr):
+    for i in arr:           # runs n times
+        print(i)            # 1 operation
+```
+
+**Analysis:** n iterations × 1 operation = **O(n)**
+
+#### Example 2: Nested Loops
+
+```python
+def print_pairs(arr):
+    for i in arr:           # n times
+        for j in arr:       # n times per i
+            print(i, j)
+```
+
+**Analysis:** n × n = n² → **O(n²)**
+
+#### Example 3: Sequential Operations
+
+```python
+def process(arr):
+    for i in arr:           # n operations
+        print(i)
+    
+    for j in arr:           # n operations
+        print(j)
+```
+
+**Analysis:** n + n = 2n → Drop constant → **O(n)**
+
+#### Example 4: Binary Search
+
+```python
+def binary_search(arr, target):
+    left, right = 0, len(arr) - 1
+    while left <= right:            # halves each time
+        mid = (left + right) // 2
+        if arr[mid] == target:
+            return mid
+        elif arr[mid] < target:
+            left = mid + 1
+        else:
+            right = mid - 1
+```
+
+**Analysis:** Each iteration halves search space
+- 1M → 500K → 250K → ... → 1 (about 20 steps)
+- **O(log n)**
+
+### Space Complexity - How to Calculate
+
+Count EXTRA memory created (not including input).
+
+#### Example 1: No Extra Space
+
+```python
+def sum_array(arr):
+    total = 0           # 1 variable
+    for num in arr:
+        total += num
+    return total
+```
+
+**Analysis:** Only 1 variable (constant) → **O(1)**
+
+#### Example 2: New Array of Size n
+
+```python
+def double_array(arr):
+    result = []         # NEW array of size n
+    for num in arr:
+        result.append(num * 2)
+    return result
+```
+
+**Analysis:** Creates array of n items → **O(n)**
+
+#### Example 3: Constant Number of Arrays
+
+```python
+def func(n):
+    arr1 = [0] * n      # n items
+    arr2 = [0] * n      # n items
+    arr3 = [0] * n      # n items
+    # 3 arrays (constant, not scaling)
+```
+
+**Analysis:** 3 × n = 3n → Drop constant → **O(n)**
+
+#### Example 4: Variable Number of Arrays (Scales with n)
+
+```python
+def create_matrix(n):
+    arrays = []
+    for i in range(n):              # n times (scales!)
+        arr = [0] * n               # n items (scales!)
+        arrays.append(arr)
+```
+
+**Analysis:** n arrays × n items each = n² → **O(n²)**
+
+#### Example 5: Recursion (Call Stack)
+
+```python
+def factorial(n):
+    if n <= 1:
+        return 1
+    return n * factorial(n - 1)     # recursive call
+```
+
+**Analysis:** Call stack depth = n → **O(n)**
+
+### Key Insight: Drop Constants
+
+Big O ignores constants - we only care about **growth rate**.
+
+```
+O(100n)  → O(n)     (100 is constant)
+O(2n)    → O(n)     (2 is constant)
+O(100)   → O(1)     (constant, not scaling)
+O(100*n) → O(n)     (not O(n²), 100 doesn't scale)
+O(n*n)   → O(n²)    (both n's scale with input)
+O(5n²)   → O(n²)    (drop the 5)
+```
+
+### Big O Notation - Upper Bound
+
+**Big O = Worst case scenario**
+
+```
+f(n) = O(g(n))
+Meaning: f(n) grows no faster than g(n)
+
+Example:
+f(n) = 3n² + 5n + 100
+
+Is it O(n²)?
+3n² + 5n + 100 ≤ c × n² for large n? YES
+→ Time Complexity: O(n²)
+```
+
+### Small O Notation - Strict Upper Bound
+
+**Small O = Grows strictly slower**
+
+```
+f(n) = o(g(n))
+Meaning: f(n) < c × g(n) for large n
+
+Example:
+f(n) = n, g(n) = n²
+Is f(n) = o(n²)?
+n < c × n² ? YES (strictly slower)
+
+So: O(n) = o(n²) ✓
+But: O(n) ≠ o(n) ✗
+```
+
+### Common Complexities (Best to Worst)
+
+```
+O(1)        - Constant       | array[0], dict lookup
+O(log n)    - Logarithmic    | binary search
+O(n)        - Linear         | single loop
+O(n log n)  - Linearithmic   | merge sort, quick sort
+O(n²)       - Quadratic      | nested loops
+O(n³)       - Cubic          | triple nested loops
+O(2ⁿ)       - Exponential    | recursive fibonacci
+O(n!)       - Factorial      | generate permutations
+```
+
+### Quick Reference Table
+
+| Code Pattern | Time | Space | Example |
+|--------------|------|-------|---------|
+| `for i in range(n): x = i` | O(n) | O(1) | Loop, no extra space |
+| `for i in range(n): for j in range(n): ...` | O(n²) | O(1) | Nested loops |
+| `arr = [0] * n` | O(n) | O(n) | Create new array |
+| `binary_search(arr)` | O(log n) | O(1) | Halve search space |
+| `def func(n): func(n-1)` | O(n) | O(n) | Recursion depth |
+| `for i in range(n): arr = [0]*n` | O(n²) | O(n²) | n arrays of n items |
+| `x, y = 0, 1; x+y` | O(1) | O(1) | Fixed operations |
+
+### How to Analyze Code (Step-by-Step)
+
+1. **Identify loops** → Count iterations (n, n-1, etc.)
+2. **Identify recursion** → Count depth
+3. **Identify nested operations** → Multiply them
+4. **Drop constants & lower terms** → Keep dominant
+5. **Express as Big O** → O(n), O(n²), etc.
+
+**Golden Rule:** Only the FASTEST GROWING term matters.
+
+```
+f(n) = n³ + n² + n + 100
+Dominant term: n³
+Space Complexity: O(n³)
+```
