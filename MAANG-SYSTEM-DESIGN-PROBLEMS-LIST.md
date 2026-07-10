@@ -8,48 +8,63 @@
 ## Table of Contents
 
 ### 🔴 Highest Priority (70%+)
-- [1. Cache System (LRU/LFU Cache)](#1-design-cache-system-lru--lfu-cache) — 76% | Google • Meta • Amazon • Apple • Netflix
-- [2. Recommendation System](#2-design-recommendation-system) — 73% | Netflix • Amazon • Google • Meta • Apple
-- [3. Netflix / Video on Demand](#3-design-netflix--video-on-demand-vod) — 72% | Netflix • Amazon • Google
-- [4. YouTube / Video Streaming](#4-design-youtube--video-streaming) — 70% | Google • Netflix • Meta • Amazon
-- [5. E-commerce Platform](#5-design-e-commerce-platform) — 68% | Amazon • Google • Apple • Meta
-- [6. URL Shortener](#6-url-shortener) — 68% | Meta • Google • Amazon
-- [7. Instagram / Photo Sharing](#7-design-instagram--photo-sharing-social-network) — 68% | Meta • Google • Amazon
+
+| # | Problem | Frequency | Companies | Key Concepts |
+|---|---------|-----------|-----------|--------------|
+| [1](#1-design-cache-system-lru--lfu-cache) | Cache System | 76% | Google • Meta • Amazon • Apple • Netflix | Hash Map • Linked List • LRU/LFU • TTL |
+| [2](#2-design-recommendation-system) | Recommendation System | 73% | Netflix • Amazon • Google • Meta • Apple | Collaborative Filtering • Content-Based • ML |
+| [3](#3-design-netflix--video-on-demand-vod) | Netflix/VOD | 72% | Netflix • Amazon • Google | Video Encoding • ABR • CDN • HLS/DASH |
+| [4](#4-design-youtube--video-streaming) | YouTube Streaming | 70% | Google • Netflix • Meta • Amazon | Video Transcoding • ABR • CDN • Sharding |
+| [5](#5-design-e-commerce-platform) | E-commerce | 68% | Amazon • Google • Apple • Meta | ACID • CAP • Inventory • Sharding |
+| [6](#6-url-shortener) | URL Shortener | 68% | Meta • Google • Amazon | Base Encoding • Hashing • Distributed ID • TTL |
+| [7](#7-design-instagram--photo-sharing-social-network) | Instagram | 68% | Meta • Google • Amazon | Sharding • Denormalization • Cache-Aside • CDN |
 
 ### 🟠 High Priority (60-69%)
-- [8. Twitter / Social Media Feed](#8-design-twitter--social-media-feed) — 65% | Meta • Google • Amazon
-- [9. Distributed Cache (Redis-like)](#9-design-distributed-cache-redis-like) — 65% | Google • Amazon • Meta • Netflix • Apple
-- [10. Database (SQL/NoSQL)](#10-design-database-sql--nosql) — 65% | Google • Amazon • Meta • Apple • Netflix
-- [11. Content Delivery Network (CDN)](#11-design-content-delivery-network-cdn) — 62% | Google • Netflix • Amazon • Meta • Apple
-- [12. Notification System](#12-design-notification-system) — 62% | Amazon • Google • Meta • Apple • Netflix
-- [13. News Feed / Timeline](#13-design-news-feed--timeline) — 62% | Meta • Google • Amazon • Apple
-- [14. Metrics / Analytics System](#14-design-metrics--analytics-system) — 58% | Google • Amazon • Meta • Netflix • Apple
-- [15. Messaging System](#15-design-messaging-system-whatsapp--facebook-messenger) — 58% | Meta • Apple • Amazon • Google
-- [16. Rate Limiter](#16-design-rate-limiter) — 58% | Google • Amazon • Meta • Apple
-- [17. Distributed Unique ID Generator](#17-design-distributed-unique-id-generator-uuid--snowflake) — 58% | Google • Amazon • Meta • Netflix • Apple
+
+| # | Problem | Frequency | Companies | Key Concepts |
+|---|---------|-----------|-----------|--------------|
+| [8](#8-design-twitter--social-media-feed) | Twitter Feed | 65% | Meta • Google • Amazon | Fan-Out • Denormalization • Timeline Ranking |
+| [9](#9-design-distributed-cache-redis-like) | Redis Cache | 65% | Google • Amazon • Meta • Netflix • Apple | In-Memory DS • Eviction • Persistence • Pub/Sub |
+| [10](#10-design-database-sql--nosql) | Database | 65% | Google • Amazon • Meta • Apple • Netflix | ACID • CAP • Indexing • Replication • Sharding |
+| [11](#11-design-content-delivery-network-cdn) | CDN | 62% | Google • Netflix • Amazon • Meta • Apple | DNS Routing • Edge Servers • Cache Invalidation |
+| [12](#12-design-notification-system) | Notifications | 62% | Amazon • Google • Meta • Apple • Netflix | Message Queues • Pub/Sub • Delivery Semantics |
+| [13](#13-design-news-feed--timeline) | News Feed | 62% | Meta • Google • Amazon • Apple | Fan-Out • Timeline Ranking • Cache-Aside |
+| [14](#14-design-metrics--analytics-system) | Metrics/Analytics | 58% | Google • Amazon • Meta • Netflix • Apple | Time-Series DB • Aggregation • Compression |
+| [15](#15-design-messaging-system-whatsapp--facebook-messenger) | Messaging | 58% | Meta • Apple • Amazon • Google | Message Ordering • Encryption • Persistence |
+| [16](#16-design-rate-limiter) | Rate Limiter | 58% | Google • Amazon • Meta • Apple | Token Bucket • Sliding Window • Redis |
+| [17](#17-design-distributed-unique-id-generator-uuid--snowflake) | UUID Generator | 58% | Google • Amazon • Meta • Netflix • Apple | Distributed ID • Timestamp • Machine ID |
 
 ### 🟡 Medium-High Priority (50-59%)
-- [18. File Storage System](#18-design-file-storage-system-dropbox--google-drive) — 57% | Google • Apple • Amazon • Meta
-- [19. Search Engine](#19-design-search-engine-elasticsearch-like) — 55% | Google • Meta • Amazon • Apple
-- [20. Search Autocomplete (Typeahead)](#20-design-search-autocomplete-typeahead) — 52% | Google • Meta • Amazon • Apple
-- [21. Distributed Web Crawler](#21-design-distributed-web-crawler) — 52% | Google • Meta • Amazon
-- [22. Payment System](#22-design-payment-system) — 52% | Amazon • Apple • Google • Meta
-- [23. Job Queue / Task Scheduler](#23-design-distributed-job-queue--task-scheduler) — 52% | Google • Amazon • Meta • Netflix • Apple
-- [24. Uber / Ride Sharing](#24-design-uber--ride-sharing) — 48% | Amazon • Google • Meta
-- [25. API Gateway / Load Balancer](#25-design-api-gateway--load-balancer) — 48% | Google • Amazon • Meta • Apple
-- [26. Booking System](#26-design-booking-system-hotel--airbnb--flight) — 48% | Amazon • Google • Meta • Apple
-- [27. Chat System](#27-design-chat-system-slack-like) — 48% | Meta • Apple • Amazon • Google
+
+| # | Problem | Frequency | Companies | Key Concepts |
+|---|---------|-----------|-----------|--------------|
+| [18](#18-design-file-storage-system-dropbox--google-drive) | File Storage | 57% | Google • Apple • Amazon • Meta | Distributed Storage • Delta Sync • Versioning |
+| [19](#19-design-search-engine-elasticsearch-like) | Search Engine | 55% | Google • Meta • Amazon • Apple | Inverted Index • TF-IDF • Ranking |
+| [20](#20-design-search-autocomplete-typeahead) | Autocomplete | 52% | Google • Meta • Amazon • Apple | Trie • Fuzzy Matching • Frequency Tracking |
+| [21](#21-design-distributed-web-crawler) | Web Crawler | 52% | Google • Meta • Amazon | URL Frontier • Politeness • Duplicate Detection |
+| [22](#22-design-payment-system) | Payment System | 52% | Amazon • Apple • Google • Meta | ACID • Idempotency • Encryption • Reconciliation |
+| [23](#23-design-distributed-job-queue--task-scheduler) | Job Queue | 52% | Google • Amazon • Meta • Netflix • Apple | Queues • Priority • Retry Logic • Scheduling |
+| [24](#24-design-uber--ride-sharing) | Uber | 48% | Amazon • Google • Meta | Geospatial Indexing • Real-Time Tracking • ETA |
+| [25](#25-design-api-gateway--load-balancer) | API Gateway | 48% | Google • Amazon • Meta • Apple | Routing • Load Balancing • Circuit Breaker |
+| [26](#26-design-booking-system-hotel--airbnb--flight) | Booking System | 48% | Amazon • Google • Meta • Apple | Inventory • Concurrency Control • Strong Consistency |
+| [27](#27-design-chat-system-slack-like) | Chat System | 48% | Meta • Apple • Amazon • Google | Message Ordering • Encryption • WebSocket |
 
 ### 🟢 Medium Priority (30-49%)
-- [28. Real-time Analytics Dashboard](#28-design-real-time-analytics-dashboard) — 42% | Google • Amazon • Meta • Netflix • Apple
-- [29. Parking Lot System](#29-design-parking-lot-system) — 35% | Amazon • Google • Meta
-- [30. TikTok / Short Form Video](#30-design-tiktok--short-form-video-platform) — 32% | Meta • Google • Amazon
+
+| # | Problem | Frequency | Companies | Key Concepts |
+|---|---------|-----------|-----------|--------------|
+| [28](#28-design-real-time-analytics-dashboard) | Analytics Dashboard | 42% | Google • Amazon • Meta • Netflix • Apple | Time-Series • Stream Processing • Caching |
+| [29](#29-design-parking-lot-system) | Parking Lot | 35% | Amazon • Google • Meta | Spatial Indexing • Inventory • Concurrency |
+| [30](#30-design-tiktok--short-form-video-platform) | TikTok | 32% | Meta • Google • Amazon | Recommendation • Video Encoding • Feed Ranking |
 
 ---
 
 ## 1. Design Cache System (LRU / LFU Cache)
 
 **Frequency:** 76% | **Asked by:** Google (90%) • Meta (80%) • Amazon (75%) • Apple (70%) • Netflix (60%)
+
+**Key Concepts:**
+Hash Map • Doubly Linked List • LRU/LFU Eviction • TTL • Memory Management • O(1) Operations
 
 **Functional Requirements:**
 - Get and put operations for cache
@@ -70,6 +85,9 @@
 ## 2. Design Recommendation System
 
 **Frequency:** 73% | **Asked by:** Netflix (95%) • Amazon (80%) • Google (65%) • Meta (55%) • Apple (45%)
+
+**Key Concepts:**
+Collaborative Filtering • Content-Based Filtering • Similarity Metrics • Matrix Factorization • Cold Start Problem • A/B Testing • Feature Engineering
 
 **Functional Requirements:**
 - Generate personalized recommendations for users
@@ -95,6 +113,9 @@
 ## 3. Design Netflix / Video on Demand (VOD)
 
 **Frequency:** 72% | **Asked by:** Netflix (95%) • Amazon (40%) • Google (35%)
+
+**Key Concepts:**
+Video Encoding (H.264, VP9) • Adaptive Bitrate Streaming • CDN • Manifest Files (DASH, HLS) • Caching • Database Partitioning • Eventual Consistency
 
 **Functional Requirements:**
 - Users can browse and search for movies/shows
@@ -122,6 +143,9 @@
 
 **Frequency:** 70% | **Asked by:** Google (75%) • Netflix (90%) • Amazon (40%) • Meta (55%)
 
+**Key Concepts:**
+Video Transcoding • Adaptive Bitrate Streaming • CDN • Caching Hierarchy • Load Balancing • Database Sharding • Search Indexing • Video Deduplication
+
 **Functional Requirements:**
 - Users can upload, view, and delete videos
 - Stream videos with adaptive bitrate (different quality levels)
@@ -146,6 +170,9 @@
 ## 5. Design E-commerce Platform
 
 **Frequency:** 68% | **Asked by:** Amazon (90%) • Google (40%) • Apple (35%) • Meta (30%)
+
+**Key Concepts:**
+ACID Transactions • CAP Theorem • Inventory Management • Concurrency Control • Caching Strategies • Search Engine Indexing • Payment Gateway • Database Sharding
 
 **Functional Requirements:**
 - Product catalog with search and filtering
@@ -172,6 +199,9 @@
 
 **Frequency:** 68% | **Asked by:** Meta (70%) • Google (65%) • Amazon (60%)
 
+**Key Concepts:**
+Base Encoding (Base62) • Hashing Algorithms • Distributed ID Generation • Database Indexing • Collision Detection • TTL/Expiration • Consistency vs. Availability
+
 **Functional Requirements:**
 - Convert long URLs to short, unique URLs
 - Redirect users from short URL to original long URL
@@ -191,6 +221,9 @@
 ## 7. Design Instagram / Photo Sharing Social Network
 
 **Frequency:** 68% | **Asked by:** Meta (85%) • Google (50%) • Amazon (35%)
+
+**Key Concepts:**
+Database Sharding • Denormalization • Cache-Aside Pattern • CDN • Image Compression • Full-Text Search • Real-Time Notifications • Feed Ranking
 
 **Functional Requirements:**
 - Users can upload, delete photos/images
@@ -217,6 +250,9 @@
 
 **Frequency:** 65% | **Asked by:** Meta (90%) • Amazon (35%) • Google (40%)
 
+**Key Concepts:**
+Push vs. Pull Architecture (Fan-out) • Denormalization • Cache-Aside Pattern • Timeline Ranking • Eventual Consistency • Message Queues • Search Indexing
+
 **Functional Requirements:**
 - Users can post tweets (create, update, delete)
 - Users can view their timeline/feed
@@ -240,6 +276,9 @@
 
 **Frequency:** 65% | **Asked by:** Google (85%) • Amazon (75%) • Meta (70%) • Netflix (60%) • Apple (55%)
 
+**Key Concepts:**
+In-Memory Data Structures • Eviction Policies (LRU, LFU) • Persistence (RDB, AOF) • Replication • Clustering/Sharding • Pub/Sub • Transactions
+
 **Functional Requirements:**
 - Get, set, delete operations
 - Support data types (string, list, set, hash, sorted set)
@@ -262,6 +301,9 @@
 ## 10. Design Database (SQL / NoSQL)
 
 **Frequency:** 65% | **Asked by:** Google (80%) • Amazon (75%) • Meta (65%) • Apple (60%) • Netflix (50%)
+
+**Key Concepts:**
+ACID Properties • CAP Theorem • Consistency Models • Indexing (B-tree, LSM-tree) • Query Optimization • Replication • Sharding • Transactions
 
 **Functional Requirements:**
 - Create, read, update, delete operations
@@ -287,6 +329,9 @@
 
 **Frequency:** 62% | **Asked by:** Google (85%) • Netflix (80%) • Amazon (70%) • Meta (60%) • Apple (50%)
 
+**Key Concepts:**
+DNS & Geo-Routing • Edge Servers • Cache Invalidation • Anycast Routing • Cache Replacement Policies • Bandwidth Optimization • Latency Measurement
+
 **Functional Requirements:**
 - Store content at geographically distributed edge servers
 - Route users to nearest edge server
@@ -309,6 +354,9 @@
 ## 12. Design Notification System
 
 **Frequency:** 62% | **Asked by:** Amazon (70%) • Google (60%) • Meta (55%) • Apple (50%) • Netflix (40%)
+
+**Key Concepts:**
+Message Queues (Kafka, RabbitMQ) • Pub/Sub Pattern • Delivery Semantics • Retry Mechanisms • Idempotency • Rate Limiting • Multi-Channel Delivery • Dead Letter Queues
 
 **Functional Requirements:**
 - Send notifications to users via multiple channels (push, email, SMS)
@@ -333,6 +381,9 @@
 ## 13. Design News Feed / Timeline
 
 **Frequency:** 62% | **Asked by:** Meta (90%) • Google (40%) • Amazon (35%) • Apple (30%)
+
+**Key Concepts:**
+Database Denormalization • Push vs. Pull Architecture • Timeline Ranking • Cache-Aside Pattern • Eventual Consistency • Real-Time Updates • Search Indexing
 
 **Functional Requirements:**
 - Display posts from users you follow
@@ -359,6 +410,9 @@
 
 **Frequency:** 58% | **Asked by:** Google (90%) • Amazon (75%) • Meta (65%) • Netflix (50%) • Apple (45%)
 
+**Key Concepts:**
+Time-Series Database • Data Aggregation • Data Compression • Sampling Techniques • Stream Processing • Data Retention Policies • Cardinality Handling • Alerting
+
 **Functional Requirements:**
 - Collect metrics and events from applications
 - Store metrics in time-series format
@@ -382,6 +436,9 @@
 ## 15. Design Messaging System (WhatsApp / Facebook Messenger)
 
 **Frequency:** 58% | **Asked by:** Meta (75%) • Apple (60%) • Amazon (40%) • Google (35%)
+
+**Key Concepts:**
+Message Ordering • Delivery Semantics (At-Least-Once) • Message Persistence • Encryption (E2E) • Compression • Acknowledge Mechanisms • Message Indexing • Presence Tracking
 
 **Functional Requirements:**
 - Users can send and receive one-to-one messages
@@ -408,6 +465,9 @@
 
 **Frequency:** 58% | **Asked by:** Google (70%) • Amazon (65%) • Meta (45%) • Apple (35%)
 
+**Key Concepts:**
+Token Bucket Algorithm • Leaky Bucket Algorithm • Sliding Window • Sliding Window with Counters • Distributed Coordination • Redis State Management • Quota Allocation
+
 **Functional Requirements:**
 - Limit number of requests per user/IP in time window
 - Support multiple rate limiting algorithms (token bucket, sliding window, etc.)
@@ -430,6 +490,9 @@
 
 **Frequency:** 58% | **Asked by:** Google (75%) • Amazon (65%) • Meta (50%) • Netflix (40%) • Apple (35%)
 
+**Key Concepts:**
+Distributed ID Generation • Timestamp Ordering • Machine ID / Worker ID • Sequence Numbers • Collision Avoidance • Clock Synchronization • Snowflake ID Concept
+
 **Functional Requirements:**
 - Generate globally unique IDs
 - IDs should be sortable by timestamp
@@ -450,6 +513,9 @@
 ## 18. Design File Storage System (Dropbox / Google Drive)
 
 **Frequency:** 57% | **Asked by:** Google (70%) • Apple (65%) • Amazon (50%) • Meta (45%)
+
+**Key Concepts:**
+File System Design • Distributed Storage • Replication & Redundancy • File Versioning • Delta Sync (Binary Diff) • Strong Consistency • Sharding • Access Control
 
 **Functional Requirements:**
 - Users can upload, download, delete files
@@ -477,6 +543,9 @@
 
 **Frequency:** 55% | **Asked by:** Google (90%) • Meta (45%) • Amazon (35%) • Apple (30%)
 
+**Key Concepts:**
+Inverted Indexing • Full-Text Search • Ranking Algorithms (TF-IDF, BM25) • Query Parsing & Tokenization • Stemming/Lemmatization • Faceted Search • Index Compression
+
 **Functional Requirements:**
 - Index documents for fast searching
 - Full-text search with relevance ranking
@@ -501,6 +570,9 @@
 
 **Frequency:** 52% | **Asked by:** Google (85%) • Meta (50%) • Amazon (40%) • Apple (30%)
 
+**Key Concepts:**
+Trie Data Structure • Prefix-Based Searching • Fuzzy Matching (Levenshtein) • Frequency Tracking • Suggestion Ranking • Caching • Real-Time Updates • Trie Optimization
+
 **Functional Requirements:**
 - Return top N suggestions as user types
 - Support for typo correction (fuzzy matching)
@@ -522,6 +594,9 @@
 ## 21. Design Distributed Web Crawler
 
 **Frequency:** 52% | **Asked by:** Google (80%) • Meta (35%) • Amazon (30%)
+
+**Key Concepts:**
+URL Frontier Management • Politeness Policies (robots.txt) • DNS Resolution • Distributed Coordination • Duplicate Detection (Bloom Filter) • URL Normalization • Metadata Extraction
 
 **Functional Requirements:**
 - Crawl web pages starting from seed URLs
@@ -546,6 +621,9 @@
 ## 22. Design Payment System
 
 **Frequency:** 52% | **Asked by:** Amazon (75%) • Apple (70%) • Google (40%) • Meta (30%)
+
+**Key Concepts:**
+ACID Transactions • 2-Phase Commit • Idempotency & Idempotency Keys • PCI Compliance • Encryption (AES, RSA) • Secure Communication (TLS) • Ledger Systems • Reconciliation
 
 **Functional Requirements:**
 - Process payments from user to merchant
@@ -573,6 +651,9 @@
 
 **Frequency:** 52% | **Asked by:** Google (70%) • Amazon (65%) • Meta (45%) • Netflix (35%) • Apple (30%)
 
+**Key Concepts:**
+Queue Data Structures • Priority Queues • Task Scheduling Algorithms • Cron-Like Scheduling • Retry Logic & Exponential Backoff • Fault Tolerance • Worker Pool Management
+
 **Functional Requirements:**
 - Submit jobs/tasks for asynchronous execution
 - Schedule jobs to run at specific times
@@ -598,6 +679,9 @@
 
 **Frequency:** 48% | **Asked by:** Amazon (55%) • Google (50%) • Meta (35%)
 
+**Key Concepts:**
+Geospatial Indexing (Quadtree, R-tree) • Real-Time Location Tracking • Matching Algorithms • ETA Estimation • Surge Pricing Algorithms • Message Queues • Concurrency Control
+
 **Functional Requirements:**
 - Users can request rides from location A to B
 - Driver can accept/reject ride requests
@@ -620,6 +704,9 @@
 ## 25. Design API Gateway / Load Balancer
 
 **Frequency:** 48% | **Asked by:** Google (65%) • Amazon (55%) • Meta (40%) • Apple (35%)
+
+**Key Concepts:**
+Request Routing Algorithms • Load Balancing Strategies • Circuit Breaker Pattern • Rate Limiting • Request/Response Transformation • Authentication (OAuth, JWT) • Service Discovery
 
 **Functional Requirements:**
 - Route requests to appropriate backend services
@@ -646,6 +733,9 @@
 
 **Frequency:** 48% | **Asked by:** Amazon (65%) • Google (45%) • Meta (35%) • Apple (30%)
 
+**Key Concepts:**
+Inventory Management • Concurrency Control (Locks, MVCC) • ACID Transactions • Overbooking Prevention • Search Index Optimization • Strong Consistency • Payment Integration
+
 **Functional Requirements:**
 - Search available rooms/properties by dates and location
 - Display room details, pricing, availability
@@ -670,6 +760,9 @@
 ## 27. Design Chat System (Slack-like)
 
 **Frequency:** 48% | **Asked by:** Meta (70%) • Apple (60%) • Amazon (40%) • Google (35%)
+
+**Key Concepts:**
+Message Ordering Guarantees • Delivery Semantics • Message Queues & Persistence • WebSocket & Real-Time Communication • End-to-End Encryption • Message Search Indexing • Presence Tracking
 
 **Functional Requirements:**
 - One-to-one and group chats
@@ -696,6 +789,9 @@
 
 **Frequency:** 42% | **Asked by:** Google (75%) • Amazon (60%) • Meta (55%) • Netflix (40%) • Apple (35%)
 
+**Key Concepts:**
+Data Aggregation & Rollups • Time-Series Storage • Real-Time Stream Processing • Data Pipelines • Visualization Libraries • Caching Layers • Sampling Techniques • Alerting
+
 **Functional Requirements:**
 - Display real-time metrics and statistics
 - Support multiple visualization types (charts, graphs, tables)
@@ -719,6 +815,9 @@
 ## 29. Design Parking Lot System
 
 **Frequency:** 35% | **Asked by:** Amazon (45%) • Google (30%) • Meta (25%)
+
+**Key Concepts:**
+Spatial Data Structures (Quadtree, Grid) • Inventory/Availability Tracking • Reservation System Design • Concurrency Control (Atomic Updates) • Payment Processing • Search Optimization
 
 **Functional Requirements:**
 - Users can search available parking spots
@@ -744,6 +843,9 @@
 ## 30. Design TikTok / Short Form Video Platform
 
 **Frequency:** 32% | **Asked by:** Meta (30%) • Google (20%) • Amazon (15%)
+
+**Key Concepts:**
+Recommendation Engines • Video Encoding/Compression • Adaptive Bitrate Streaming • CDN • Feed Ranking Algorithms (ML) • Real-Time Engagement Tracking • Search Indexing • User Profiling
 
 **Functional Requirements:**
 - Users can create, upload short videos
