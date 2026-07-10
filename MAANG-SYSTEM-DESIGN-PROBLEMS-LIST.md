@@ -8,42 +8,42 @@
 ## Table of Contents
 
 ### 🔴 Highest Priority (70%+)
-- [13. Cache System (LRU/LFU Cache)](#13-design-cache-system-lru--lfu-cache) — 76%
-- [20. Recommendation System](#20-design-recommendation-system) — 73%
-- [8. Netflix / Video on Demand](#8-design-netflix--video-on-demand-vod) — 72%
-- [5. YouTube / Video Streaming](#5-design-youtube--video-streaming) — 70%
-- [22. E-commerce Platform](#22-design-e-commerce-platform) — 68%
-- [1. URL Shortener](#1-url-shortener) — 68%
-- [6. Instagram / Photo Sharing](#6-design-instagram--photo-sharing-social-network) — 68%
+- [13. Cache System (LRU/LFU Cache)](#13-design-cache-system-lru--lfu-cache) — 76% | Google • Meta • Amazon • Apple • Netflix
+- [20. Recommendation System](#20-design-recommendation-system) — 73% | Netflix • Amazon • Google • Meta • Apple
+- [8. Netflix / Video on Demand](#8-design-netflix--video-on-demand-vod) — 72% | Netflix • Amazon • Google
+- [5. YouTube / Video Streaming](#5-design-youtube--video-streaming) — 70% | Google • Netflix • Meta • Amazon
+- [22. E-commerce Platform](#22-design-e-commerce-platform) — 68% | Amazon • Google • Apple • Meta
+- [1. URL Shortener](#1-url-shortener) — 68% | Meta • Google • Amazon
+- [6. Instagram / Photo Sharing](#6-design-instagram--photo-sharing-social-network) — 68% | Meta • Google • Amazon
 
 ### 🟠 High Priority (60-69%)
-- [2. Twitter / Social Media Feed](#2-design-twitter--social-media-feed) — 65%
-- [26. Distributed Cache (Redis-like)](#26-design-distributed-cache-redis-like) — 65%
-- [28. Database (SQL/NoSQL)](#28-design-database-sql--nosql) — 65%
-- [27. Content Delivery Network (CDN)](#27-design-content-delivery-network-cdn) — 62%
-- [10. Notification System](#10-design-notification-system) — 62%
-- [17. News Feed / Timeline](#17-design-news-feed--timeline) — 62%
-- [24. Metrics / Analytics System](#24-design-metrics--analytics-system) — 58%
-- [4. Messaging System](#4-design-messaging-system-whatsapp--facebook-messenger) — 58%
-- [12. Rate Limiter](#12-design-rate-limiter) — 58%
-- [25. Distributed Unique ID Generator](#25-design-distributed-unique-id-generator-uuid--snowflake) — 58%
+- [2. Twitter / Social Media Feed](#2-design-twitter--social-media-feed) — 65% | Meta • Google • Amazon
+- [26. Distributed Cache (Redis-like)](#26-design-distributed-cache-redis-like) — 65% | Google • Amazon • Meta • Netflix • Apple
+- [28. Database (SQL/NoSQL)](#28-design-database-sql--nosql) — 65% | Google • Amazon • Meta • Apple • Netflix
+- [27. Content Delivery Network (CDN)](#27-design-content-delivery-network-cdn) — 62% | Google • Netflix • Amazon • Meta • Apple
+- [10. Notification System](#10-design-notification-system) — 62% | Amazon • Google • Meta • Apple • Netflix
+- [17. News Feed / Timeline](#17-design-news-feed--timeline) — 62% | Meta • Google • Amazon • Apple
+- [24. Metrics / Analytics System](#24-design-metrics--analytics-system) — 58% | Google • Amazon • Meta • Netflix • Apple
+- [4. Messaging System](#4-design-messaging-system-whatsapp--facebook-messenger) — 58% | Meta • Apple • Amazon • Google
+- [12. Rate Limiter](#12-design-rate-limiter) — 58% | Google • Amazon • Meta • Apple
+- [25. Distributed Unique ID Generator](#25-design-distributed-unique-id-generator-uuid--snowflake) — 58% | Google • Amazon • Meta • Netflix • Apple
 
 ### 🟡 Medium-High Priority (50-59%)
-- [7. File Storage System](#7-design-file-storage-system-dropbox--google-drive) — 57%
-- [29. Search Engine](#29-design-search-engine-elasticsearch-like) — 55%
-- [14. Search Autocomplete (Typeahead)](#14-design-search-autocomplete-typeahead) — 52%
-- [15. Distributed Web Crawler](#15-design-distributed-web-crawler) — 52%
-- [19. Payment System](#19-design-payment-system) — 52%
-- [23. Job Queue / Task Scheduler](#23-design-distributed-job-queue--task-scheduler) — 52%
-- [3. Uber / Ride Sharing](#3-design-uber--ride-sharing) — 48%
-- [16. API Gateway / Load Balancer](#16-design-api-gateway--load-balancer) — 48%
-- [18. Booking System](#18-design-booking-system-hotel--airbnb--flight) — 48%
-- [21. Chat System](#21-design-chat-system-slack-like) — 48%
+- [7. File Storage System](#7-design-file-storage-system-dropbox--google-drive) — 57% | Google • Apple • Amazon • Meta
+- [29. Search Engine](#29-design-search-engine-elasticsearch-like) — 55% | Google • Meta • Amazon • Apple
+- [14. Search Autocomplete (Typeahead)](#14-design-search-autocomplete-typeahead) — 52% | Google • Meta • Amazon • Apple
+- [15. Distributed Web Crawler](#15-design-distributed-web-crawler) — 52% | Google • Meta • Amazon
+- [19. Payment System](#19-design-payment-system) — 52% | Amazon • Apple • Google • Meta
+- [23. Job Queue / Task Scheduler](#23-design-distributed-job-queue--task-scheduler) — 52% | Google • Amazon • Meta • Netflix • Apple
+- [3. Uber / Ride Sharing](#3-design-uber--ride-sharing) — 48% | Amazon • Google • Meta
+- [16. API Gateway / Load Balancer](#16-design-api-gateway--load-balancer) — 48% | Google • Amazon • Meta • Apple
+- [18. Booking System](#18-design-booking-system-hotel--airbnb--flight) — 48% | Amazon • Google • Meta • Apple
+- [21. Chat System](#21-design-chat-system-slack-like) — 48% | Meta • Apple • Amazon • Google
 
 ### 🟢 Medium Priority (30-49%)
-- [30. Real-time Analytics Dashboard](#30-design-real-time-analytics-dashboard) — 42%
-- [11. Parking Lot System](#11-design-parking-lot-system) — 35%
-- [9. TikTok / Short Form Video](#9-design-tiktok--short-form-video-platform) — 32%
+- [30. Real-time Analytics Dashboard](#30-design-real-time-analytics-dashboard) — 42% | Google • Amazon • Meta • Netflix • Apple
+- [11. Parking Lot System](#11-design-parking-lot-system) — 35% | Amazon • Google • Meta
+- [9. TikTok / Short Form Video](#9-design-tiktok--short-form-video-platform) — 32% | Meta • Google • Amazon
 
 ---
 
