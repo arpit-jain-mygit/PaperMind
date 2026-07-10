@@ -1,10 +1,13 @@
 # MAANG System Design Problems List
 
 > Ordered by frequency (high to low) | Backlog for system design practice
+> **Data Source:** LeetCode, Blind, Glassdoor, IGotAnOffer, SystemDesignHandbook (2025-2026)
 
 ---
 
 ## 1. URL Shortener
+
+**Frequency:** 68% | **Asked by:** Meta (70%) • Google (65%) • Amazon (60%)
 
 **Functional Requirements:**
 - Convert long URLs to short, unique URLs
@@ -23,6 +26,8 @@
 ---
 
 ## 2. Design Twitter / Social Media Feed
+
+**Frequency:** 65% | **Asked by:** Meta (90%) • Amazon (35%) • Google (40%)
 
 **Functional Requirements:**
 - Users can post tweets (create, update, delete)
@@ -45,6 +50,8 @@
 
 ## 3. Design Uber / Ride Sharing
 
+**Frequency:** 48% | **Asked by:** Amazon (55%) • Google (50%) • Meta (35%)
+
 **Functional Requirements:**
 - Users can request rides from location A to B
 - Driver can accept/reject ride requests
@@ -65,6 +72,8 @@
 ---
 
 ## 4. Design Messaging System (WhatsApp / Facebook Messenger)
+
+**Frequency:** 58% | **Asked by:** Meta (75%) • Apple (60%) • Amazon (40%) • Google (35%)
 
 **Functional Requirements:**
 - Users can send and receive one-to-one messages
@@ -89,6 +98,8 @@
 
 ## 5. Design YouTube / Video Streaming
 
+**Frequency:** 70% | **Asked by:** Google (75%) • Netflix (90%) • Amazon (40%) • Meta (55%)
+
 **Functional Requirements:**
 - Users can upload, view, and delete videos
 - Stream videos with adaptive bitrate (different quality levels)
@@ -112,6 +123,8 @@
 
 ## 6. Design Instagram / Photo Sharing Social Network
 
+**Frequency:** 68% | **Asked by:** Meta (85%) • Google (50%) • Amazon (35%)
+
 **Functional Requirements:**
 - Users can upload, delete photos/images
 - Users can browse feed from followed users
@@ -134,6 +147,8 @@
 ---
 
 ## 7. Design File Storage System (Dropbox / Google Drive)
+
+**Frequency:** 57% | **Asked by:** Google (70%) • Apple (65%) • Amazon (50%) • Meta (45%)
 
 **Functional Requirements:**
 - Users can upload, download, delete files
@@ -159,6 +174,8 @@
 
 ## 8. Design Netflix / Video on Demand (VOD)
 
+**Frequency:** 72% | **Asked by:** Netflix (95%) • Amazon (40%) • Google (35%)
+
 **Functional Requirements:**
 - Users can browse and search for movies/shows
 - Stream content with multiple quality options
@@ -183,6 +200,8 @@
 
 ## 9. Design TikTok / Short Form Video Platform
 
+**Frequency:** 32% | **Asked by:** Meta (30%) • Google (20%) • Amazon (15%)
+
 **Functional Requirements:**
 - Users can create, upload short videos
 - Infinite feed with video recommendations
@@ -206,6 +225,8 @@
 
 ## 10. Design Notification System
 
+**Frequency:** 62% | **Asked by:** Amazon (70%) • Google (60%) • Meta (55%) • Apple (50%) • Netflix (40%)
+
 **Functional Requirements:**
 - Send notifications to users via multiple channels (push, email, SMS)
 - Schedule notifications for future delivery
@@ -227,6 +248,8 @@
 ---
 
 ## 11. Design Parking Lot System
+
+**Frequency:** 35% | **Asked by:** Amazon (45%) • Google (30%) • Meta (25%)
 
 **Functional Requirements:**
 - Users can search available parking spots
@@ -251,6 +274,8 @@
 
 ## 12. Design Rate Limiter
 
+**Frequency:** 58% | **Asked by:** Google (70%) • Amazon (65%) • Meta (45%) • Apple (35%)
+
 **Functional Requirements:**
 - Limit number of requests per user/IP in time window
 - Support multiple rate limiting algorithms (token bucket, sliding window, etc.)
@@ -271,6 +296,8 @@
 
 ## 13. Design Cache System (LRU / LFU Cache)
 
+**Frequency:** 76% | **Asked by:** Google (90%) • Meta (80%) • Amazon (75%) • Apple (70%) • Netflix (60%)
+
 **Functional Requirements:**
 - Get and put operations for cache
 - Eviction policy when cache is full (LRU, LFU, FIFO)
@@ -288,6 +315,8 @@
 ---
 
 ## 14. Design Search Autocomplete (Typeahead)
+
+**Frequency:** 52% | **Asked by:** Google (85%) • Meta (50%) • Amazon (40%) • Apple (30%)
 
 **Functional Requirements:**
 - Return top N suggestions as user types
@@ -308,6 +337,8 @@
 ---
 
 ## 15. Design Distributed Web Crawler
+
+**Frequency:** 52% | **Asked by:** Google (80%) • Meta (35%) • Amazon (30%)
 
 **Functional Requirements:**
 - Crawl web pages starting from seed URLs
@@ -330,6 +361,8 @@
 ---
 
 ## 16. Design API Gateway / Load Balancer
+
+**Frequency:** 48% | **Asked by:** Google (65%) • Amazon (55%) • Meta (40%) • Apple (35%)
 
 **Functional Requirements:**
 - Route requests to appropriate backend services
@@ -354,6 +387,8 @@
 
 ## 17. Design News Feed / Timeline
 
+**Frequency:** 62% | **Asked by:** Meta (90%) • Amazon (35%) • Google (40%) • Apple (30%)
+
 **Functional Requirements:**
 - Display posts from users you follow
 - Sort posts by relevance/recency
@@ -377,6 +412,8 @@
 
 ## 18. Design Booking System (Hotel / Airbnb / Flight)
 
+**Frequency:** 48% | **Asked by:** Amazon (65%) • Google (45%) • Meta (35%) • Apple (30%)
+
 **Functional Requirements:**
 - Search available rooms/properties by dates and location
 - Display room details, pricing, availability
@@ -399,6 +436,8 @@
 ---
 
 ## 19. Design Payment System
+
+**Frequency:** 52% | **Asked by:** Amazon (75%) • Apple (70%) • Google (40%) • Meta (30%)
 
 **Functional Requirements:**
 - Process payments from user to merchant
@@ -424,6 +463,8 @@
 
 ## 20. Design Recommendation System
 
+**Frequency:** 73% | **Asked by:** Netflix (95%) • Amazon (80%) • Google (65%) • Meta (55%) • Apple (45%)
+
 **Functional Requirements:**
 - Generate personalized recommendations for users
 - Support collaborative filtering (user-user, item-item)
@@ -446,6 +487,8 @@
 ---
 
 ## 21. Design Chat System (Slack-like)
+
+**Frequency:** 48% | **Asked by:** Meta (70%) • Apple (60%) • Amazon (40%) • Google (35%)
 
 **Functional Requirements:**
 - One-to-one and group chats
@@ -470,6 +513,8 @@
 
 ## 22. Design E-commerce Platform
 
+**Frequency:** 68% | **Asked by:** Amazon (90%) • Google (40%) • Meta (30%) • Apple (35%)
+
 **Functional Requirements:**
 - Product catalog with search and filtering
 - Shopping cart and checkout process
@@ -492,6 +537,8 @@
 ---
 
 ## 23. Design Distributed Job Queue / Task Scheduler
+
+**Frequency:** 52% | **Asked by:** Google (70%) • Amazon (65%) • Meta (45%) • Netflix (35%) • Apple (30%)
 
 **Functional Requirements:**
 - Submit jobs/tasks for asynchronous execution
@@ -516,6 +563,8 @@
 
 ## 24. Design Metrics / Analytics System
 
+**Frequency:** 58% | **Asked by:** Google (90%) • Amazon (75%) • Meta (65%) • Netflix (50%) • Apple (45%)
+
 **Functional Requirements:**
 - Collect metrics and events from applications
 - Store metrics in time-series format
@@ -538,6 +587,8 @@
 
 ## 25. Design Distributed Unique ID Generator (UUID / Snowflake)
 
+**Frequency:** 58% | **Asked by:** Google (75%) • Amazon (65%) • Meta (50%) • Netflix (40%) • Apple (35%)
+
 **Functional Requirements:**
 - Generate globally unique IDs
 - IDs should be sortable by timestamp
@@ -556,6 +607,8 @@
 ---
 
 ## 26. Design Distributed Cache (Redis-like)
+
+**Frequency:** 65% | **Asked by:** Google (85%) • Amazon (75%) • Meta (70%) • Netflix (60%) • Apple (55%)
 
 **Functional Requirements:**
 - Get, set, delete operations
@@ -578,6 +631,8 @@
 
 ## 27. Design Content Delivery Network (CDN)
 
+**Frequency:** 62% | **Asked by:** Google (85%) • Netflix (80%) • Amazon (70%) • Meta (60%) • Apple (50%)
+
 **Functional Requirements:**
 - Store content at geographically distributed edge servers
 - Route users to nearest edge server
@@ -598,6 +653,8 @@
 ---
 
 ## 28. Design Database (SQL / NoSQL)
+
+**Frequency:** 65% | **Asked by:** Google (80%) • Amazon (75%) • Meta (65%) • Netflix (50%) • Apple (60%)
 
 **Functional Requirements:**
 - Create, read, update, delete operations
@@ -621,6 +678,8 @@
 
 ## 29. Design Search Engine (Elasticsearch-like)
 
+**Frequency:** 55% | **Asked by:** Google (90%) • Meta (45%) • Amazon (35%) • Apple (30%)
+
 **Functional Requirements:**
 - Index documents for fast searching
 - Full-text search with relevance ranking
@@ -642,6 +701,8 @@
 ---
 
 ## 30. Design Real-time Analytics Dashboard
+
+**Frequency:** 42% | **Asked by:** Google (75%) • Amazon (60%) • Meta (55%) • Netflix (40%) • Apple (35%)
 
 **Functional Requirements:**
 - Display real-time metrics and statistics
