@@ -745,3 +745,180 @@ f(n) = n³ + n² + n + 100
 Dominant term: n³
 Space Complexity: O(n³)
 ```
+
+## Concurrency vs Multithreading - Core Concept
+
+### Concurrency on Single Core
+
+**1 Core, Multiple Tasks (Interleaving)**
+
+```
+                    CPU
+        ┌─────────────────────┐
+        │   SINGLE CORE       │
+        └─────────────────────┘
+
+Timeline (Interleaving):
+┌─────────────────────────────────────────┐
+│ Time: 0ms   1ms   2ms   3ms   4ms   5ms │
+├─────────────────────────────────────────┤
+│ Core: Task1 Task2 Task3 Task1 Task2 Task3│
+│       ▰     ▰     ▰     ▰     ▰     ▰    │
+└─────────────────────────────────────────┘
+
+At any moment:
+├─ Only 1 task running
+├─ Others waiting
+└─ Core switches between them (context switching)
+
+Result: CONCURRENT but NOT PARALLEL
+        (Looks concurrent, runs sequentially)
+```
+
+**Example: Node.js Event Loop**
+
+```
+                     CPU (1 Core)
+        ┌────────────────────────┐
+        │  ▰ Task A (running)    │
+        │  ○ Task B (waiting)    │
+        │  ○ Task C (waiting)    │
+        │  ○ Task D (waiting)    │
+        └────────────────────────┘
+                  ↓ (Context switch every ms)
+        ┌────────────────────────┐
+        │  ○ Task A (waiting)    │
+        │  ▰ Task B (running)    │
+        │  ○ Task C (waiting)    │
+        │  ○ Task D (waiting)    │
+        └────────────────────────┘
+```
+
+---
+
+### Multithreading on Multiple Cores
+
+**4 Cores, 4 Threads (True Parallelism)**
+
+```
+                    CPU
+        ┌─────────────────────────┐
+        │ Core1 │ Core2 │ Core3 │ │
+        ├───────┼───────┼───────┤ │
+        │ Task1 │ Task2 │ Task3 │ │
+        │  ▰    │  ▰    │  ▰    │ │
+        └───────┴───────┴───────┘ │
+            (All running at same time!)
+        └─────────────────────────┘
+
+Timeline (Parallel):
+┌─────────────────────────────────────────┐
+│ Time: 0ms  1ms  2ms  3ms  4ms  5ms      │
+├─────────────────────────────────────────┤
+│ C1:   ▰▰▰▰▰▰▰▰▰▰  (Task1)             │
+│ C2:   ▰▰▰▰▰▰▰▰▰▰  (Task2)             │
+│ C3:   ▰▰▰▰▰▰▰▰▰▰  (Task3)             │
+│ C4:   ▰▰▰▰▰▰▰▰▰▰  (Task4)             │
+└─────────────────────────────────────────┘
+
+At any moment:
+├─ All 4 tasks running (different cores)
+├─ No waiting
+└─ True parallelism
+
+Result: CONCURRENT AND PARALLEL
+        (Runs truly simultaneously)
+```
+
+**Example: Java Multithreading with 4 Cores**
+
+```
+                     CPU (4 Cores)
+    ┌──────────┬──────────┬──────────┬──────────┐
+    │  Core 1  │  Core 2  │  Core 3  │  Core 4  │
+    ├──────────┼──────────┼──────────┼──────────┤
+    │ ▰ Task1  │ ▰ Task2  │ ▰ Task3  │ ▰ Task4  │
+    │ Running  │ Running  │ Running  │ Running  │
+    └──────────┴──────────┴──────────┴──────────┘
+
+All tasks execute simultaneously!
+```
+
+---
+
+### Side-by-Side Comparison
+
+```
+CONCURRENCY (Single Core)          MULTITHREADING (Multi Core)
+
+   CPU (1 Core)                        CPU (4 Cores)
+┌─────────────────┐                ┌──────┬──────┬──────┬──────┐
+│ ▰ Task A        │                │ ▰ T1 │ ▰ T2 │ ▰ T3 │ ▰ T4 │
+│ ○ Task B        │                │ Run  │ Run  │ Run  │ Run  │
+│ ○ Task C        │                └──────┴──────┴──────┴──────┘
+│ ○ Task D        │
+└─────────────────┘                All 4 tasks run at same time
+
+Only 1 task at a time              Multiple tasks at same time
+(Switching between them)           (True parallelism)
+```
+
+---
+
+### Execution Timeline Comparison
+
+**Concurrency: Interleaving on 1 Core**
+
+```
+Task A: ▰▰▯▯▯▯▯▯▯▯▯▯▯▯▯▯
+Task B: ▯▯▰▰▰▯▯▯▯▯▯▯▯▯▯▯
+Task C: ▯▯▯▯▯▰▰▰▰▰▯▯▯▯▯▯
+Task D: ▯▯▯▯▯▯▯▯▯▯▰▰▰▰▰▰
+        └────────────────────→ Time
+
+Tasks take turns on single core
+Total time: ~16 time units
+```
+
+**Multithreading: Parallel on 4 Cores**
+
+```
+Core 1: ▰▰▰▰▰▰▰▰ (Task A)
+Core 2: ▰▰▰▰▰▰▰▰ (Task B)
+Core 3: ▰▰▰▰▰▰▰▰ (Task C)
+Core 4: ▰▰▰▰▰▰▰▰ (Task D)
+        └────────────────→ Time
+
+All tasks run simultaneously
+Total time: ~8 time units (4x faster!)
+```
+
+---
+
+### Key Differences Table
+
+| Aspect | Concurrency (1 Core) | Multithreading (Multi Core) |
+|--------|----------------------|------------------------------|
+| **Cores Used** | 1 | 4+ |
+| **Execution** | Interleaved (take turns) | Parallel (simultaneous) |
+| **At any moment** | 1 task running | Multiple tasks running |
+| **Speed** | Slower | Faster (4x with 4 cores) |
+| **Example** | Node.js, async/await | Python threads, Java threads |
+| **Diagram** | ▰▯▰▯▰▯ (switching) | ▰▰▰▰ (all at once) |
+
+---
+
+### TL;DR - Visual Summary
+
+```
+Concurrency (1 Core):
+   Core: ▰▯▰▯▰▯  (switching between tasks)
+   Result: Handles multiple tasks (not truly parallel)
+
+Multithreading (4 Cores):
+   C1: ▰▰▰▰▰▰  (Task 1)
+   C2: ▰▰▰▰▰▰  (Task 2)
+   C3: ▰▰▰▰▰▰  (Task 3)
+   C4: ▰▰▰▰▰▰  (Task 4)
+   Result: Multiple tasks run at same time (true parallel)
+```
