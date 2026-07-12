@@ -74,11 +74,11 @@ Hash Map • Doubly Linked List • LRU/LFU Eviction • TTL • Memory Manageme
 - Cache statistics (hit/miss rate)
 
 **Non-Functional Requirements:**
-- O(1) time complexity for get and put operations
-- Memory efficient
-- Highly concurrent access
-- Support for multi-threading/distributed cache
-- Scalable to millions of entries
+- **O(1) time complexity** for get and put operations
+- **Memory efficient** — Bounded cache size with eviction policy
+- **Multi-threaded support** — Handle concurrent access from multiple threads safely (no data corruption)
+- **Thread-safe operations** — Use locks or concurrent data structures (ReentrantReadWriteLock, ConcurrentHashMap)
+- **Scalable capacity** — Support millions of entries before eviction
 
 ---
 
