@@ -2,6 +2,21 @@
 
 Topics that frequently come up in interviews but are often unclear or misunderstood.
 
+---
+
+## Table of Contents
+
+1. [Sharding vs Read Replicas](#sharding-vs-read-replicas)
+2. [Read Replicas in NoSQL](#read-replicas-in-nosql)
+3. [Caching Strategies](#caching-strategies)
+4. [Cache Eviction Strategies](#cache-eviction-strategies)
+5. [301 vs 302 Redirects for Data Analytics](#301-vs-302-redirects-for-data-analytics)
+6. [CDN Refresh Strategies](#cdn-refresh-strategies)
+7. [Time & Space Complexity Analysis](#time--space-complexity-analysis)
+8. [Concurrency vs Multithreading](#concurrency-vs-multithreading---core-concept)
+
+---
+
 ## Sharding vs Read Replicas
 
 ### Sharding
