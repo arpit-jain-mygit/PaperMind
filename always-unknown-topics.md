@@ -14,6 +14,8 @@ Topics that frequently come up in interviews but are often unclear or misunderst
 6. [CDN Refresh Strategies](#cdn-refresh-strategies)
 7. [Time & Space Complexity Analysis](#time--space-complexity-analysis)
 8. [Concurrency vs Multithreading](#concurrency-vs-multithreading---core-concept)
+9. [Hashtable vs HashMap](#hashtable-vs-hashmap)
+10. [ReentrantReadWriteLock](#reentrantreadwritelock)
 
 ---
 
@@ -936,4 +938,134 @@ Multithreading (4 Cores):
    C3: ▰▰▰▰▰▰  (Task 3)
    C4: ▰▰▰▰▰▰  (Task 4)
    Result: Multiple tasks run at same time (true parallel)
+```
+
+## Hashtable vs HashMap
+
+**Both hash-based key-value stores, but different approaches.**
+
+### Key Differences
+
+| Aspect | Hashtable | HashMap |
+|--------|-----------|---------|
+| **Thread-Safe** | ✅ YES (synchronized) | ❌ NO |
+| **Performance** | Slower (locks everything) | Faster (no locks) |
+| **Null Keys** | ❌ Not allowed | ✅ Allowed |
+| **Null Values** | ❌ Not allowed | ✅ Allowed |
+| **Legacy** | ✅ Old (Java 1.0) | ✅ Modern (Java 1.2+) |
+| **Best For** | Multi-threaded (rarely) | Single-threaded (common) |
+
+### Why NOT Use Hashtable?
+
+**Hashtable locks entire map for every operation → Only 1 thread at a time → SLOW**
+
+```
+Hashtable:          HashMap:
+Thread 1: ▰▰▰       Thread 1: ▰▰▰
+Thread 2: ▯▯▯       Thread 2: ▰▰▰ (simultaneous!)
+Thread 3: ▯▯▯       Thread 3: ▰▰▰ (simultaneous!)
+```
+
+### Better Alternatives for Multi-threaded Apps
+
+```
+For Maps:      ConcurrentHashMap ✅ (segment-based locking)
+For Lists:     CopyOnWriteArrayList ✅ (read-heavy)
+For Queues:    ConcurrentLinkedQueue ✅ (lock-free)
+For Custom:    ReadWriteLock ✅ (reader-writer sync)
+
+Avoid:         Hashtable ❌ (legacy, slow)
+```
+
+---
+
+## ReentrantReadWriteLock
+
+**Allows multiple READERS or single WRITER (but not both simultaneously)**
+
+### Why Do We Need Read Locks?
+
+**Read lock prevents WRITERS, not readers!**
+
+Without read lock:
+```
+Reader:  Reading balance
+Writer:  Changes balance mid-read
+Result:  Reader gets corrupted value! ❌
+
+With read lock:
+Reader:  ▰▰▰▰▰▰▰▰ (reading safely)
+Writer:  ▯▯▯▯▰▰▰▰ (waits for reader, then exclusive access)
+Result:  No corruption! ✓
+```
+
+### How It Works
+
+```
+Read Lock:
+├─ Multiple readers: Can acquire simultaneously ✓
+└─ Prevent writers: Writer must wait ✓
+
+Write Lock:
+├─ Only 1 writer: Exclusive access
+└─ Prevent readers: Readers wait ✓
+```
+
+### Timeline Example
+
+```
+Reader 1: ▰▰▰▰▰▯▯
+Reader 2: ▰▰▰▰▰▯▯ (simultaneous with Reader 1!)
+Writer:   ▯▯▯▯▯▰▰ (exclusive, after all readers)
+
+Multiple readers together, then exclusive writer!
+```
+
+### Code Example
+
+```java
+ReadWriteLock lock = new ReentrantReadWriteLock();
+int balance = 1000;
+
+// Many threads reading
+lock.readLock().lock();
+try {
+    int myBalance = balance;  // ✓ Safe! Prevents writer
+} finally {
+    lock.readLock().unlock();
+}
+
+// Few threads writing
+lock.writeLock().lock();
+try {
+    balance = 2000;  // ✓ Exclusive! Prevents readers
+} finally {
+    lock.writeLock().unlock();
+}
+```
+
+### When to Use
+
+```
+Use if:
+✅ Many readers, few writers
+✅ Read operations are fast
+✅ Cache, configurations, profiles
+
+Don't use if:
+❌ Frequent writes
+❌ Read & write equally common
+```
+
+### TL;DR
+
+```
+Read Lock = "Prevent writers while I read"
+Write Lock = "I need exclusive access"
+
+Multiple readers: No conflict ✓
+Reader + Writer: Writer waits ✓
+Multiple writers: Only 1 at a time ✓
+
+"Reentrant" = Same thread can acquire lock multiple times
 ```
