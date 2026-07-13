@@ -987,3 +987,559 @@ Thread 2: Put("Y", value) - cache full, evicts same LRU?
 ---
 
 **Status**: Revision #3 adds concrete numbers and NFR mapping, but critical features (TTL, Clear, Stats) and thread-safety details (ReentrantReadWriteLock) still need implementation.
+
+---
+
+## Comprehensive Assessment: Revision #3 Deep Dive
+
+### 🎯 Honest Feedback on Final R3
+
+#### ✅ Excellent Additions (What You Got Right)
+
+1. **✅ SMART Assumptions** 
+   - "No sync needed, accept out-of-sync caches + session stickiness"
+   - Shows understanding of distributed system trade-offs
+   - Realistic for microservices architecture
+
+2. **✅ API Contracts DEFINED**
+   - GET /get(key) → return value or exception
+   - POST /put(key, value) → return entry or error
+   - Clear error handling semantics
+
+3. **✅ TTL Strategies COMPREHENSIVE**
+   - Time-based, Access-based (sliding window), Adaptive, Lazy, Refresh-ahead
+   - Shows deep understanding of cache patterns
+   - Different TTLs per data type (5min sessions, 1hr catalog, 1day profile, 1week config)
+   - **This is excellent production thinking**
+
+4. **✅ Config Strategy CLEAR**
+   - Configurable at startup via app config
+   - Separate TTLs per data type
+   - Realistic for production deployments
+
+5. **✅ Edge Cases HANDLED**
+   - Cache size = 1 ✓
+   - Empty cache Get ✓
+   - Empty DLL after eviction ✓
+   - Concurrent get+put on same key (ReentrantReadWriteLock) ✓
+
+6. **✅ Thread-Safety DEFINED** — ReentrantReadWriteLock for DLL operations
+
+7. **✅ Memory Efficiency BOUNDED** — 10M entries = 10GB = 32GB RAM per instance
+
+---
+
+#### 🔴 Critical Issues - What's Still Missing
+
+##### 1. **Lazy TTL Implementation Details**
+
+You mentioned "Lazy TTL" but no pseudo-code:
+
+```java
+// MISSING: How is createdAt/accessedAt stored?
+// Should be in Node class:
+class Node {
+    String key;
+    Object value;
+    long createdAt;          // For time-based TTL
+    long lastAccessedAt;     // For access-based TTL
+    Node prev, next;
+}
+
+// MISSING: Check logic on Get
+public get(key) {
+    lock.readLock().lock();
+    try {
+        Node node = HM.get(key);
+        if (node == null) return "not found";
+        
+        // Check if expired (MISSING LOGIC)
+        if (isExpired(node)) {
+            // Remove from cache
+            // Return cache miss
+        }
+        
+        moveToEnd(node);
+        return node.value;
+    } finally {
+        lock.readLock().unlock();
+    }
+}
+
+private boolean isExpired(Node node) {
+    long ttl = getTTL(node.key);  // Get TTL for this key's data type
+    return (System.currentTimeMillis() - node.createdAt) > ttl;
+}
+```
+
+**Currently**: ❌ Pseudo-code missing
+
+---
+
+##### 2. **"Refresh-Ahead" Implementation Missing**
+
+You mentioned "refresh before TTL expiry" but how?
+
+```java
+// MISSING: Background task for refresh-ahead
+// Should have scheduled executor:
+ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+
+scheduler.scheduleAtFixedRate(() -> {
+    long now = System.currentTimeMillis();
+    for each entry in DLL {
+        long ttl = getTTL(entry.key);
+        if ((now - entry.createdAt) > (ttl * 0.8)) {  // 80% of TTL
+            // Refresh from DB
+            freshValue = fetchFromDB(entry.key);
+            entry.value = freshValue;
+            entry.createdAt = now;  // Reset TTL
+        }
+    }
+}, 0, 1, TimeUnit.MINUTES);  // Run every 1 minute
+```
+
+**Currently**: ❌ No background job mechanism
+
+---
+
+##### 3. **Clear Operation Not Detailed**
+
+You said "Clear operation implied" but:
+
+```java
+// MISSING: Pseudo-code for clear()
+public void clear() {
+    lock.writeLock().lock();
+    try {
+        HM.clear();
+        // How to clear DLL efficiently?
+        // Option A: Iterate and remove each node (O(n))
+        // Option B: Reset head/tail pointers (O(1), wastes memory)
+        DLL.removeAll();
+        stats.reset();  // Reset hit/miss/eviction counters
+    } finally {
+        lock.writeLock().unlock();
+    }
+}
+```
+
+**Currently**: ⚠️ Partially addressed
+
+---
+
+##### 4. **Cache Statistics Not Detailed**
+
+You said "cache statistics" but no implementation:
+
+```java
+// MISSING: How to track atomic counters
+class CacheStats {
+    AtomicLong totalHits = new AtomicLong(0);
+    AtomicLong totalMisses = new AtomicLong(0);
+    AtomicLong totalEvictions = new AtomicLong(0);
+    AtomicLong totalExpiredEntriesRemoved = new AtomicLong(0);
+    
+    public void recordHit() {
+        totalHits.incrementAndGet();
+    }
+    
+    public void recordMiss() {
+        totalMisses.incrementAndGet();
+    }
+    
+    public double getHitRate() {
+        long total = totalHits.get() + totalMisses.get();
+        return total == 0 ? 0 : (double) totalHits.get() / total;
+    }
+    
+    public void recordEviction() {
+        totalEvictions.incrementAndGet();
+    }
+}
+```
+
+**Currently**: ⚠️ Mentioned but no implementation
+
+---
+
+##### 5. **Batch TTL Cleanup Job Not Detailed**
+
+You said "batch job for TTL cleanup" but no design:
+
+```java
+// MISSING: How does batch cleanup work concurrently?
+// Critical questions:
+// - How often? Every 1 min? 5 min? 1 hour?
+// - Does it hold write-lock entire time? (Blocks all reads/puts)
+// - How to handle concurrent Put during cleanup?
+// - What if cleanup takes longer than scheduled interval?
+
+// Better approach - use read-lock for scanning, write-lock only for removal:
+ScheduledExecutorService batchCleanup = Executors.newScheduledThreadPool(1);
+
+batchCleanup.scheduleAtFixedRate(() -> {
+    // Step 1: Identify expired entries (can use read-lock)
+    lock.readLock().lock();
+    List<String> expiredKeys = new ArrayList<>();
+    try {
+        Node current = DLL.head.next;
+        while (current != null) {
+            if (isExpired(current)) {
+                expiredKeys.add(current.key);
+            }
+            current = current.next;
+        }
+    } finally {
+        lock.readLock().unlock();
+    }
+    
+    // Step 2: Remove expired entries (need write-lock)
+    if (!expiredKeys.isEmpty()) {
+        lock.writeLock().lock();
+        try {
+            for (String key : expiredKeys) {
+                Node node = HM.get(key);
+                if (node != null && isExpired(node)) {
+                    removeNode(node);
+                    HM.remove(key);
+                    stats.recordExpiredRemoval();
+                }
+            }
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+}, 5, 5, TimeUnit.MINUTES);  // Run every 5 minutes
+```
+
+**Currently**: ❌ Missing design, doesn't address lock contention
+
+---
+
+##### 6. **Variable Value Sizes Edge Case**
+
+You assumed "1KB per value" but:
+
+```java
+// MISSING: How to handle variable sizes?
+// Example: maxCapacity = 10GB
+// Current: 5M entries × 2KB each = 10GB (full)
+// New entry: 100MB value
+// How many entries to evict?
+
+// Should define behavior:
+public put(key, largeValue) {
+    lock.writeLock().lock();
+    try {
+        long requiredSpace = estimateSize(largeValue);
+        
+        // Option A: Evict ONE LRU at a time (might need many iterations)
+        // Option B: Evict until freed space >= new entry size
+        
+        while (currentMemoryUsage + requiredSpace > maxCapacity) {
+            evictLRU();
+            currentMemoryUsage -= lastEvictedSize;
+        }
+        
+        // Option C: Reject if larger than maxCapacity
+        if (requiredSpace > maxCapacity) {
+            throw new CacheException("Value too large");
+        }
+        
+        addNode(key, largeValue);
+        currentMemoryUsage += requiredSpace;
+    } finally {
+        lock.writeLock().unlock();
+    }
+}
+```
+
+**Currently**: ⚠️ Not addressed, assumes fixed size
+
+---
+
+##### 7. **Monitoring & Observability Missing**
+
+MAANG expects discussion of:
+```
+- Cache hit rate trending (% over time)
+- Eviction rates (entries/sec being evicted)
+- Lock contention signals (write-lock wait times)
+- GC impact (stop-the-world pauses with 10M objects)
+- Memory usage patterns (growth over time)
+- TTL distribution (how many entries expire vs. being accessed?)
+- Cache size vs. maxCapacity utilization
+```
+
+**Currently**: ❌ Not mentioned
+
+---
+
+##### 8. **Failure Recovery Not Addressed**
+
+Missing scenarios:
+```
+- What if cleanup is slow and falls behind?
+  → Cache fills with expired entries
+  → Performance degradation
+  
+- What if value > maxCapacity?
+  → Error? Reject? Store partially?
+  
+- What if HM and DLL get out of sync?
+  → Corruption detection?
+  → Recovery mechanism?
+  
+- Application crash?
+  → Cache lost (OK, it's in-process)
+  → But: How to warm cache on restart?
+  
+- Memory exhaustion (OOM)?
+  → Fail gracefully or aggressive eviction?
+```
+
+**Currently**: ❌ Not addressed
+
+---
+
+##### 9. **No Trade-Off Discussion**
+
+Missing analysis:
+```
+- Lazy TTL vs. Batch cleanup trade-offs
+  → Lazy: CPU overhead on every Get, but clean immediately
+  → Batch: Stale entries in cache, but less CPU
+  
+- ConcurrentHashMap vs. ReentrantReadWriteLock
+  → ConcurrentHashMap: Fine-grained locking, complex
+  → ReentrantReadWriteLock: Coarse-grained, simpler, contention?
+  
+- Read-lock for Get vs. Write-lock for Put
+  → Read-lock allows parallelism
+  → But still mutual exclusion with Put
+  
+- Memory efficiency vs. CPU overhead
+  → Tracking TTL costs CPU
+  → But saves memory with cleanup
+```
+
+**Currently**: ❌ Not discussed
+
+---
+
+##### 10. **No Alternatives Discussion**
+
+MAANG expects:
+```
+- Why HashMap + DLL vs. TreeMap + LinkedHashMap?
+  → HashMap: O(1) vs. TreeMap: O(log n)
+  → DLL: Explicit control vs. LinkedHashMap: Built-in order
+  
+- Why ReentrantReadWriteLock vs. ConcurrentHashMap alone?
+  → ConcurrentHashMap: Only protects HashMap, not DLL
+  → ReentrantReadWriteLock: Protects entire operation
+  
+- Why in-process vs. Redis?
+  → In-process: Fast (local memory), no network
+  → Redis: Distributed, high availability, persistence
+  → Use case dependent
+  
+- Why no persistence?
+  → Cache is ephemeral, OK to lose on restart
+  → If persistence needed, use Redis or custom RDB
+```
+
+**Currently**: ❌ Not addressed
+
+---
+
+### 📊 Summary: What's Missing in R3
+
+| Component | Status | Impact | MAANG Expectation |
+|-----------|--------|--------|-------------------|
+| **Data structures** | ✅ | - | ✅ Correct |
+| **O(1) complexity** | ✅ | - | ✅ Demonstrated |
+| **LRU eviction** | ✅ | - | ✅ Implemented |
+| **TTL strategies** | ⚠️ | Mentioned only | ✅ Need pseudo-code |
+| **Clear operation** | ⚠️ | Implied | ⚠️ Need details |
+| **Cache stats** | ⚠️ | Mentioned only | ⚠️ Need implementation |
+| **Thread-safety** | ✅ | - | ✅ ReentrantReadWriteLock |
+| **API contracts** | ✅ | - | ✅ Defined |
+| **Edge cases** | ✅ | - | ✅ Handled |
+| **Batch cleanup** | ❌ | Critical gap | ❌ Missing design |
+| **Variable sizes** | ❌ | Edge case | ⚠️ Not addressed |
+| **Monitoring** | ❌ | Production gap | ❌ Missing |
+| **Failure recovery** | ❌ | Production gap | ❌ Missing |
+| **Trade-offs** | ❌ | Interview signal | ❌ Missing |
+| **Alternatives** | ❌ | Interview signal | ❌ Missing |
+
+---
+
+## 📈 MAANG Readiness Score by Revision
+
+### **Revision #1: 5-10/100** 🔴 FAIL
+
+**What It Has**:
+- ✅ Thinking about distributed aspects
+- ✅ Storage calculation
+
+**What It Lacks**:
+- ❌ Wrong approach (Postgres for in-process)
+- ❌ Not truly in-process
+- ❌ O(1) claims false (O(log n) with network latency)
+- ❌ No implementation details
+- ❌ No thread-safety
+- ❌ No TTL mechanism
+- ❌ Confusion between in-process and distributed
+
+**Interviewer Feedback**:
+> "This is fundamentally wrong. Postgres is not an in-process cache. The whole architecture is misaligned. Let's restart with a correct approach."
+
+**MAANG Verdict**: ❌ **REJECTED** — Start over, wrong problem solved
+
+---
+
+### **Revision #2: 40-50/100** 🟡 INCOMPLETE
+
+**What It Has**:
+- ✅ Correct data structures (HashMap + DLL)
+- ✅ O(1) complexity achieved and explained
+- ✅ LRU eviction logic sound
+- ✅ Step-by-step operations clear
+- ⚠️ Mentions ConcurrentHashMap (partial thread-safety)
+
+**What It Lacks**:
+- ❌ Thread-safety incomplete (ConcurrentHashMap ≠ DLL safety)
+- ❌ No TTL implementation
+- ❌ No Clear operation design
+- ❌ No Cache statistics tracking
+- ❌ No API contracts defined
+- ❌ No edge case handling
+- ❌ No config/setup strategy
+- ❌ No trade-off discussion
+
+**Interview Experience**:
+- Get through initial round
+- Fail when asked deeper questions
+- "How do you handle TTL?" → Blank stare
+- "How do clients use this?" → No API defined
+- "What about concurrent access?" → "ConcurrentHashMap" (incomplete)
+
+**MAANG Verdict**: ⚠️ **CONDITIONAL PASS** — Address missing pieces quickly or fail follow-up
+
+---
+
+### **Revision #3: 75-85/100** 🟢 STRONG, Interview-Ready
+
+**What It Has**:
+- ✅ Correct data structures + O(1) complexity
+- ✅ Thread-safety defined (ReentrantReadWriteLock)
+- ✅ TTL strategies outlined (5 different types)
+- ✅ API contracts detailed (GET/POST with error handling)
+- ✅ Config strategy defined (app config, per-data-type TTLs)
+- ✅ Edge cases handled (size=1, empty cache, concurrent access)
+- ✅ Clear operation addressed
+- ✅ Cache statistics mentioned
+- ✅ Smart assumptions (no sync, session stickiness)
+- ✅ Capacity bounds quantified (10M entries, 32GB RAM)
+- ✅ Memory efficiency strategy (bounded cache with eviction)
+
+**What It Lacks**:
+- ⚠️ No pseudo-code for TTL cleanup
+- ⚠️ No batch cleanup job concurrency design
+- ⚠️ No statistics implementation details
+- ⚠️ No variable value size handling
+- ⚠️ No monitoring/observability strategy
+- ⚠️ No failure recovery discussion
+- ⚠️ No trade-off analysis
+- ⚠️ No alternatives comparison
+
+**Interview Experience**:
+- Pass phone screen with flying colors
+- Interviewer is impressed with depth
+- "Let me dig into implementation. How does TTL cleanup work exactly?"
+- Ready to handle follow-up questions if prepared
+- Likely progresses to on-site
+
+**MAANG Verdict**: ✅ **STRONG PASS** — Design is solid, interview-ready, ready for on-site
+
+---
+
+### **Revision #3 + Implementation Details: 90-95/100** 🟢 EXCELLENT
+
+To reach this level, add:
+
+```
+1. Pseudo-code for:
+   ✅ Lazy TTL check logic
+   ✅ Batch cleanup job (scheduler + locking)
+   ✅ Clear operation implementation
+   ✅ Statistics tracking
+
+2. Edge case handling:
+   ✅ Cleanup falling behind solution
+   ✅ Value > maxCapacity rejection
+   ✅ HM/DLL sync detection
+
+3. Design discussions:
+   ✅ Why ReentrantReadWriteLock vs. ConcurrentHashMap
+   ✅ Lazy vs. batch TTL trade-offs
+   ✅ Why this vs. Redis
+   ✅ Scalability limits
+
+4. Monitoring:
+   ✅ Hit rate tracking
+   ✅ Eviction metrics
+   ✅ Lock contention signals
+
+5. Failure scenarios:
+   ✅ Crash recovery
+   ✅ Memory exhaustion
+   ✅ Corruption detection
+```
+
+**MAANG Verdict**: ✅ **EXCELLENT PASS** — Get offer, strong technical depth
+
+---
+
+## 🎤 What to Say in MAANG Interview
+
+### Opening Statement (Start with R3)
+
+> "I'll design a local, in-process LRU cache using HashMap for O(1) lookups and DoublyLinkedList for O(1) eviction. It will be thread-safe with ReentrantReadWriteLock and support configurable TTL with multiple strategies. Each microservice instance maintains its own cache—they don't sync. To maximize hit rate, we use session stickiness so users hit the same instance repeatedly."
+
+### When Asked "How Does TTL Work?"
+
+> "I use a hybrid approach: lazy deletion on every Get plus a background batch job every 5 minutes. On Get, I check if the entry is expired (now - createdAt > TTL). If expired, I remove it and return cache miss. For cleanup, I run a separate scheduled task that scans the DLL under read-lock to identify expired entries, then upgrades to write-lock to remove them. This prevents the cache from filling with stale data."
+
+### When Asked "What About Thread-Safety?"
+
+> "I use ReentrantReadWriteLock, not just ConcurrentHashMap. ConcurrentHashMap protects the HashMap bucket, but the DLL node movements (updating prev/next pointers) aren't atomic. Multiple threads moving nodes simultaneously would corrupt pointers. ReentrantReadWriteLock allows multiple readers (Get operations) but exclusive access for writers (Put operations). This minimizes contention under read-heavy workloads."
+
+### When Asked "What Are the Trade-Offs?"
+
+> "Lazy TTL has CPU overhead on every Get but cleans immediately. Batch cleanup reduces CPU but allows stale entries briefly. I chose hybrid because it balances both. For thread-safety, fine-grained locking (ConcurrentHashMap per bucket) would be faster under extreme contention, but ReentrantReadWriteLock is simpler and sufficient for typical workloads."
+
+### When Asked "Why Not Redis?"
+
+> "Redis is great for distributed scenarios and high availability, but it adds network latency (5-20ms per call). For in-process cache, local memory is 100x faster. We accept eventual inconsistency between instances—session stickiness ensures users see consistent data within their session."
+
+### When Asked "What About Monitoring?"
+
+> "I track hit rate (hits / (hits + misses)), eviction rate (evictions/sec), and lock wait times. If hit rate drops, we might increase capacity. If lock contention spikes, we'd profile to see if a different locking strategy helps."
+
+---
+
+## Final Verdict
+
+| Revision | Score | Status | Action |
+|----------|-------|--------|--------|
+| **#1** | 5-10 | ❌ REJECTED | Restart with correct approach |
+| **#2** | 40-50 | ⚠️ INCOMPLETE | Needs major work |
+| **#3** | 75-85 | ✅ READY | Interview-prepared |
+| **#3 + Details** | 90-95 | ✅ EXCELLENT | Strong offer signal |
+
+---
+
+**Bottom Line**: Your R3 is **INTERVIEW-READY for MAANG phone screen**. You'll likely pass and move to on-site. To guarantee offer, add pseudo-code for batch cleanup, monitoring strategy, and trade-off discussions. You're **80% there**.
