@@ -16,6 +16,9 @@ Topics that frequently come up in interviews but are often unclear or misunderst
 8. [Concurrency vs Multithreading](#concurrency-vs-multithreading---core-concept)
 9. [Hashtable vs HashMap](#hashtable-vs-hashmap)
 10. [ReentrantReadWriteLock](#reentrantreadwritelock)
+11. [TTL (Time To Live) Strategies](#ttl-time-to-live-strategies)
+12. [TTL vs Cache Eviction](#ttl-vs-cache-eviction)
+13. [Item-Level vs Cache-Level TTL](#item-level-vs-cache-level-ttl)
 
 ---
 
@@ -1068,4 +1071,247 @@ Reader + Writer: Writer waits ✓
 Multiple writers: Only 1 at a time ✓
 
 "Reentrant" = Same thread can acquire lock multiple times
+```
+
+## TTL (Time To Live) Strategies
+
+**TTL = When cached data expires and should be refreshed**
+
+### 1. Fixed TTL (Most Common)
+
+Expires after fixed duration, regardless of usage.
+
+```
+Item cached at 10:00, TTL=5min
+Expires at 10:05 (automatically removed)
+
+10:00  Cached ✓
+10:02  Access: still cached ✓
+10:05  Expired ❌ (remove from cache)
+```
+
+### 2. Sliding Window TTL (Resets on Access)
+
+TTL resets every time item is accessed.
+
+```
+10:00  Cached, expires 10:05
+10:02  Access: expires resets to 10:07
+10:04  Access: expires resets to 10:09
+
+Result: Item stays in cache if actively used!
+```
+
+**Best for:** Session tokens, active user data
+
+### 3. Absolute TTL (Fixed Expiry Time)
+
+Expires at specific time, regardless of usage.
+
+```
+Expires at: 2024-01-15 midnight
+
+10:00 AM: Cached ✓
+11:00 AM: Accessed ✓
+Midnight: Expires ❌ (no matter how many accesses)
+```
+
+**Best for:** Daily reports, batch data
+
+### 4. Lazy TTL (Checked on Access)
+
+Expiry checked only when accessed, not removed proactively.
+
+```
+10:05  TTL expired (still in memory)
+10:06  Access: Check TTL → Expired! Remove
+
+Advantage: No background cleanup
+Disadvantage: Stale data in memory
+```
+
+### 5. Proactive TTL (Refresh Before Expiry)
+
+Refresh cache BEFORE it expires.
+
+```
+TTL=5min, Refresh before=30sec
+
+10:04:30  TTL near expiry → Background refresh
+10:05  Cache updated with fresh data
+10:06  User access: Gets fresh data ✓
+
+No cache miss! Always fresh!
+```
+
+**Best for:** Popular data, critical data, configs
+
+### 6. Adaptive TTL (Based on Access Patterns)
+
+TTL changes based on how frequently accessed.
+
+```
+Frequently accessed: TTL=1 min (refresh often)
+Rarely accessed: TTL=1 day (refresh rarely)
+Medium accessed: TTL=10 min
+
+Auto-optimizes based on usage!
+```
+
+### 7. Variable TTL by Data Type
+
+Different TTL for different data types.
+
+```
+Session:          5 minutes
+User Profile:     1 hour
+Product Catalog:  24 hours
+Ad Campaign:      15 minutes
+System Config:    30 days
+```
+
+---
+
+## TTL vs Cache Eviction
+
+**TTL and Eviction are INDEPENDENT but COMPLEMENTARY**
+
+| Aspect | TTL | Eviction (LRU/LFU) |
+|--------|-----|-------------------|
+| **Trigger** | Time-based | Space-based (cache full) |
+| **When** | Automatically after X sec | Only when cache FULL |
+| **Removes** | Old/stale data | Unused/least-used data |
+| **Independent** | ✅ YES (anytime) | ✅ YES (if full) |
+
+### How They Work Together
+
+```
+                    CACHE ITEM
+                        │
+         ┌──────────────┼──────────────┐
+         ▼              ▼              ▼
+      TTL EXPIRED   CACHE FULL   MANUALLY DELETED
+    (Time trigger) (Space trigger) (App trigger)
+         │              │              │
+         └──────────────┼──────────────┘
+                        ▼
+                    REMOVE ITEM
+```
+
+### Timeline Example
+
+```
+Time    | Event                      | Action
+--------|----------------------------|-------------------
+10:00   | Cache Item X (TTL=10min)   | Add
+10:02   | Cache full (100 items)     | Full ✓
+10:05   | Item Y TTL expires         | Remove (TTL)
+10:05   | Cache: 99 items            | Space freed!
+10:12   | Cache full again           | Full ✓
+10:12   | New request                | LRU eviction
+```
+
+### TL;DR
+
+```
+Without TTL:   Stale data lingers ❌
+Without Eviction: Cache can overflow ❌
+With Both:     Perfect cache! ✓
+
+TTL = What (remove old)
+Eviction = How (remove when full using LRU/LFU)
+```
+
+---
+
+## Item-Level vs Cache-Level TTL
+
+**TTL can be at ITEM-level (each key) or CACHE-level (entire cache)**
+
+### Item-Level TTL (Most Common)
+
+Each item has its OWN individual TTL.
+
+```
+Cache:
+├─ Item A: TTL=5 min (expires 10:05)
+├─ Item B: TTL=1 hour (expires 11:00)
+├─ Item C: TTL=10 min (expires 10:10)
+└─ Item D: TTL=24 hours (expires tomorrow)
+
+Each expires at DIFFERENT times!
+```
+
+**Code:**
+
+```java
+// Item-level TTL (Redis)
+SET user:1 data EX 300      # 5 min
+SET profile:1 data EX 3600  # 1 hour
+GET user:1                  # Works for 5 min only
+GET profile:1               # Works for 1 hour
+```
+
+**Common in:** Redis, Memcached
+
+### Cache-Level TTL (Rare)
+
+Entire cache or session expires after X seconds.
+
+```
+Cache session starts: 10:00
+Cache-level TTL: 30 minutes
+Cache expires: 10:30 (completely!)
+
+Result: ALL items removed!
+Individual TTLs ignored!
+```
+
+**Example: Session Timeout**
+
+```java
+// Entire session cache expires
+HttpSession session = request.getSession();
+session.setMaxInactiveInterval(1800);  // 30 min
+
+// After 30 min: ENTIRE cache cleared!
+// All items removed regardless of individual TTL
+```
+
+### Comparison
+
+| Aspect | Item-Level | Cache-Level |
+|--------|-----------|------------|
+| **Granularity** | Per item | Entire cache |
+| **Individual TTL** | ✅ YES | ❌ NO |
+| **Flexibility** | High | Low |
+| **Common** | ✅ YES | ❌ Rare (Sessions) |
+
+### Can You Have BOTH?
+
+**YES! Item-level + Cache-level TTL**
+
+```
+Cache-level: 30 min session timeout
+├─ Item A: TTL=5 min (expires first)
+├─ Item B: TTL=10 min (expires second)
+├─ Item C: TTL=1 hour (expires at 30 min cache timeout)
+
+Whichever expires FIRST wins!
+```
+
+### TL;DR
+
+```
+Item-Level TTL (Common):
+├─ Each item: put(key, value, TTL)
+├─ Items expire at different times
+└─ Example: Redis, Memcached
+
+Cache-Level TTL (Rare):
+├─ Entire cache: cache.setMaxAge(TTL)
+├─ All items expire together
+└─ Example: Session timeout
+
+99% of cases: Item-level TTL ✓
 ```
