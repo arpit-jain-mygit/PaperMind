@@ -1075,100 +1075,130 @@ Multiple writers: Only 1 at a time ✓
 
 ## TTL (Time To Live) Strategies
 
-**TTL = When cached data expires and should be refreshed**
+**TTL fundamentally answers: "When should cached data expire?"**
 
-### 1. Fixed TTL (Most Common)
+### Two Ways to Express TTL
 
-Expires after fixed duration, regardless of usage.
+#### 1. Duration-Based (Relative)
+
+"Expire X seconds/minutes from when cached"
 
 ```
-Item cached at 10:00, TTL=5min
-Expires at 10:05 (automatically removed)
+cache.put(key, value, TTL=300);  # 5 minutes from now
 
-10:00  Cached ✓
-10:02  Access: still cached ✓
-10:05  Expired ❌ (remove from cache)
+Item cached at 10:00 → Expires at 10:05
+Item cached at 11:00 → Expires at 11:05
+Item cached at 12:00 → Expires at 12:05
+
+Same TTL, different expiry times (relative to caching)
 ```
 
-### 2. Sliding Window TTL (Resets on Access)
+#### 2. Time-Based (Absolute)
+
+"Expire at specific point in time"
+
+```
+cache.put(key, value, expireAt=2024-01-15T23:59:59);
+
+Item cached at 10:00 AM → Expires at midnight
+Item cached at 11:00 AM → Expires at midnight
+Item cached at 11:30 PM → Expires at midnight
+
+Same expiry time (absolute point in time)
+```
+
+### Strategies for Managing TTL
+
+These are STRATEGIES, not different TTL types:
+
+#### Strategy 1: Fixed Duration
+
+Expires after set duration, no reset.
+
+```
+TTL=5 min (set once, doesn't change)
+
+10:00  Cached (expires 10:05)
+10:02  Access: still expires 10:05 ❌
+10:05  Expires (removed)
+```
+
+**Use:** API responses, general data
+
+#### Strategy 2: Sliding Window
 
 TTL resets every time item is accessed.
 
 ```
-10:00  Cached, expires 10:05
-10:02  Access: expires resets to 10:07
-10:04  Access: expires resets to 10:09
+TTL=5 min (resets on access)
 
-Result: Item stays in cache if actively used!
+10:00  Cached (expires 10:05)
+10:02  Access: expires resets to 10:07 ✓
+10:04  Access: expires resets to 10:09 ✓
+10:09  Expires (if no access)
+
+Item stays in cache as long as accessed!
 ```
 
-**Best for:** Session tokens, active user data
+**Use:** Sessions, active user data
 
-### 3. Absolute TTL (Fixed Expiry Time)
-
-Expires at specific time, regardless of usage.
-
-```
-Expires at: 2024-01-15 midnight
-
-10:00 AM: Cached ✓
-11:00 AM: Accessed ✓
-Midnight: Expires ❌ (no matter how many accesses)
-```
-
-**Best for:** Daily reports, batch data
-
-### 4. Lazy TTL (Checked on Access)
-
-Expiry checked only when accessed, not removed proactively.
-
-```
-10:05  TTL expired (still in memory)
-10:06  Access: Check TTL → Expired! Remove
-
-Advantage: No background cleanup
-Disadvantage: Stale data in memory
-```
-
-### 5. Proactive TTL (Refresh Before Expiry)
+#### Strategy 3: Proactive Refresh
 
 Refresh cache BEFORE it expires.
 
 ```
-TTL=5min, Refresh before=30sec
+TTL=5 min, refresh before=30 sec
 
 10:04:30  TTL near expiry → Background refresh
-10:05  Cache updated with fresh data
-10:06  User access: Gets fresh data ✓
+10:05  Cache refreshed with fresh data
+10:06  User access: Gets latest data ✓
 
 No cache miss! Always fresh!
 ```
 
-**Best for:** Popular data, critical data, configs
+**Use:** Popular/hot data, leaderboards, critical data
 
-### 6. Adaptive TTL (Based on Access Patterns)
+#### Strategy 4: Lazy Check
 
-TTL changes based on how frequently accessed.
-
-```
-Frequently accessed: TTL=1 min (refresh often)
-Rarely accessed: TTL=1 day (refresh rarely)
-Medium accessed: TTL=10 min
-
-Auto-optimizes based on usage!
-```
-
-### 7. Variable TTL by Data Type
-
-Different TTL for different data types.
+Expiry checked only when accessed, not removed proactively.
 
 ```
-Session:          5 minutes
-User Profile:     1 hour
-Product Catalog:  24 hours
-Ad Campaign:      15 minutes
-System Config:    30 days
+10:05  TTL expired (still in memory - stale!)
+10:06  Access: Check TTL → Expired! Remove
+
+Advantage: No background cleanup
+Disadvantage: Stale data in memory temporarily
 ```
+
+**Use:** Low-traffic items, memory optimization
+
+#### Strategy 5: Adaptive TTL
+
+Adjust duration based on access frequency.
+
+```
+Frequently accessed: TTL=1 min (hot data)
+Rarely accessed: TTL=24 hours (cold data)
+Medium accessed: TTL=10 min (warm data)
+
+Auto-optimizes based on usage patterns!
+```
+
+**Use:** Unknown access patterns, hybrid workloads
+
+#### Strategy 6: Variable TTL by Data Type
+
+Different TTL per data type.
+
+```
+Session:          5 min (changes frequently)
+User Profile:     1 hour (medium change)
+Product Catalog:  24 hours (admin-managed)
+System Config:    7 days (rarely changes)
+Daily Report:     End of day (time-specific)
+```
+
+**Use:** Multi-type caches, mixed workloads
 
 ---
 
@@ -1226,9 +1256,9 @@ Eviction = How (remove when full using LRU/LFU)
 
 ## Item-Level vs Cache-Level TTL
 
-**TTL can be at ITEM-level (each key) or CACHE-level (entire cache)**
+**Where TTL is applied: Individual items or entire cache?**
 
-### Item-Level TTL (Most Common)
+### Item-Level TTL (99% of Cases)
 
 Each item has its OWN individual TTL.
 
@@ -1239,79 +1269,111 @@ Cache:
 ├─ Item C: TTL=10 min (expires 10:10)
 └─ Item D: TTL=24 hours (expires tomorrow)
 
-Each expires at DIFFERENT times!
+Each expires at DIFFERENT times independently!
 ```
 
 **Code:**
 
 ```java
 // Item-level TTL (Redis)
-SET user:1 data EX 300      # 5 min
-SET profile:1 data EX 3600  # 1 hour
-GET user:1                  # Works for 5 min only
-GET profile:1               # Works for 1 hour
+SET user:1 data EX 300      # 5 min TTL
+SET profile:1 data EX 3600  # 1 hour TTL
+SET config data EX 86400    # 24 hours TTL
+
+// Each expires at its own time
 ```
 
-**Common in:** Redis, Memcached
+**Examples:** Redis, Memcached, most caches
 
-### Cache-Level TTL (Rare)
+**Benefits:**
+```
+✅ Granular control per item
+✅ Different data types = different TTLs
+✅ Flexible management
+✅ Standard approach
+```
 
-Entire cache or session expires after X seconds.
+---
+
+### Cache-Level TTL (Rare, Sessions Only)
+
+Entire cache/session expires together, ALL items removed.
 
 ```
 Cache session starts: 10:00
 Cache-level TTL: 30 minutes
-Cache expires: 10:30 (completely!)
+Cache expires: 10:30 (EVERYTHING cleared!)
 
-Result: ALL items removed!
-Individual TTLs ignored!
+Result: ALL items removed (regardless of individual TTL)
 ```
 
-**Example: Session Timeout**
+**Code:**
 
 ```java
-// Entire session cache expires
+// Cache-level TTL (Session Timeout)
 HttpSession session = request.getSession();
-session.setMaxInactiveInterval(1800);  // 30 min
+session.setMaxInactiveInterval(1800);  // 30 min total TTL
 
 // After 30 min: ENTIRE cache cleared!
-// All items removed regardless of individual TTL
+// Even if an item had 24-hour individual TTL
 ```
+
+**Examples:** Web session timeouts, temporary caches
+
+**Benefits:**
+```
+✅ Simple: One timeout for whole session
+✅ Safe: Guarantees session cleanup
+✅ Common in: Web frameworks (JSP, Spring)
+```
+
+---
 
 ### Comparison
 
 | Aspect | Item-Level | Cache-Level |
 |--------|-----------|------------|
-| **Granularity** | Per item | Entire cache |
-| **Individual TTL** | ✅ YES | ❌ NO |
+| **Scope** | Per item | Entire cache |
+| **Individual TTLs** | ✅ YES (each item diff) | ❌ NO (all same) |
 | **Flexibility** | High | Low |
-| **Common** | ✅ YES | ❌ Rare (Sessions) |
+| **Common** | ✅ YES (99%) | ❌ Rare (1%, sessions) |
+| **Example** | Redis: Each key has TTL | Session: 30 min timeout |
+
+---
 
 ### Can You Have BOTH?
 
-**YES! Item-level + Cache-level TTL**
+**YES! Item-level + Cache-level TTL (Hybrid)**
 
 ```
-Cache-level: 30 min session timeout
-├─ Item A: TTL=5 min (expires first)
-├─ Item B: TTL=10 min (expires second)
-├─ Item C: TTL=1 hour (expires at 30 min cache timeout)
+Session expires: 30 min (cache-level)
+├─ Item A: TTL=5 min (item-level)
+├─ Item B: TTL=10 min (item-level)
+├─ Item C: TTL=2 hours (item-level)
 
-Whichever expires FIRST wins!
+Whichever expires FIRST wins:
+├─ 5 min: Item A removed
+├─ 10 min: Item B removed
+├─ 30 min: Session timeout → ALL removed!
+└─ Item C never gets to 2 hours
 ```
+
+**Result:** Items removed by earliest expiry (item or cache level)
+
+---
 
 ### TL;DR
 
 ```
-Item-Level TTL (Common):
+99% of cases: Item-Level TTL
 ├─ Each item: put(key, value, TTL)
-├─ Items expire at different times
-└─ Example: Redis, Memcached
+├─ Different items = different expiry times
+└─ Example: Redis (SET key value EX 300)
 
-Cache-Level TTL (Rare):
-├─ Entire cache: cache.setMaxAge(TTL)
-├─ All items expire together
-└─ Example: Session timeout
+1% of cases: Cache-Level TTL
+├─ Entire cache: setMaxAge(TTL) or setMaxInactiveInterval()
+├─ All items: same expiry time
+└─ Example: Web session timeout
 
-99% of cases: Item-level TTL ✓
+Best practice: Use Item-level + add Cache-level for safety
 ```
