@@ -1543,3 +1543,322 @@ To reach this level, add:
 ---
 
 **Bottom Line**: Your R3 is **INTERVIEW-READY for MAANG phone screen**. You'll likely pass and move to on-site. To guarantee offer, add pseudo-code for batch cleanup, monitoring strategy, and trade-off discussions. You're **80% there**.
+
+---
+
+---
+
+## LRU Cache - Revision #3 (With HEAD & TAIL Sentinel Pointers)
+
+### **Data Structures**
+
+```
+1. HashMap<String, Node> - O(1) key lookup
+   Example: {"A": Node(A), "B": Node(B), "C": Node(C)}
+
+2. DoublyLinkedList with HEAD and TAIL sentinel nodes
+   - HEAD: dummy node pointing to oldest (LRU) node
+   - TAIL: dummy node pointing to newest (MRU) node
+   
+   Structure: HEAD → [oldest] ↔ ... ↔ [newest] → TAIL
+```
+
+---
+
+### **Initial State: Cache Capacity = 3**
+
+```
+DLL Structure:
+  HEAD → A ↔ B ↔ C → TAIL
+  
+  HEAD points to A (A is least recently used)
+  TAIL points to C (C is most recently used)
+
+HashMap:
+  {"A": Node(A), "B": Node(B), "C": Node(C)}
+```
+
+---
+
+### **Get Operation: Get("B")**
+
+```
+BEFORE:
+  DLL: HEAD → A ↔ B ↔ C → TAIL
+  HEAD pointer = A
+  TAIL pointer = C
+
+PROCESS:
+  i)   Check in HashMap: "B" exists ✓
+  ii)  Fetch Node B value from DLL
+  iii) Remove B from middle position
+       DLL: HEAD → A ↔ C → TAIL
+  iv)  Move B to end (before TAIL)
+       DLL: HEAD → A ↔ C ↔ B → TAIL
+  v)   Update HEAD and TAIL pointers
+       HEAD pointer = A (unchanged)
+       TAIL pointer = B (changed)
+
+AFTER:
+  DLL: HEAD → A ↔ C ↔ B → TAIL
+  A is still LRU (pointed by HEAD)
+  B is now MRU (pointed by TAIL)
+```
+
+---
+
+### **Put Operation - Case (a): Update Existing Key**
+
+```
+BEFORE:
+  DLL: HEAD → A ↔ C ↔ B → TAIL
+  Node B: value = B1
+
+Put("B", B2):
+  i)   Check HashMap: "B" exists ✓
+  ii)  Update node value in DLL: B1 → B2
+  iii) Remove B from current position
+       DLL: HEAD → A ↔ C → TAIL
+  iv)  Move B to end
+       DLL: HEAD → A ↔ C ↔ B → TAIL
+  v)   Update HEAD and TAIL pointers
+       HEAD pointer = A (unchanged)
+       TAIL pointer = B (unchanged, already at tail)
+
+AFTER:
+  DLL: HEAD → A ↔ C ↔ B → TAIL
+  Node B: value = B2 (updated)
+```
+
+---
+
+### **Put Operation - Case (b): Add New Key (Cache Full)**
+
+```
+BEFORE:
+  DLL: HEAD → A ↔ C ↔ B → TAIL  (FULL 3/3)
+  Cache size = 3
+
+Put("D", 40):
+  
+  EVICTION:
+  i)   Check if cache full: YES
+  ii)  Get node after HEAD: A (least recently used)
+       A is the first node after HEAD sentinel
+  iii) Remove A from DLL
+       DLL: HEAD → C ↔ B → TAIL
+  iv)  Remove from HashMap: cache.remove("A")
+       HashMap: {"B": ..., "C": ..., "D": ...}
+  
+  ADD NEW NODE:
+  v)   Create new Node D with value 40
+  vi)  Add D at end (before TAIL)
+       DLL: HEAD → C ↔ B ↔ D → TAIL
+  vii) Add to HashMap: cache.put("D", Node(D))
+  viii) Update HEAD and TAIL pointers
+        HEAD pointer = C (no change, still points to oldest)
+        TAIL pointer = D (changed)
+
+AFTER:
+  DLL: HEAD → C ↔ B ↔ D → TAIL
+  HashMap: {"B": Node(B), "C": Node(C), "D": Node(D)}
+  Cache size = 3/3
+  HEAD.next = C (LRU, will be evicted next)
+  TAIL.prev = D (MRU, most recently added)
+```
+
+---
+
+### **Why HEAD and TAIL Pointers Matter**
+
+```
+Advantage 1: O(1) Eviction
+  - Evict node = HEAD.next (always first real node)
+  - No need to search
+  - No need for min/max tracking
+
+Advantage 2: O(1) Access Update
+  - Move to MRU = move before TAIL
+  - No need to know current position
+  - Just update prev/next pointers
+
+Advantage 3: No Null Checks
+  - HEAD always exists
+  - TAIL always exists
+  - No "if (head == null)" checks needed
+
+Advantage 4: Clear Boundaries
+  - HEAD marks oldest boundary
+  - TAIL marks newest boundary
+  - Easy to understand and debug
+```
+
+---
+
+### **Node Class Structure**
+
+```java
+class Node {
+    String key;
+    int value;
+    Node prev;      // Link to previous node
+    Node next;      // Link to next node
+}
+
+// Sentinel nodes (can have dummy key/value)
+Node HEAD = new Node("HEAD", -1);   // Dummy
+Node TAIL = new Node("TAIL", -1);   // Dummy
+
+// Initialize empty DLL
+HEAD.next = TAIL;
+TAIL.prev = HEAD;
+// Now: HEAD ↔ TAIL (empty list, ready to add nodes)
+```
+
+---
+
+### **Critical Operations with HEAD/TAIL**
+
+#### **Eviction (O(1))**
+
+```java
+private void evict() {
+    Node lru = HEAD.next;  // ← Always LRU node after HEAD
+    
+    // Remove from DLL
+    lru.prev.next = lru.next;
+    lru.next.prev = lru.prev;
+    
+    // Remove from HashMap
+    cache.remove(lru.key);
+}
+```
+
+#### **Move to End (O(1))**
+
+```java
+private void moveToTail(Node node) {
+    // Remove from current position
+    node.prev.next = node.next;
+    node.next.prev = node.prev;
+    
+    // Add before TAIL (at end)
+    node.prev = TAIL.prev;
+    node.next = TAIL;
+    TAIL.prev.next = node;
+    TAIL.prev = node;
+}
+```
+
+#### **Get Operation**
+
+```java
+public int get(String key) {
+    lock.readLock().lock();
+    try {
+        if (!cache.containsKey(key)) {
+            return -1;  // not found
+        }
+        
+        Node node = cache.get(key);
+        
+        // Upgrade to write lock for moving
+        lock.readLock().unlock();
+        lock.writeLock().lock();
+        try {
+            moveToTail(node);  // Move to most recent
+            return node.value;
+        } finally {
+            lock.writeLock().unlock();
+        }
+    } finally {
+        if (lock.readLock().tryLock()) {
+            lock.readLock().unlock();
+        }
+    }
+}
+```
+
+---
+
+### **Example: Step-by-Step with HEAD/TAIL**
+
+```
+Step 1: Put("A", 10)
+  DLL: HEAD ↔ A ↔ TAIL
+  HEAD.next = A (LRU)
+  TAIL.prev = A (MRU)
+
+Step 2: Put("B", 20)
+  DLL: HEAD ↔ A ↔ B ↔ TAIL
+  HEAD.next = A (LRU)
+  TAIL.prev = B (MRU)
+
+Step 3: Get("A")
+  Remove A from middle: HEAD ↔ B ↔ TAIL
+  Move A to end: HEAD ↔ B ↔ A ↔ TAIL
+  HEAD.next = B (LRU)
+  TAIL.prev = A (MRU)
+
+Step 4: Put("C", 30) [Cache Full, capacity=3]
+  Evict HEAD.next = B
+  DLL: HEAD ↔ A ↔ TAIL
+  Add C: HEAD ↔ A ↔ C ↔ TAIL
+  HEAD.next = A (LRU)
+  TAIL.prev = C (MRU)
+```
+
+---
+
+### **Summary: HEAD and TAIL Benefits**
+
+| Feature | Without Sentinels | With HEAD/TAIL |
+|---------|-------------------|----------------|
+| **Eviction** | Search for oldest | HEAD.next (O(1)) |
+| **Move to Recent** | Track current pos | Before TAIL (O(1)) |
+| **Empty check** | if (head == null) | Never null |
+| **Code clarity** | Confusing boundaries | Clear (HEAD/TAIL) |
+| **Edge cases** | Many null checks | Fewer checks |
+
+---
+
+### **Honest Feedback on LRU R3**
+
+#### ✅ What's Correct
+
+1. ✅ **HEAD and TAIL sentinels** — Simplifies implementation
+2. ✅ **O(1) eviction** — Always evict HEAD.next
+3. ✅ **O(1) access** — Move to before TAIL
+4. ✅ **Clear boundaries** — No null confusion
+5. ✅ **All NFRs addressed** — Thread-safety, TTL, stats, capacity
+
+#### 🔴 Still Missing (for 90%+ score)
+
+1. ⚠️ Lock upgrade logic (read→write) not detailed
+2. ⚠️ Pseudo-code for moveToTail not provided
+3. ⚠️ Edge case: empty DLL handling
+4. ⚠️ Monitoring strategy incomplete
+5. ⚠️ Failure recovery (corruption detection) missing
+
+---
+
+### **Final Verdict on LRU R3**
+
+```
+Score: 80-85/100
+
+✅ READY FOR INTERVIEW
+   - Correct data structures with sentinels
+   - O(1) operations clearly explained
+   - Thread-safety addressed
+   - TTL strategies outlined
+   - Edge cases handled
+
+🎯 TO REACH 90%+
+   - Add pseudo-code for moveToTail
+   - Detail lock upgrade strategy
+   - Add monitoring metrics
+   - Discuss failure scenarios
+
+Status: STRONG PASS for phone screen ✓
+```
