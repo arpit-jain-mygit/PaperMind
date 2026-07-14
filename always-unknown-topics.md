@@ -21,6 +21,8 @@ Topics that frequently come up in interviews but are often unclear or misunderst
 13. [Item-Level vs Cache-Level TTL](#item-level-vs-cache-level-ttl)
 14. [Cache Capacity Boundary Logic](#cache-capacity-boundary-logic)
 15. [Calculate Memory Consumed by HashMap](#calculate-memory-consumed-by-hashmap)
+16. [Hashing Concept](#hashing-concept)
+17. [Consistent Hashing](#consistent-hashing)
 
 ---
 
@@ -1719,4 +1721,280 @@ Implementation tip:
 ├─ Store in Map<K, Long> sizeMap
 ├─ Reuse on eviction
 └─ Avoid recalculating every time
+```
+
+## Hashing Concept
+
+**Hashing = Convert any input into a fixed-size number**
+
+```
+hash("user:1") = 45
+hash("user:2") = 123
+hash("anything") = some_number
+```
+
+**Why?**
+```
+Need to distribute data across servers.
+
+hash(key) % number_of_servers = which_server
+
+Example (3 servers):
+hash("user:1") = 45 → 45 % 3 = 0 → Server 0
+hash("user:2") = 46 → 46 % 3 = 1 → Server 1
+hash("user:3") = 47 → 47 % 3 = 2 → Server 2
+```
+
+**Key Property:**
+```
+Same input = Same hash = Same server (ALWAYS)
+
+hash("user:123") always returns same value
+└─ Deterministic (consistent)
+```
+
+---
+
+## Consistent Hashing
+
+### Q1: Why Can't We Use Simple `hash(key) % num_servers`?
+
+**Answer:** When you add a server, the modulo divisor changes, so ALL keys recalculate to different servers.
+
+| Method | Before | After | Issue |
+|--------|--------|-------|-------|
+| `hash(key) % 3` | product_001 → 523 % 3 = 1 (Server B) | product_001 → 523 % 4 = 3 (Server D) | ❌ MOVED! |
+
+**Real Impact:** Add 1 server to 10 servers → **~80% of keys move** → Cache thrashing → DB hammered 💥
+
+---
+
+### Q2: What's the Magic of Consistent Hashing?
+
+**Answer:** Use a **fixed ring size** instead of modulo by number of servers.
+
+| Aspect | Regular Hash | Consistent Hash |
+|--------|-------------|-----------------|
+| Hash calculation | `hash(key) % num_servers` | `hash(key) % ring_size` |
+| Changes when | Server added → **ALL keys recalculate** | Server added → **Ring size stays same** |
+| Redistribution | ~80-100% | ~1/n (e.g., 10% with 10 servers) |
+| Better? | ❌ Bad | ✅ Good |
+
+**Why it works:** Keys stay at same position on ring. Only the server nearest to them changes.
+
+---
+
+### Q3: Show Me with Real Numbers
+
+**Setup:** Ring size = 100, 3 Servers at positions A(20), B(40), C(75)
+
+| Product | Hash | Position % 100 | **Before Adding D** | **After Adding D at 50** | Moved? |
+|---------|------|---|---------|---------|--------|
+| product_001 | 523 | 23 | A (20)* | A (20)* | ✅ NO |
+| product_002 | 1047 | 47 | C (75)* | D (50)* | ❌ YES |
+| product_003 | 85 | 85 | A (20)* | A (20)* | ✅ NO |
+| product_004 | 412 | 12 | A (20)* | A (20)* | ✅ NO |
+| product_005 | 654 | 54 | C (75)* | C (75)* | ✅ NO |
+| product_006 | 299 | 99 | A (20)* | A (20)* | ✅ NO |
+| product_007 | 782 | 82 | A (20)* | A (20)* | ✅ NO |
+| product_008 | 165 | 65 | C (75)* | C (75)* | ✅ NO |
+| product_009 | 338 | 38 | B (40)* | B (40)* | ✅ NO |
+| product_010 | 509 | 9 | A (20)* | A (20)* | ✅ NO |
+
+**Result:** Only **1 out of 10 (10%) moved** ✓  
+*= "Next server clockwise" from that position
+
+---
+
+### Q4: Why Only 10% Moved? Explain the Mechanism
+
+**Answer:** Only keys in the ring range of the new server are affected.
+
+| Ring Range | Original | New | Keys Affected |
+|-----------|----------|-----|--------------|
+| 0-20 | → A | → A | None (unchanged) |
+| 20-40 | → B | → B | None (unchanged) |
+| 40-50 | → C | → **D (NEW!)** | product_002 (hash=47) ✓ |
+| 50-75 | → C | → C | None (unchanged) |
+| 75-100 | → A | → A | None (unchanged) |
+
+**Key insight:** Server D at position 50 only steals the [40-50) ring range from C. That's only 10% of the ring.
+
+---
+
+### Q5: What's "Next Server Clockwise"?
+
+**Answer:** Starting from key's ring position, find the first server ≥ that position (circular).
+
+**Example with product_002 (hash=47):**
+
+```
+Before: Servers at 20 ──── 40 ──── 75 ──── 100
+                                              ↑ wraps to 0
+        
+product_002 at position 47:
+- Is there a server ≥ 47? 
+- YES! Server at 75
+- product_002 → Server C ✓
+
+After: Servers at 20 ──── 40 -- 50 -- 75 ──── 100
+
+product_002 at position 47:
+- Is there a server ≥ 47?
+- YES! Server at 50 (NEW D is before 75)
+- product_002 → Server D ✓ MOVED!
+```
+
+---
+
+### Q6: Comparison - Regular Hash vs Consistent Hash
+
+**Same 10 products, add 1 server to 3 servers:**
+
+**REGULAR HASH: `hash % num_servers` (3 → 4)**
+
+| Product | 3 Servers | 4 Servers | Moved? |
+|---------|-----------|-----------|--------|
+| product_001 | 523 % 3 = 1 → B | 523 % 4 = 3 → D | ❌ YES |
+| product_002 | 1047 % 3 = 0 → A | 1047 % 4 = 3 → D | ❌ YES |
+| product_003 | 85 % 3 = 1 → B | 85 % 4 = 1 → B | ✅ NO |
+| product_004 | 412 % 3 = 1 → B | 412 % 4 = 0 → A | ❌ YES |
+| product_005 | 654 % 3 = 0 → A | 654 % 4 = 2 → C | ❌ YES |
+| product_006 | 299 % 3 = 2 → C | 299 % 4 = 3 → D | ❌ YES |
+| product_007 | 782 % 3 = 2 → C | 782 % 4 = 2 → C | ✅ NO |
+| product_008 | 165 % 3 = 0 → A | 165 % 4 = 1 → B | ❌ YES |
+| product_009 | 338 % 3 = 2 → C | 338 % 4 = 2 → C | ✅ NO |
+| product_010 | 509 % 3 = 2 → C | 509 % 4 = 1 → B | ❌ YES |
+
+**Total moved: 7 out of 10 (70%)** 💥
+
+---
+
+**CONSISTENT HASH: Ring size 100 (never changes)**
+
+| Product | Position | Before | After D(50) | Moved? |
+|---------|----------|--------|------------|--------|
+| product_001 | 23 | A(20) | A(20) | ✅ NO |
+| product_002 | 47 | C(75) | D(50) | ❌ YES |
+| product_003 | 85 | A(20) | A(20) | ✅ NO |
+| product_004 | 12 | A(20) | A(20) | ✅ NO |
+| product_005 | 54 | C(75) | C(75) | ✅ NO |
+| product_006 | 99 | A(20) | A(20) | ✅ NO |
+| product_007 | 82 | A(20) | A(20) | ✅ NO |
+| product_008 | 65 | C(75) | C(75) | ✅ NO |
+| product_009 | 38 | B(40) | B(40) | ✅ NO |
+| product_010 | 9 | A(20) | A(20) | ✅ NO |
+
+**Total moved: 1 out of 10 (10%)** ✓
+
+**Difference: 70% vs 10% = 7x better!**
+
+---
+
+### Q7: What Are Virtual Nodes?
+
+**Answer:** Place each server **multiple times** on the ring to improve distribution.
+
+**Without Virtual Nodes:**
+```
+Ring:  0 -------- 33 -------- 67 -------- 100
+      Server A   Server B   Server C
+
+Problem: Uneven distribution, A gets more load
+```
+
+**With Virtual Nodes (each server = 3 copies):**
+```
+Ring:  0--A---B--A---C--B--A--C---B---C---A--100
+       S  S  S  S  S  S  S  S  S  S  S  S
+
+Result: More even distribution across ring
+```
+
+| Metric | Without VN | With VN (3x) |
+|--------|-----------|------------|
+| Distribution | Uneven | More uniform |
+| Hot spots | Possible | Less likely |
+| Per server impact | High | Low |
+
+---
+
+### Q8: Real-World Production Impact
+
+**Scenario:** 1 billion keys, 10 servers → Add 1 new server
+
+| Method | Keys Moved | Network Requests | Cache Hit Rate Impact |
+|--------|-----------|------------------|----------------------|
+| Regular hash | ~909M (90%) | 909M requests | 😱 Cache thrash |
+| Consistent hash | ~91M (10%) | 91M requests | ✓ Mostly intact |
+| **Savings** | **818M fewer** | **90% less work** | **~10x better** |
+
+---
+
+### Q9: Key Concepts Summary
+
+| Concept | Explanation |
+|---------|------------|
+| **Ring Size** | Fixed number (e.g., 100 or 2^32) — NEVER changes |
+| **Key Position** | `hash(key) % ring_size` — SAME before & after |
+| **Server Position** | `hash(server_id)` — determines where on ring |
+| **Next Clockwise** | First server position ≥ key position |
+| **Affected Range** | Only keys in [new_server.pos - prev_server.pos) |
+| **Why It Works** | Keys stay at same ring position; only servers move |
+
+---
+
+### Q10: When Do We Use Consistent Hashing?
+
+**Use in:**
+- ✅ Redis/Memcached clusters (distribute cache across servers)
+- ✅ Database sharding (distribute data across databases)
+- ✅ Load balancers (distribute requests across servers)
+- ✅ CDNs (distribute content across edge nodes)
+- ✅ Any distributed system with dynamic membership
+
+**Avoid if:**
+- ❌ Single server (no distribution needed)
+- ❌ Fixed servers (no scaling planned)
+
+---
+
+## How Zones Work in Consistent Hashing
+
+**Zones = Auto-created ranges by hashing servers**
+
+| Ring Section | Server | Why |
+|-------------|--------|-----|
+| 0 to hash(Server A) | Server A | Range between 0 and A's hash |
+| hash(Server A) to hash(Server B) | Server B | Range between A and B |
+| hash(Server B) to 2^32 (wrap) | A or C | Depends on ring positions |
+
+**Key Rule:** "Zone belongs to the server STARTING at that position"
+
+---
+
+## TL;DR: Consistent Hashing
+
+```
+Problem:
+  Add server → hash % num_servers changes → ~100% keys rehashed → Disaster
+
+Solution:
+  Use fixed ring size → hash % ring_size stays same → Only ~1/n keys move → Safe
+
+Magic Formula:
+  key_position = hash(key) % ring_size       ← NEVER CHANGES
+  server_position = hash(server_id)          ← WHERE SERVER SITS
+  next_server = find_first(server ≥ key)     ← "NEXT CLOCKWISE"
+
+Real Impact:
+  Without: 1B keys + 1 new server = 909M keys move (90%)
+  With: 1B keys + 1 new server = 91M keys move (10%)
+  → 10x better!
+
+Used in:
+  ├─ Redis/Memcached clusters (distributed cache)
+  ├─ Database sharding (distributed storage)
+  ├─ Load balancers (distributed requests)
+  └─ CDNs (distributed content)
 ```
