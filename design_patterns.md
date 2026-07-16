@@ -71,6 +71,251 @@ You care about **responsibilities and interactions** — who calls whom, how do 
 
 ---
 
+#### Real-World Tech Examples
+
+**1. Database Connection Pool**
+```java
+// WRONG: Creates new pool each time
+ConnectionPool pool1 = new ConnectionPool();
+ConnectionPool pool2 = new ConnectionPool();
+// Now you have 2 pools with duplicate connections ❌
+
+// RIGHT: Singleton ensures one pool
+ConnectionPool pool = ConnectionPool.getInstance();
+// Always the same instance ✅
+```
+
+**2. Logger**
+```java
+// Production app has thousands of log statements
+Logger logger1 = new Logger();  // ❌ Creates new logger object 1000+ times
+Logger logger2 = new Logger();  // ❌ Wastes memory, creates file handles
+
+// Singleton
+Logger logger = Logger.getInstance();  // ✅ All logs use same logger instance
+logger.info("User login");
+logger.info("User action");
+logger.info("User logout");
+// One logger, one log file, clean organization
+```
+
+**3. Configuration Manager**
+```java
+// WRONG: Loads config multiple times
+Config config1 = new Config();
+config1.load("app.properties");
+Config config2 = new Config();
+config2.load("app.properties");  // Redundant disk I/O ❌
+
+// RIGHT: Singleton loads once
+Config config = Config.getInstance();  // Loaded once at startup
+String dbUrl = config.get("database.url");  // Returns cached value ✅
+```
+
+**4. Cache Manager (Redis, Memcached)**
+```java
+// WRONG: Multiple cache instances = no sharing
+Cache cache1 = new Cache();
+cache1.set("user:123", userData);
+
+Cache cache2 = new Cache();
+String data = cache2.get("user:123");  // Returns null ❌ (different instance)
+
+// RIGHT: Singleton shares cache
+Cache cache = CacheManager.getInstance();
+cache.set("user:123", userData);
+
+Cache cache2 = CacheManager.getInstance();  // Same instance
+String data = cache2.get("user:123");  // Returns userData ✅
+```
+
+**5. Thread Pool**
+```java
+// WRONG: Creates multiple thread pools
+ExecutorService pool1 = Executors.newFixedThreadPool(10);
+ExecutorService pool2 = Executors.newFixedThreadPool(10);
+// Now 20 threads instead of 10 ❌
+
+// RIGHT: Singleton manages one thread pool
+ExecutorService pool = ThreadPoolManager.getInstance().getPool();
+pool.execute(task1);
+pool.execute(task2);
+// All tasks use same 10 threads ✅
+```
+
+**6. Application Settings/Configuration**
+```java
+// Spring Framework's ApplicationContext (Singleton by default)
+ApplicationContext context = ApplicationContext.getInstance();
+
+Service service = context.getBean(Service.class);  // Same instance always
+// No matter where you call it, you get the same context
+```
+
+**7. Database Connection (Single Connection)**
+```java
+// Some apps need a single, persistent connection
+DatabaseConnection conn = DatabaseConnection.getInstance();
+conn.query("SELECT * FROM users");
+
+// Later in app
+DatabaseConnection conn2 = DatabaseConnection.getInstance();
+// Same connection object ✅
+```
+
+**8. Metrics/Monitoring**
+```java
+// Track app-wide metrics
+MetricsCollector metrics = MetricsCollector.getInstance();
+metrics.recordRequest();      // Increments shared counter
+metrics.recordResponse();     // Updates shared stats
+
+// Reports use same instance
+Report report = new Report();
+int totalRequests = report.getTotalRequests();  // Reads from shared metrics
+```
+
+---
+
+#### When to Use Singleton
+
+```
+✅ Database Connection Pool       → ONE pool, all requests use it
+✅ Logger                         → ONE logger, all modules log to it
+✅ Configuration Manager          → ONE config, loaded once
+✅ Cache Manager                  → ONE cache, shared across app
+✅ Thread Pool                    → ONE pool, limited threads
+✅ Metrics Collector              → ONE metrics instance, shared data
+✅ Application Context            → ONE context, all beans available
+✅ Authentication Manager         → ONE auth service, all requests use it
+```
+
+---
+
+#### When NOT to Use Singleton
+
+```
+❌ User object                    → Each user needs separate instance
+❌ Request object                 → Each HTTP request needs separate instance
+❌ Connection (per-request)       → Each thread might need its own connection
+❌ Temporary data holder          → Should be scoped to specific use
+❌ Domain objects (Customer, Order)  → Each object is independent
+```
+
+**Wrong Singleton:**
+```java
+// BAD: User as Singleton
+User user = User.getInstance();
+user.setName("Alice");
+
+User user2 = User.getInstance();
+user2.setName("Bob");
+
+System.out.println(user.getName());  // Prints "Bob" ❌ (overwrote Alice!)
+```
+
+**Right approach:**
+```java
+// GOOD: Each user is separate
+User user1 = new User("Alice");
+User user2 = new User("Bob");
+
+System.out.println(user1.getName());  // "Alice" ✅
+System.out.println(user2.getName());  // "Bob" ✅
+```
+
+---
+
+#### Common Mistakes in Interviews
+
+**Mistake 1: Making everything Singleton**
+```
+❌ "We should make User, Order, Product all Singletons"
+❌ "Easier to access globally"
+
+✅ "Singleton only for shared resources like Logger, Config, ThreadPool"
+```
+
+**Mistake 2: Not thread-safe Singleton**
+```java
+// WRONG: Not thread-safe
+class Logger {
+    private static Logger instance;
+    
+    public static Logger getInstance() {
+        if (instance == null) {
+            instance = new Logger();  // Race condition ❌
+        }
+        return instance;
+    }
+}
+
+// RIGHT: Thread-safe
+class Logger {
+    private static final Logger instance = new Logger();  // Eager init ✅
+    
+    public static Logger getInstance() {
+        return instance;
+    }
+}
+```
+
+**Mistake 3: Hard to test**
+```java
+// WRONG: Can't mock
+DatabaseConnection conn = DatabaseConnection.getInstance();
+conn.query("SELECT...");  // Hard to mock this
+
+// RIGHT: Use interface + dependency injection
+interface Database {
+    ResultSet query(String sql);
+}
+
+class Service {
+    private Database db;
+    
+    Service(Database db) {
+        this.db = db;  // Mockable ✅
+    }
+}
+```
+
+---
+
+#### Interview Questions on Singleton
+
+**Q1: Why not just use a static variable?**
+```
+A: "Singleton can implement interfaces, be inherited, and be mocked in tests.
+Static variable is just a variable — can't do any of those. 
+Also Singleton can have initialization logic; static variable can't."
+```
+
+**Q2: Is Singleton thread-safe?**
+```
+A: "Depends on implementation. Use eager initialization or synchronized 
+double-checked locking. Better: use enum for automatic thread safety."
+```
+
+**Q3: How do you test code using Singleton?**
+```
+A: "Inject an interface instead of directly using Singleton.
+Or use reflection to reset singleton in @Before/@After methods.
+Or use Singleton with setter for testing: 
+Logger.setInstance(mockLogger);"
+```
+
+**Q4: Singleton vs. Dependency Injection?**
+```
+A: "Singleton makes global state. Dependency injection is cleaner — 
+inject what you need into constructor. But Singleton is acceptable for 
+true singletons like Logger, Config that are rarely mocked."
+```
+
+---
+
+---
+
 ### Factory Method
 
 **Real Problem:** Object creation logic is complex or varies by subclass. You want subclasses to decide WHAT type of object to create, not the caller.
