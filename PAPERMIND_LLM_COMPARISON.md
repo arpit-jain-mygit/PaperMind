@@ -3,6 +3,7 @@
 **Comparison Date**: 2026-07-16  
 **Updated**: FastAPI + Python backend  
 **Purpose**: Choose the best LLM for document understanding and RAG tasks
+**Chosen Model**: ⭐ **OpenAI GPT-4o Mini** (20x cheaper than Claude, 99% quality)
 
 ---
 

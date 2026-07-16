@@ -13,9 +13,9 @@
 | 7 | **User Query Interface** | Frontend | Angular (query input + chat UI) | Vercel/Netlify | FREE | Text input, real-time response display |
 | 8 | **RAG Retrieval** | Backend + Vector DB | FastAPI + Qdrant SDK (similarity search) | Railway + Qdrant | FREE | Semantic search to find top-K relevant documents |
 | 9 | **Decrypt Retrieved Docs** | Client-Side Processing | TweetNaCl.js (in-browser decryption) | Vercel/Netlify | FREE | Decrypt only retrieved docs client-side |
-| 10 | **Send to LLM Agent** | Backend + LLM | FastAPI + Claude API (via Anthropic SDK) | Railway | ~$0.001-0.05/query | Send context + query to Claude 3.5 Sonnet |
-| 11 | **LLM Reasoning** | External AI | Claude 3.5 Sonnet (via API) | Anthropic Cloud | ~$0.06/mo avg | Intelligent reasoning across documents |
-| 12 | **Format Response** | Backend | FastAPI + Pydantic | Railway | FREE | Parse Claude response, format with type safety |
+| 10 | **Send to LLM Agent** | Backend + LLM | FastAPI + OpenAI API (via SDK) | Railway | ~$0.0001-0.01/query | Send context + query to GPT-4o Mini |
+| 11 | **LLM Reasoning** | External AI | GPT-4o Mini (via API) | OpenAI Cloud | ~$0.008/mo | Intelligent reasoning across documents |
+| 12 | **Format Response** | Backend | FastAPI + Pydantic | Railway | FREE | Parse GPT-4o Mini response, format with type safety |
 | 13 | **Return Answer to Frontend** | Backend API | REST API (FastAPI) | Railway | FREE | Stream or batch response to Angular frontend |
 | 14 | **Display Result** | Frontend | Angular (response component) | Vercel/Netlify | FREE | Rich text formatting, citations, confidence scores |
 
@@ -64,9 +64,9 @@
 ### 🤖 **AI/LLM Layer**
 | Component | Technology | Purpose | Cost |
 |-----------|-----------|---------|------|
-| Embeddings | OpenAI Ada-3 / Claude Embeddings | Convert text → vectors | ~$0.01-0.05/doc |
-| LLM Agent | **Claude 3.5 Sonnet** | Intelligent reasoning | ~$0.06/mo avg |
-| RAG Framework | LangChain (Node.js) | Orchestrate RAG pipeline | FREE |
+| Embeddings | OpenAI Ada-3 | Convert text → vectors | ~$0.01-0.05/doc |
+| LLM Agent | **OpenAI GPT-4o Mini** ⭐ | Intelligent reasoning (20x cheaper) | ~$0.008/mo |
+| RAG Framework | LangChain (Python) | Orchestrate RAG pipeline | FREE |
 
 ### 🔐 **Security Layer**
 | Component | Technology | Purpose | Cost |
@@ -189,14 +189,14 @@ CORS_ORIGIN=https://papermind.vercel.app
 
 | Service | Free Tier | Monthly Cost | Notes |
 |---------|-----------|--------------|-------|
-| Claude API | Pay-per-token | ~$0.06-0.50 | Only for reasoning, 100 queries/mo |
-| OpenAI Embeddings | $5 free credits | ~$0.01-0.10 | Or use Claude embeddings |
+| **OpenAI GPT-4o Mini** ⭐ | Pay-per-token | ~$0.008/mo | 20x cheaper than Claude, 100 queries/mo |
+| OpenAI Embeddings | $5 free credits | ~$0.01-0.10 | Included with API calls |
 | Qdrant Cloud | 1 free cluster (1GB) | **FREE** | Unlimited queries |
 | Supabase PostgreSQL | 500MB free | **FREE** | Plenty for personal docs |
 | Vercel (Frontend) | Unlimited | **FREE** | Auto-deploys on git push |
 | Railway (Backend) | $5/mo credits | ~$0.20-0.50 | Pay-as-you-go after credits |
 | Domain (optional) | - | $0-12/yr | Custom domain for frontend |
-| **TOTAL** | | **~$0.07-0.60/mo** | Extremely affordable |
+| **TOTAL** | | **~$0.03-0.60/mo** | Ultra-affordable with GPT-4o Mini |
 
 ---
 
