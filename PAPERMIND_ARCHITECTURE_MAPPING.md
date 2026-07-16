@@ -2,22 +2,175 @@
 
 ## Complete Architecture Flow with Tech Stack
 
-| Step | Process | Layer | Technology | Hosting | Cost | Notes |
-|------|---------|-------|------------|---------|------|-------|
-| 1 | **Document Ingestion** | Frontend | Angular 18+ (file upload component) | Vercel/Netlify | FREE | Drag-and-drop file handler, file validation |
-| 2 | **OCR + Text Extraction** | Client-Side Processing | Tesseract.js (in-browser) | Vercel/Netlify | FREE | Runs locally in browser, no server call needed |
-| 3 | **Encryption** | Client-Side Security | TweetNaCl.js (NaCl crypto library) | Vercel/Netlify | FREE | Asymmetric encryption before uploading |
-| 4 | **Store Encrypted File** | Backend + Storage | FastAPI + Supabase PostgreSQL | Railway (backend) + Supabase (DB) | FREE | Store encrypted blob + metadata (file name, doc type, etc.) |
-| 5 | **Generate Embeddings** | Backend Processing | FastAPI + LangChain + OpenAI Embeddings API | Railway | ~$0.01-0.05/doc | Convert encrypted text to vector embeddings |
-| 6 | **Store Embeddings in Vector DB** | Vector Storage | Qdrant Cloud (free tier cluster) | Qdrant Cloud (managed) | FREE | 1GB free storage, unlimited queries, semantic search |
-| 7 | **User Query Interface** | Frontend | Angular (query input + chat UI) | Vercel/Netlify | FREE | Text input, real-time response display |
-| 8 | **RAG Retrieval** | Backend + Vector DB | FastAPI + Qdrant SDK (similarity search) | Railway + Qdrant | FREE | Semantic search to find top-K relevant documents |
-| 9 | **Decrypt Retrieved Docs** | Client-Side Processing | TweetNaCl.js (in-browser decryption) | Vercel/Netlify | FREE | Decrypt only retrieved docs client-side |
-| 10 | **Send to LLM Agent** | Backend + LLM | FastAPI + OpenAI API (via SDK) | Railway | ~$0.0001-0.01/query | Send context + query to GPT-4o Mini |
-| 11 | **LLM Reasoning** | External AI | GPT-4o Mini (via API) | OpenAI Cloud | ~$0.008/mo | Intelligent reasoning across documents |
-| 12 | **Format Response** | Backend | FastAPI + Pydantic | Railway | FREE | Parse GPT-4o Mini response, format with type safety |
-| 13 | **Return Answer to Frontend** | Backend API | REST API (FastAPI) | Railway | FREE | Stream or batch response to Angular frontend |
-| 14 | **Display Result** | Frontend | Angular (response component) | Vercel/Netlify | FREE | Rich text formatting, citations, confidence scores |
+| Step | Process | Layer | Technology | Hosting | Cost | Infrastructure & Registration |
+|------|---------|-------|------------|---------|------|------------------------------|
+| 1 | **Document Ingestion** | Frontend | Angular 18+ (file upload component) | Vercel | FREE | ✅ GitHub repo · ✅ Vercel account · ✅ Link repo to Vercel |
+| 2 | **OCR + Text Extraction** | Client-Side Processing | Tesseract.js (in-browser) | Browser | FREE | ❌ No setup (runs locally) |
+| 3 | **Encryption** | Client-Side Security | TweetNaCl.js (NaCl crypto library) | Browser | FREE | ❌ No setup (runs locally) |
+| 4 | **Store Encrypted File** | Backend + Storage | FastAPI + Supabase PostgreSQL | Railway + Supabase | FREE | ✅ Railway account · ✅ Supabase account · ✅ Create PostgreSQL DB · ✅ Link GitHub to Railway |
+| 5 | **Generate Embeddings** | Backend Processing | FastAPI + LangChain + OpenAI Embeddings API | Railway + OpenAI | ~$0.01-0.05/doc | ✅ OpenAI account · ✅ Create API key · ✅ Set environment var: OPENAI_API_KEY |
+| 6 | **Store Embeddings in Vector DB** | Vector Storage | Qdrant Cloud (free tier cluster) | Qdrant Cloud | FREE | ✅ Qdrant Cloud account · ✅ Create free cluster · ✅ Set API key: QDRANT_URL, QDRANT_API_KEY |
+| 7 | **User Query Interface** | Frontend | Angular (query input + chat UI) | Vercel | FREE | ✅ Already done in Step 1 |
+| 8 | **RAG Retrieval** | Backend + Vector DB | FastAPI + Qdrant SDK (similarity search) | Railway + Qdrant | FREE | ✅ Already done in Steps 4 & 6 |
+| 9 | **Decrypt Retrieved Docs** | Client-Side Processing | TweetNaCl.js (in-browser decryption) | Browser | FREE | ❌ No setup (runs locally) |
+| 10 | **Send to LLM Agent** | Backend + LLM | FastAPI + OpenAI API (via SDK) | Railway + OpenAI | ~$0.0001-0.01/query | ✅ Already done in Step 5 (API key) |
+| 11 | **LLM Reasoning** | External AI | GPT-4o Mini (via API) | OpenAI Cloud | ~$0.008/mo | ✅ Already done in Step 5 |
+| 12 | **Format Response** | Backend | FastAPI + Pydantic | Railway | FREE | ✅ Already done in Step 4 |
+| 13 | **Return Answer to Frontend** | Backend API | REST API (FastAPI) | Railway | FREE | ✅ Already done in Step 4 |
+| 14 | **Display Result** | Frontend | Angular (response component) | Vercel | FREE | ✅ Already done in Step 1 |
+
+---
+
+## Infrastructure Setup Checklist
+
+### Platforms to Register & Setup (In Order)
+
+| # | Platform | Purpose | Free Tier | Setup Time | What to Do |
+|---|----------|---------|-----------|-----------|-----------|
+| 1 | **GitHub** | Version control | ✅ Yes (public repos) | 5 min | Create account, create `PaperMind` repo |
+| 2 | **Vercel** | Frontend hosting | ✅ Yes (unlimited) | 10 min | Sign up with GitHub, link PaperMind repo, auto-deploys on push |
+| 3 | **Railway** | Backend hosting | ✅ Yes ($5/mo credits) | 10 min | Sign up with GitHub, create new project, link repo |
+| 4 | **Supabase** | PostgreSQL database | ✅ Yes (500MB) | 10 min | Sign up, create new project, get `DATABASE_URL` |
+| 5 | **Qdrant** | Vector database | ✅ Yes (1GB free tier) | 10 min | Sign up, create free cluster, get `QDRANT_URL` + `QDRANT_API_KEY` |
+| 6 | **OpenAI** | LLM + embeddings API | ✅ Yes ($5 trial) | 5 min | Sign up, create API key, get `OPENAI_API_KEY` |
+
+**Total Setup Time**: ~50 minutes
+
+---
+
+### Step-by-Step Registration Guide
+
+#### Step 1: GitHub (5 minutes)
+```bash
+1. Go to https://github.com/signup
+2. Create account
+3. Create new repository: "PaperMind"
+4. Clone to local: git clone https://github.com/YOUR_USERNAME/PaperMind.git
+```
+
+#### Step 2: Vercel (10 minutes)
+```bash
+1. Go to https://vercel.com/signup
+2. Sign up with GitHub (authorize access)
+3. Import PaperMind repository
+4. Add environment variables:
+   - NG_APP_API_BASE_URL=https://papermind-api.railway.app
+5. Deploy (automatic on git push)
+```
+**Result**: Frontend at `https://papermind.vercel.app`
+
+#### Step 3: Railway (10 minutes)
+```bash
+1. Go to https://railway.app
+2. Sign up with GitHub
+3. Create new project
+4. Connect GitHub repository (PaperMind)
+5. Add environment variables:
+   - ENVIRONMENT=production
+   - DATABASE_URL=<from Supabase>
+   - QDRANT_URL=<from Qdrant>
+   - QDRANT_API_KEY=<from Qdrant>
+   - OPENAI_API_KEY=<from OpenAI>
+```
+**Result**: Backend at `https://papermind-api.railway.app`
+
+#### Step 4: Supabase (10 minutes)
+```bash
+1. Go to https://supabase.com
+2. Sign up (GitHub or email)
+3. Create new project
+4. Go to Settings → Database → Connection string
+5. Copy connection URL (PostgreSQL)
+6. Add to Railway as DATABASE_URL
+```
+**Result**: PostgreSQL database connected
+
+#### Step 5: Qdrant (10 minutes)
+```bash
+1. Go to https://qdrant.tech/cloud/
+2. Sign up (GitHub or email)
+3. Create free cluster
+4. Get API key from dashboard
+5. Copy: QDRANT_URL and QDRANT_API_KEY
+6. Add to Railway environment
+```
+**Result**: Vector database ready for embeddings
+
+#### Step 6: OpenAI (5 minutes)
+```bash
+1. Go to https://platform.openai.com/signup
+2. Sign up with email/GitHub
+3. Go to API keys section
+4. Create new secret key
+5. Copy key: sk-xxxxxxxxxxxx
+6. Add to Railway as OPENAI_API_KEY
+```
+**Result**: LLM API access configured
+
+---
+
+### Environment Variables to Set in Railway
+
+```bash
+# After setup, these should be configured in Railway dashboard:
+
+ENVIRONMENT=production
+LOG_LEVEL=info
+
+# From Supabase
+DATABASE_URL=postgresql://user:password@aws-0-region.pooler.supabase.com:6543/postgres
+
+# From Qdrant
+QDRANT_URL=https://xxxxxxxx-qdrant.aws.cloud.qdrant.io:6333
+QDRANT_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# From OpenAI
+OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Application
+CORS_ORIGIN=https://papermind.vercel.app
+JWT_SECRET=your-secret-key-change-this
+SESSION_SECRET=your-session-secret-change-this
+```
+
+---
+
+### Verification Checklist
+
+After all setup, verify everything works:
+
+```bash
+✅ Frontend
+  - [ ] Vercel deployment successful
+  - [ ] App accessible at https://papermind.vercel.app
+  - [ ] Environment variables loaded
+
+✅ Backend
+  - [ ] Railway deployment successful
+  - [ ] API accessible at https://papermind-api.railway.app
+  - [ ] Swagger docs at /docs
+  - [ ] Health check: curl https://papermind-api.railway.app/health
+
+✅ Database
+  - [ ] Supabase connected (check Railway logs)
+  - [ ] PostgreSQL working
+  - [ ] Tables created successfully
+
+✅ Vector DB
+  - [ ] Qdrant cluster created
+  - [ ] Connection test passes
+  - [ ] API key valid
+
+✅ LLM
+  - [ ] OpenAI API key valid
+  - [ ] Can make API calls (test with curl)
+  - [ ] Billing set up (card added)
+
+✅ Integration
+  - [ ] Frontend can call backend API
+  - [ ] CORS properly configured
+  - [ ] All environment variables accessible
+```
 
 ---
 
