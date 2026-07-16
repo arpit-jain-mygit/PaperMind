@@ -32,7 +32,8 @@
 | State Management | NgRx / Akita | Manage app state (documents, queries) | FREE |
 | HTTP Client | Angular HttpClient | Communicate with backend API | FREE |
 | Styling | Tailwind CSS / Angular Material Theme | Responsive UI design | FREE |
-| Hosting | **Vercel / Netlify** | Static + serverless functions | FREE |
+| Hosting | **Vercel** | Static + serverless functions | FREE |
+| Domain | Custom domain (optional) | papermind.com or similar | $0-12/year |
 
 ### 🔄 **Client-Side Processing Layer**
 | Component | Technology | Purpose | Cost |
@@ -50,7 +51,7 @@
 | Language | **Python** | Type-safe backend with Pydantic | FREE |
 | Process Queue | Celery / RQ | Async job processing | FREE |
 | ASGI Server | Uvicorn | Production server | FREE |
-| Hosting | **Railway / Render / Fly.io** | Deploy backend service | FREE (~$5-10 credits/mo) |
+| Hosting | **Railway** | Deploy backend service | ~$0.20-0.50/mo (pay-as-you-go) |
 
 ### 📊 **Data & Storage Layer**
 | Component | Technology | Purpose | Cost |
@@ -186,16 +187,16 @@ CORS_ORIGIN=https://papermind.vercel.app
 
 ## Monthly Cost Summary
 
-| Service | Free Tier | Monthly Cost |
-|---------|-----------|--------------|
-| Claude API | Pay-per-token | ~$0.06-0.50 |
-| OpenAI Embeddings (if used) | $5 free credits | ~$0.01-0.10 |
-| Qdrant Cloud | 1 free cluster (1GB) | **FREE** |
-| Supabase PostgreSQL | 500MB free | **FREE** |
-| Vercel (Frontend) | Unlimited | **FREE** |
-| Railway (Backend) | $5/mo credits | **FREE** |
-| Domain (optional) | - | $0-12/yr |
-| **TOTAL** | | **~$0.07-0.60/mo** |
+| Service | Free Tier | Monthly Cost | Notes |
+|---------|-----------|--------------|-------|
+| Claude API | Pay-per-token | ~$0.06-0.50 | Only for reasoning, 100 queries/mo |
+| OpenAI Embeddings | $5 free credits | ~$0.01-0.10 | Or use Claude embeddings |
+| Qdrant Cloud | 1 free cluster (1GB) | **FREE** | Unlimited queries |
+| Supabase PostgreSQL | 500MB free | **FREE** | Plenty for personal docs |
+| Vercel (Frontend) | Unlimited | **FREE** | Auto-deploys on git push |
+| Railway (Backend) | $5/mo credits | ~$0.20-0.50 | Pay-as-you-go after credits |
+| Domain (optional) | - | $0-12/yr | Custom domain for frontend |
+| **TOTAL** | | **~$0.07-0.60/mo** | Extremely affordable |
 
 ---
 
