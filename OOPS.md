@@ -251,11 +251,19 @@ public class PayPalProcessor implements PaymentProcessor {
 
 ### Liskov Substitution Principle (LSP) {#lsp}
 
-**Definition:** Derived classes must be substitutable for their base classes.
+**Definition:** Derived classes must be substitutable for their base classes. Subclass behavior must match parent's contract.
+
+**The Rule:** If `S` is a subtype of `T`, then objects of type `S` may be substituted for objects of type `T` without breaking the program.
+
+---
+
+#### Example 1: The Classic Rectangle-Square Problem
 
 ```java
-// Bad: Square violates LSP
+// ❌ Bad: Square violates LSP
 public class Rectangle {
+    protected int width, height;
+    
     public void setWidth(int w) { this.width = w; }
     public void setHeight(int h) { this.height = h; }
     public int area() { return width * height; }
@@ -265,17 +273,271 @@ public class Square extends Rectangle {
     @Override
     public void setWidth(int w) { 
         this.width = w; 
-        this.height = w;  // Forces height = width
+        this.height = w;  // VIOLATION: Caller expects independent width/height
     }
-    // Violates contract: if caller sets width ≠ height, behavior is unexpected
+    @Override
+    public void setHeight(int h) { 
+        this.width = h;   // This breaks the contract
+        this.height = h;
+    }
 }
 
-// Good: Use composition or correct hierarchy
+// This breaks:
+Rectangle r = new Square();
+r.setWidth(5);
+r.setHeight(10);
+System.out.println(r.area()); // Expected 50, got 100. Caller is shocked.
+
+// ✅ Good: Use composition, not inheritance
 public class Square {
     private int side;
+    
+    public void setSide(int s) { this.side = s; }
     public int area() { return side * side; }
 }
 ```
+
+---
+
+#### Example 2: Cache Implementations (Real Architect Scenario)
+
+```java
+// Contract: Cache stores and retrieves values, may return null if missing
+public interface Cache {
+    void put(String key, Object value);
+    Object get(String key);
+}
+
+// ✅ Correct: InMemoryCache follows the contract
+public class InMemoryCache implements Cache {
+    private Map<String, Object> store = new HashMap<>();
+    
+    @Override
+    public void put(String key, Object value) {
+        store.put(key, value);
+    }
+    
+    @Override
+    public Object get(String key) {
+        return store.get(key);  // Returns null if missing - OK
+    }
+}
+
+// ✅ Correct: RedisCache follows the contract
+public class RedisCache implements Cache {
+    private JedisCluster redis;
+    
+    @Override
+    public void put(String key, Object value) {
+        redis.set(key, serialize(value));
+    }
+    
+    @Override
+    public Object get(String key) {
+        String val = redis.get(key);
+        return val == null ? null : deserialize(val);
+    }
+}
+
+// ❌ Wrong: StrictCache violates contract (throws on missing key)
+public class StrictCache implements Cache {
+    private Map<String, Object> store = new HashMap<>();
+    
+    @Override
+    public void put(String key, Object value) {
+        store.put(key, value);
+    }
+    
+    @Override
+    public Object get(String key) {
+        // VIOLATION: Throws exception instead of returning null
+        if (!store.containsKey(key)) {
+            throw new CacheKeyNotFoundException("Key not found: " + key);
+        }
+        return store.get(key);
+    }
+}
+
+// This breaks code that uses Cache polymorphically:
+Cache cache = new StrictCache();
+Object user = cache.get("user:123"); // Caller expects null or Object
+                                      // But gets exception! Violates contract.
+
+// Usage code that worked with InMemoryCache now crashes:
+for (String key : keys) {
+    Object val = cache.get(key);
+    if (val != null) {  // What if cache throws exception? Code breaks.
+        process(val);
+    }
+}
+```
+
+**Key Insight:** Contract includes return values AND exceptions. If base class returns null, subclass can't throw exception.
+
+---
+
+#### Example 3: Data Store Repository (Multi-implementation)
+
+```java
+// Contract: query() returns results, may be empty; must handle timeouts
+public interface UserRepository {
+    List<User> findByAge(int age) throws TimeoutException;
+}
+
+// ✅ Correct: Database implementation
+public class SqlUserRepository implements UserRepository {
+    @Override
+    public List<User> findByAge(int age) throws TimeoutException {
+        try {
+            // DB query with timeout handling
+            return executeQueryWithTimeout(age, 5000);
+        } catch (SQLException e) {
+            throw new TimeoutException("Query exceeded timeout");
+        }
+    }
+}
+
+// ✅ Correct: ElasticSearch implementation
+public class ElasticSearchUserRepository implements UserRepository {
+    @Override
+    public List<User> findByAge(int age) throws TimeoutException {
+        // ES query with timeout
+        return searchWithTimeout(age, 5000);
+    }
+}
+
+// ❌ Wrong: In-memory implementation that doesn't handle timeout
+public class InMemoryUserRepository implements UserRepository {
+    @Override
+    public List<User> findByAge(int age) {  // VIOLATION: Doesn't throw TimeoutException
+        // No timeout handling - just iterates memory
+        return users.stream()
+                    .filter(u -> u.getAge() == age)
+                    .collect(toList());
+    }
+}
+
+// Caller code breaks:
+UserRepository repo = new InMemoryUserRepository();
+try {
+    List<User> results = repo.findByAge(25);  // Never throws TimeoutException
+    // What if data grows to millions? No protection from hanging.
+} catch (TimeoutException e) {
+    // This catch block never executes, defeating resilience strategy
+}
+```
+
+---
+
+#### Example 4: Payment Processing (Preconditions/Postconditions)
+
+```java
+public interface PaymentProcessor {
+    // Contract: Input must have amount > 0, returns success/failure
+    PaymentResult process(Payment payment) throws PaymentException;
+    
+    // Precondition: balance must be >= amount
+    // Postcondition: if success, balance decreases by amount
+}
+
+// ✅ Correct: Stripe processor enforces contract
+public class StripeProcessor implements PaymentProcessor {
+    @Override
+    public PaymentResult process(Payment payment) throws PaymentException {
+        if (payment.getAmount() <= 0) {
+            throw new PaymentException("Amount must be positive");  // Enforces precondition
+        }
+        
+        PaymentResult result = stripe.charge(payment);
+        
+        if (result.isSuccess()) {
+            // Postcondition: balance is reduced
+            accountService.deductBalance(payment.getAmount());
+        }
+        return result;
+    }
+}
+
+// ❌ Wrong: MockPaymentProcessor violates postcondition
+public class MockPaymentProcessor implements PaymentProcessor {
+    @Override
+    public PaymentResult process(Payment payment) throws PaymentException {
+        // Just returns success without deducting balance!
+        // VIOLATION: Postcondition not satisfied
+        return PaymentResult.success();
+    }
+}
+
+// Test code that worked breaks in production:
+PaymentProcessor processor = new MockPaymentProcessor();
+double balanceBefore = account.getBalance();
+processor.process(new Payment(100, account));
+// With real processor, balance would be 100 less
+// With mock, balance is unchanged - test passes but production fails!
+```
+
+---
+
+#### Example 5: Message Queue Publishing (Guarantee violations)
+
+```java
+public interface MessageQueue {
+    // Contract: Message is guaranteed to be delivered to all subscribers
+    void publish(String topic, String message) throws QueueException;
+}
+
+// ✅ Correct: Kafka implementation guarantees delivery
+public class KafkaQueue implements MessageQueue {
+    @Override
+    public void publish(String topic, String message) throws QueueException {
+        // Kafka: Replicated, persistent, guaranteed delivery
+        kafka.send(new ProducerRecord(topic, message));
+    }
+}
+
+// ✅ Correct: RabbitMQ implementation with persistence
+public class RabbitMQQueue implements MessageQueue {
+    @Override
+    public void publish(String topic, String message) throws QueueException {
+        // RabbitMQ with durable queue: guaranteed delivery
+        channel.basicPublish(topic, "", MessageProperties.PERSISTENT_TEXT_PLAIN, message.getBytes());
+    }
+}
+
+// ❌ Wrong: In-memory queue loses messages on crash
+public class InMemoryQueue implements MessageQueue {
+    private List<String> messages = new ArrayList<>();  // Not persistent!
+    
+    @Override
+    public void publish(String topic, String message) {
+        messages.add(message);  // VIOLATION: No delivery guarantee
+    }
+}
+
+// Caller code fails silently:
+MessageQueue queue = new InMemoryQueue();
+queue.publish("orders", "user:123 ordered item:456");
+// System crashes, message is lost
+// With Kafka, message would be replicated and recover
+```
+
+---
+
+#### Why LSP Matters at Architect Level
+
+| Scenario | Bad Design | Good Design |
+|----------|-----------|------------|
+| **Caching Strategy** | Cache impl throws on missing key | All implementations return null consistently |
+| **Multi-region Deployment** | Different datastores have different guarantees | All datastores have same SLA/timeout behavior |
+| **Microservice Upgrades** | New implementation has different error handling | All versions handle errors identically |
+| **Testing** | Mock behaves differently than real impl | Mock follows exact same contract |
+| **Scaling** | Different implementations timeout differently | All scale with same timeout guarantees |
+
+**The Golden Rule:** 
+- If callers write code that works with `DatabaseRepository`, it must work with `CacheRepository` too
+- If one implementation throws exception on timeout, all must
+- If one implementation guarantees consistency, all must
+- If one caches results, all must (or none should)
 
 ---
 
