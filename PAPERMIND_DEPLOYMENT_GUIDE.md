@@ -3,13 +3,239 @@
 This document contains step-by-step instructions to deploy PaperMind to production from scratch.
 
 ## Table of Contents
-1. [Pre-Deployment Checklist](#pre-deployment-checklist)
-2. [Infrastructure Setup](#infrastructure-setup)
-3. [Environment Configuration](#environment-configuration)
-4. [Application Deployment](#application-deployment)
-5. [Post-Deployment Verification](#post-deployment-verification)
-6. [Rollback Procedure](#rollback-procedure)
-7. [Monitoring & Maintenance](#monitoring--maintenance)
+1. [Platform Registration & Setup](#platform-registration--setup)
+2. [Pre-Deployment Checklist](#pre-deployment-checklist)
+3. [Infrastructure Setup](#infrastructure-setup)
+4. [Environment Configuration](#environment-configuration)
+5. [Application Deployment](#application-deployment)
+6. [Post-Deployment Verification](#post-deployment-verification)
+7. [Rollback Procedure](#rollback-procedure)
+8. [Monitoring & Maintenance](#monitoring--maintenance)
+
+---
+
+## Platform Registration & Setup
+
+### Complete Setup Time: ~50 minutes
+
+Register and setup these platforms in this order:
+
+---
+
+### 1. GitHub - Version Control (5 minutes)
+
+**Purpose**: Store code repository  
+**Cost**: FREE  
+**What you need**: Email address
+
+**Steps:**
+
+1. Go to https://github.com/signup
+2. Enter username, email, password
+3. Click "Create account"
+4. Verify email
+5. Create new repository:
+   - Go to https://github.com/new
+   - Repository name: `PaperMind`
+   - Description: "Personal Document AI System"
+   - Set to Public (for easy sharing)
+   - Click "Create repository"
+
+6. Clone locally:
+```bash
+git clone https://github.com/YOUR_USERNAME/PaperMind.git
+cd PaperMind
+```
+
+**Result**: GitHub repository created and linked locally
+
+---
+
+### 2. Vercel - Frontend Hosting (10 minutes)
+
+**Purpose**: Deploy Angular frontend  
+**Cost**: FREE (unlimited)  
+**Prerequisites**: GitHub account
+
+**Steps:**
+
+1. Go to https://vercel.com/signup
+2. Click "Continue with GitHub"
+3. Authorize Vercel to access GitHub
+4. Create Vercel account
+5. Select "Import Project"
+6. Click "Import Git Repository"
+7. Paste: `https://github.com/YOUR_USERNAME/PaperMind`
+8. Select "Other" framework
+9. Configure project:
+   - Build command: `cd frontend && ng build`
+   - Output directory: `frontend/dist/papermind`
+   - Install command: `npm install`
+
+10. Add environment variables:
+```
+NG_APP_API_BASE_URL = https://papermind-api.railway.app
+NG_APP_ENVIRONMENT = production
+```
+
+11. Click "Deploy"
+12. Wait for deployment to complete
+
+**Result**: 
+- Frontend deployed at: `https://papermind.vercel.app`
+- Auto-deploys on every git push
+
+---
+
+### 3. Railway - Backend Hosting (10 minutes)
+
+**Purpose**: Deploy FastAPI backend  
+**Cost**: FREE ($5/mo credits, then ~$0.20-0.50/mo)  
+**Prerequisites**: GitHub account
+
+**Steps:**
+
+1. Go to https://railway.app/
+2. Click "Start Project"
+3. Click "Deploy from GitHub repo"
+4. Click "Connect GitHub account"
+5. Authorize Railway
+6. Select your GitHub repository: `PaperMind`
+7. Railway will auto-detect Python project
+8. Add environment variables (do this in next step)
+9. Click "Deploy"
+10. Wait for initial deployment
+
+**Result**:
+- Backend deployed at: `https://papermind-api.railway.app`
+- Auto-deploys on git push (if configured)
+
+---
+
+### 4. Supabase - PostgreSQL Database (10 minutes)
+
+**Purpose**: Store application data  
+**Cost**: FREE (500MB storage)  
+**Prerequisites**: Email or GitHub account
+
+**Steps:**
+
+1. Go to https://supabase.com/
+2. Click "Start your project"
+3. Sign up with GitHub or email
+4. Click "Create a new project"
+5. Project configuration:
+   - Organization: Create new (e.g., "PaperMind")
+   - Project name: `papermind-db`
+   - Database password: Create strong password (save it!)
+   - Region: Choose closest to you
+   - Pricing plan: Free
+
+6. Wait for database to provision (~2 minutes)
+7. Get connection string:
+   - Go to Settings → Database
+   - Copy "Connection pooling" URI (Postgres)
+   - Format: `postgresql://user:password@host:6543/postgres?sslmode=require`
+
+8. Save this for Railway setup (DATABASE_URL)
+
+**Result**: PostgreSQL database ready
+
+---
+
+### 5. Qdrant - Vector Database (10 minutes)
+
+**Purpose**: Store document embeddings  
+**Cost**: FREE (1GB storage, unlimited queries)  
+**Prerequisites**: Email or GitHub account
+
+**Steps:**
+
+1. Go to https://qdrant.tech/cloud/
+2. Click "Start for free"
+3. Sign up with GitHub or email
+4. Create cluster:
+   - Cluster name: `papermind-cluster`
+   - Region: Choose closest to you
+   - Choose "Free tier" plan
+
+5. Wait for cluster to be created (~2 minutes)
+6. Get credentials:
+   - Click on cluster
+   - Copy API URL (in format: `https://xxxxx-qdrant.aws.cloud.qdrant.io:6333`)
+   - Copy API Key (under "API Keys")
+
+7. Save for Railway setup:
+   - QDRANT_URL = API URL
+   - QDRANT_API_KEY = API Key
+
+**Result**: Vector database cluster ready
+
+---
+
+### 6. OpenAI - LLM & Embeddings API (5 minutes)
+
+**Purpose**: Access GPT-4o Mini model and embeddings  
+**Cost**: FREE ($5 trial credits, then ~$0.008/mo)  
+**Prerequisites**: Email, phone number for verification
+
+**Steps:**
+
+1. Go to https://platform.openai.com/signup
+2. Sign up with email or GitHub
+3. Verify phone number (required)
+4. Go to API keys: https://platform.openai.com/api/keys
+5. Click "Create new secret key"
+6. Name it: `papermind-production`
+7. Copy key immediately (can only see once): `sk-xxxxxxxxxxxxxxxx`
+8. Store in secure location
+
+9. Setup billing (required for API):
+   - Go to Billing → Overview
+   - Add payment method
+   - Set usage limit to $5/month (to prevent overspending)
+
+10. Save for Railway setup: `OPENAI_API_KEY = sk-xxxx...`
+
+**Result**: LLM API access configured
+
+---
+
+### Setup Summary Table
+
+| # | Platform | Account Created | API Key/URL Saved | Added to Railway | ✓ |
+|---|----------|-----------------|-------------------|------------------|---|
+| 1 | GitHub | [ ] | N/A | N/A | [ ] |
+| 2 | Vercel | [ ] | N/A | Auto-linked | [ ] |
+| 3 | Railway | [ ] | N/A | N/A | [ ] |
+| 4 | Supabase | [ ] | DATABASE_URL | [ ] | [ ] |
+| 5 | Qdrant | [ ] | QDRANT_URL, QDRANT_API_KEY | [ ] | [ ] |
+| 6 | OpenAI | [ ] | OPENAI_API_KEY | [ ] | [ ] |
+
+---
+
+### Add All Secrets to Railway
+
+After creating all accounts, add environment variables to Railway:
+
+```bash
+railway variables set DATABASE_URL="postgresql://user:pass@host:6543/postgres"
+railway variables set QDRANT_URL="https://xxxxx-qdrant.aws.cloud.qdrant.io:6333"
+railway variables set QDRANT_API_KEY="xxxxxxxxxxxxxxxx"
+railway variables set OPENAI_API_KEY="sk-xxxxxxxxxxxxxxxx"
+railway variables set ENVIRONMENT="production"
+railway variables set LOG_LEVEL="info"
+railway variables set CORS_ORIGIN="https://papermind.vercel.app"
+railway variables set JWT_SECRET="your-secret-key-here"
+railway variables set SESSION_SECRET="your-session-secret-here"
+```
+
+Or via Railway dashboard:
+1. Go to Railway dashboard
+2. Select PaperMind project
+3. Click "Variables"
+4. Add each variable above
+5. Click "Save"
 
 ---
 
