@@ -18,6 +18,30 @@ This document compares LLM options for PaperMind based on:
 
 ---
 
+## Quick Reference Table
+
+| LLM Model | Monthly Cost | Quality/Speed | RAG Capability | Privacy | Free Tier | Setup | Best For |
+|-----------|--------------|---------------|----------------|---------|-----------|-------|----------|
+| **Claude 3.5 Sonnet** (Current) | $0.16/mo | ⭐⭐⭐⭐⭐ Excellent Fast | ⭐⭐⭐⭐⭐ Best-in-class | Medium (Cloud) | ❌ No | Easy SDK | Maximum quality, best reasoning across documents |
+| **OpenAI GPT-4o Mini** ⭐ Best | $0.008/mo 20x cheaper | ⭐⭐⭐⭐⭐ Excellent Fastest | ⭐⭐⭐⭐⭐ Excellent | Medium (Cloud) | ❌ No | Easy SDK | ✅ RECOMMENDED: Best value for cost 99% quality of Claude at 5% cost. Excellent for RAG |
+| **Google Gemini Flash** 💰 Cheapest | $0.004/mo 40x cheaper! | ⭐⭐⭐⭐ Very Good Blazing Fast | ⭐⭐⭐⭐ Very Good | Medium (Cloud) | ✅ YES 50 req/day free | Easy SDK | Ultra-cheap with free tier. Great for testing/light usage Free: 50 queries/day (enough for personal use!) |
+| **Ollama + Llama 3** 🔒 Private | $0.00 Completely FREE | ⭐⭐⭐ Very Good Slower | ⭐⭐⭐ Good | ⭐⭐⭐⭐⭐ 100% Local | ✅ YES Unlimited | Medium Setup | ✅ PRIVACY-FIRST: Run LLM on your own machine No data leaves your computer. Needs 8GB+ RAM |
+| **Mistral 7B API** | $0.007/mo (via API) | ⭐⭐⭐ Good | ⭐⭐⭐ Good | Medium (Cloud) | ❌ No | Easy | Good alternative, slightly cheaper than GPT-4o Mini |
+| **Claude 3 Haiku** | $0.025/mo (6x cheaper) | ⭐⭐⭐⭐ Excellent | ⭐⭐⭐⭐ Very Good | Medium (Cloud) | ❌ No | Easy SDK | Claude quality at lower cost. Good middle ground |
+
+---
+
+## Recommendations by Use Case
+
+| Use Case | Recommendation | Why |
+|----------|-----------------|-----|
+| 🏆 **BEST OVERALL** | OpenAI GPT-4o Mini | Cost: $0.008/month (20x cheaper than Claude) • Quality: 99% as good as Claude for document understanding • Best for: Anyone who wants best value + excellent quality |
+| 💰 **CHEAPEST** | Google Gemini 1.5 Flash | Cost: $0.004/month (40x cheaper than Claude) • Free Tier: 50 queries/day (perfect for personal use!) • Best for: Testing, light usage, budget-conscious users |
+| 🔒 **PRIVACY-FIRST** | Ollama + Llama 3 | Cost: $0 (completely free, runs locally) • Privacy: 100% local, no data leaves your computer • Best for: Maximum privacy, sensitive documents, offline-capable |
+| ⚖️ **BALANCED** | Claude 3 Haiku | Cost: $0.025/month (6x cheaper than Sonnet) • Quality: Still excellent for reasoning & document understanding • Best for: Claude ecosystem users who want lower cost |
+
+---
+
 ## Cost Scenarios
 
 All prices calculated for a typical query:
