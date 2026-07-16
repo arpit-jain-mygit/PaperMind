@@ -30,6 +30,33 @@
 
 ---
 
+## Understanding the Three Categories
+
+### **Creational** = HOW to CREATE objects
+**Core question:** "How do I instantiate objects in my codebase?"
+
+You care about the **creation process** — who creates what, when, how many. Examples: database connection pools, API clients, service factories.
+
+### **Structural** = HOW to ORGANIZE objects together
+**Core question:** "How do I compose/combine objects into larger structures?"
+
+You care about **relationships and composition** — how do pieces fit together? How do you layer services? Examples: middleware stacks, decorator chains, adapters, wrappers.
+
+### **Behavioral** = HOW objects COMMUNICATE and INTERACT
+**Core question:** "How do objects talk to each other? Who does what? When does execution happen?"
+
+You care about **responsibilities and interactions** — who calls whom, how do they coordinate, what triggers what? Examples: event listeners, task queues, state machines, workflows.
+
+**Quick Reference:**
+
+| Category | Asks | Solves | Tech Examples |
+|----------|------|--------|---|
+| **Creational** | "How do I INSTANTIATE it?" | Object creation logic | Database clients, API clients, service factories |
+| **Structural** | "How do I LAYER/COMPOSE it?" | Object relationships | Middleware stacks, decorator chains, adapters |
+| **Behavioral** | "How do objects INTERACT?" | Communication flow | Event listeners, task queues, state machines |
+
+---
+
 ## Creational Patterns
 
 ### Singleton
