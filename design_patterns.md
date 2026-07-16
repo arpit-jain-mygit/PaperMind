@@ -75,23 +75,50 @@ You care about **responsibilities and interactions** — who calls whom, how do 
 
 **Real Problem:** Object creation logic is complex or varies by subclass. You want subclasses to decide WHAT type of object to create, not the caller.
 
-**Real-World Example:** Payment gateway. You have `PaymentFactory` where each subclass (StripePayment, PayPalPayment) creates its own payment processor. The caller just calls `process()` without knowing the concrete type.
+**Real-World Example:** Payment processor. Each payment provider has different initialization:
+```
+PaymentProcessor processor = StripeFactory.create();  // Returns StripeProcessor
+PaymentProcessor processor = PayPalFactory.create();  // Returns PayPalProcessor
+```
+Caller doesn't know or care which concrete type. Subclass decides.
 
 **Key Difference from Similar:**
-- **vs. Abstract Factory:** Factory Method creates ONE type of object; Abstract Factory creates families of related objects.
+- **vs. Abstract Factory:** 
+  - **Factory Method** creates ONE product family. Example: `PaymentFactory` only creates payment processors.
+  - **Abstract Factory** creates MULTIPLE related product families together. Example: `DatabaseFactory` creates both `Connection` AND `ConnectionPool` AND `TransactionManager` — all compatible with each other.
+  - **Factory Method:** `PaymentFactory.create()` returns a Processor.
+  - **Abstract Factory:** `PaymentFactory.create()` returns a whole suite: `{Processor, Validator, Reconciler}`.
+
 - **vs. Constructor:** Factory Method hides creation complexity; constructor is always explicit about the type.
 
 ---
 
 ### Abstract Factory
 
-**Real Problem:** You need to create FAMILIES of related objects (e.g., UI components for Windows vs. Mac vs. Linux) and ensure they're all compatible.
+**Real Problem:** You need to create FAMILIES of related objects (e.g., UI components for Windows vs. Mac vs. Linux) and ensure they're all compatible. Mixing components from different families breaks consistency.
 
-**Real-World Example:** UI toolkit. `WindowsUIFactory` creates Windows-style button, checkbox, dropdown. `MacUIFactory` creates Mac-style versions. Code switches factories but never switches individual components.
+**Real-World Example:** Database driver factory. Different databases need compatible suites:
+```
+DatabaseFactory mysqlFactory = new MySQLFactory();
+Connection conn = mysqlFactory.createConnection();      // MySQLConnection
+StatementBuilder stmt = mysqlFactory.createStatement(); // MySQLStatement
+ConnectionPool pool = mysqlFactory.createPool();        // MySQLPool
+
+DatabaseFactory postgresFactory = new PostgresFactory();
+Connection conn = postgresFactory.createConnection();   // PostgresConnection
+StatementBuilder stmt = postgresFactory.createStatement(); // PostgresStatement
+ConnectionPool pool = postgresFactory.createPool();     // PostgresPool
+```
+Switch factories, get entire compatible suite. Never mix MySQL connection with Postgres statement.
 
 **Key Difference from Similar:**
-- **vs. Factory Method:** Abstract Factory creates multiple related objects; Factory Method creates a single object.
-- **vs. Builder:** Abstract Factory creates objects immediately; Builder builds incrementally with a fluent API.
+- **vs. Factory Method:**
+  - **Factory Method** creates ONE product. Example: `PaymentFactory.create()` returns just a `PaymentProcessor`.
+  - **Abstract Factory** creates MULTIPLE related products. Example: `DatabaseFactory.create()` returns `{Connection, Statement, Pool, Metadata}` — all for the same database.
+  - **Use Factory Method** when: You have ONE product type that varies (payment providers).
+  - **Use Abstract Factory** when: You have MULTIPLE product types that must work together (database drivers, UI toolkits, cloud providers).
+
+- **vs. Builder:** Abstract Factory creates objects immediately; Builder builds ONE object step-by-step with a fluent API.
 
 ---
 
@@ -336,6 +363,97 @@ You care about **responsibilities and interactions** — who calls whom, how do 
 **Key Difference from Similar:**
 - **vs. Iterator:** Iterator traverses; Visitor performs operations ON each element.
 - **vs. Composite:** Both work on trees, but Visitor separates operations into Visitor classes.
+
+---
+
+## Deep Dive: Factory Method vs. Abstract Factory
+
+This is THE most confused pair in GoF patterns. Here's the tech-architect way to think about it:
+
+### **Factory Method = One Product Type**
+
+**What it does:**
+- Creates ONE type of object
+- Varies based on context (subclass decides which concrete type)
+- Caller doesn't know or care about the concrete class
+
+**Tech example:**
+```
+// Factory Method
+PaymentProcessor processor = PaymentFactory.createProcessor(provider);
+
+// Returns one of:
+// - StripeProcessor
+// - PayPalProcessor
+// - SquareProcessor
+
+// Caller just uses: processor.charge(amount);
+```
+
+**When to use:**
+- Payment gateways (one processor per provider)
+- Database drivers (one connection type per database)
+- Log handlers (FileLogger vs. ConsoleLogger vs. RemoteLogger)
+
+---
+
+### **Abstract Factory = Multiple Related Product Families**
+
+**What it does:**
+- Creates MULTIPLE related objects that work together
+- Entire suite changes based on context (factory switches all products at once)
+- Guarantees all products are compatible
+
+**Tech example:**
+```
+// Abstract Factory
+DatabaseFactory factory = DatabaseFactory.get("mysql");
+
+Connection conn = factory.createConnection();           // MySQLConnection
+Statement stmt = factory.createStatement();             // MySQLStatement  
+Pool pool = factory.createPool();                       // MySQLPool
+Metadata meta = factory.createMetadata();               // MySQLMetadata
+
+// Switch to Postgres:
+DatabaseFactory factory = DatabaseFactory.get("postgres");
+
+Connection conn = factory.createConnection();           // PostgresConnection
+Statement stmt = factory.createStatement();             // PostgresStatement
+Pool pool = factory.createPool();                       // PostgresPool
+Metadata meta = factory.createMetadata();               // PostgresMetadata
+
+// All products changed consistently. Never mix MySQL conn with Postgres stmt.
+```
+
+**When to use:**
+- Database drivers (Connection + Statement + Pool + Metadata all compatible)
+- UI toolkits (Button + Checkbox + TextField all use same look & feel)
+- Cloud providers (EC2Instance + S3Bucket + RDSDatabase all from AWS)
+- UI themes (Dark mode: dark button, dark checkbox, dark textfield)
+
+---
+
+### **Quick Decision Tree**
+
+```
+Are you creating ONE product type that varies?
+├─ YES → Factory Method
+│        Example: PaymentProcessor (Stripe vs. PayPal)
+│
+└─ NO: Are you creating MULTIPLE related products that must work together?
+       ├─ YES → Abstract Factory
+       │        Example: Database suite (Connection + Statement + Pool)
+       │
+       └─ NO: Consider other patterns (Builder, Prototype, Singleton)
+```
+
+---
+
+### **Interview Answer Format**
+
+**Q: When would you use Factory Method over Abstract Factory?**
+
+A: "Factory Method when you have ONE product that varies. Example: payment processors. You pick Stripe or PayPal, but that's one decision. Abstract Factory when you have MULTIPLE products that must be compatible. Example: database drivers — you don't just pick 'MySQL connection', you need the MySQL suite: connection, statement, pool, metadata. If I only needed to vary ONE thing, I'd use Factory Method. If I need multiple things to stay compatible, Abstract Factory."
 
 ---
 
