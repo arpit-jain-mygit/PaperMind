@@ -121,6 +121,14 @@
 
 **Completion Date**: ___________
 
+### Phase 1.5: Database Setup (COMPLETED ✅)
+- [x] PostgreSQL schema & models
+- [x] Qdrant vector DB collection
+- [x] Database connection initialization
+- [x] Vector DB client setup
+
+**Completion Date**: 2026-07-17
+
 ### Phase 2: Enhanced Processing (LangGraph + Pydantic AI)
 - [ ] LangGraph workflow orchestration
 - [ ] Pydantic AI type-safe extraction
@@ -155,10 +163,10 @@
 
 | Technology | Status | Date Started | Date Completed | Notes |
 |-----------|--------|--------------|----------------|-------|
+| PostgreSQL | ✅ Done | 2026-07-17 | 2026-07-17 | Models, schema, initialization |
+| Qdrant | ✅ Done | 2026-07-17 | 2026-07-17 | Vector DB setup, collections |
+| FastAPI | ✅ In Progress | 2026-07-17 | | Basic endpoints ready |
 | Angular 18+ | Planning | | | Frontend framework |
-| FastAPI | Planning | | | Backend framework |
-| Qdrant | Planning | | | Vector database |
-| LlamaIndex | Planning | | | Document intelligence |
 | OpenAI GPT-4o Mini | Planning | | | Primary LLM |
 | Pydantic AI | Planning | | | Type-safe agents |
 | LangGraph | Planning | | | Workflow orchestration |
