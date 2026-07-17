@@ -263,11 +263,44 @@ NG_APP_ENVIRONMENT = production
 
 ---
 
+### Generate Security Secrets
+
+Before adding to Railway, generate secure random secrets for JWT and Sessions.
+
+**Generate JWT_SECRET:**
+```bash
+python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+**Generate SESSION_SECRET:**
+```bash
+python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+Or use Node.js:
+```bash
+# JWT_SECRET
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+
+# SESSION_SECRET
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+Or use OpenSSL:
+```bash
+openssl rand -base64 32  # Run twice
+```
+
+**Store these values securely** - you'll need them in the next step.
+
+---
+
 ### Add All Secrets to Railway
 
-After creating all accounts, add environment variables to Railway:
+After creating all accounts and generating secrets, add environment variables to Railway:
 
 ```bash
+# Replace these values with your actual secrets generated above
 railway variables set DATABASE_URL="postgresql://user:pass@host:6543/postgres"
 railway variables set QDRANT_URL="https://xxxxx-qdrant.aws.cloud.qdrant.io:6333"
 railway variables set QDRANT_API_KEY="xxxxxxxxxxxxxxxx"
@@ -275,16 +308,43 @@ railway variables set OPENAI_API_KEY="sk-xxxxxxxxxxxxxxxx"
 railway variables set ENVIRONMENT="production"
 railway variables set LOG_LEVEL="info"
 railway variables set CORS_ORIGIN="https://papermind.vercel.app"
-railway variables set JWT_SECRET="your-secret-key-here"
-railway variables set SESSION_SECRET="your-session-secret-here"
+railway variables set JWT_SECRET="<paste-generated-jwt-secret-here>"
+railway variables set SESSION_SECRET="<paste-generated-session-secret-here>"
 ```
 
-Or via Railway dashboard:
-1. Go to Railway dashboard
-2. Select PaperMind project
-3. Click "Variables"
-4. Add each variable above
-5. Click "Save"
+**Or via Railway Dashboard:**
+
+1. Go to https://railway.app/dashboard
+2. Select "PaperMind" project
+3. Click "Variables" tab
+4. Add each variable above:
+   - Copy key name (e.g., `DATABASE_URL`)
+   - Paste value
+   - Click "Add"
+5. Repeat for all variables
+6. Click "Save"
+
+**Checklist:**
+
+| Variable | Source | Status |
+|----------|--------|--------|
+| DATABASE_URL | Supabase | [ ] |
+| QDRANT_URL | Qdrant | [ ] |
+| QDRANT_API_KEY | Qdrant | [ ] |
+| OPENAI_API_KEY | OpenAI | [ ] |
+| JWT_SECRET | Generated (random) | [ ] |
+| SESSION_SECRET | Generated (random) | [ ] |
+| ENVIRONMENT | `production` | [ ] |
+| LOG_LEVEL | `info` | [ ] |
+| CORS_ORIGIN | `https://papermind.vercel.app` | [ ] |
+
+**Important Security Notes:**
+- ✅ Generate random secrets (don't make them up)
+- ✅ Never commit secrets to Git
+- ✅ Store only in Railway environment variables
+- ✅ Use different values for JWT_SECRET and SESSION_SECRET
+- ✅ Min 32 characters recommended
+- ✅ Change these values if ever compromised
 
 ---
 
