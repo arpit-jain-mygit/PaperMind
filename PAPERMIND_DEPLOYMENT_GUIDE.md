@@ -173,31 +173,80 @@ NG_APP_ENVIRONMENT = production
 
 ---
 
-### 6. OpenAI - LLM & Embeddings API (5 minutes)
+### 6. OpenAI - LLM & Embeddings API (10 minutes)
 
 **Purpose**: Access GPT-4o Mini model and embeddings  
-**Cost**: FREE ($5 trial credits, then ~$0.008/mo)  
+**Cost**: FREE ($5 trial credits), then pay-as-you-go (~$0.008/mo for PaperMind)  
 **Prerequisites**: Email, phone number for verification
 
 **Steps:**
 
+#### 6.1 Create OpenAI Account & API Key
+
 1. Go to https://platform.openai.com/signup
 2. Sign up with email or GitHub
-3. Verify phone number (required)
+3. Verify phone number (required for API access)
 4. Go to API keys: https://platform.openai.com/api/keys
 5. Click "Create new secret key"
 6. Name it: `papermind-production`
 7. Copy key immediately (can only see once): `sk-xxxxxxxxxxxxxxxx`
 8. Store in secure location
+9. Save for Railway setup: `OPENAI_API_KEY = sk-xxxx...`
 
-9. Setup billing (required for API):
-   - Go to Billing → Overview
-   - Add payment method
-   - Set usage limit to $5/month (to prevent overspending)
+#### 6.2 Setup Billing & Monthly Budget (IMPORTANT)
 
-10. Save for Railway setup: `OPENAI_API_KEY = sk-xxxx...`
+**Important**: You need a payment method even though you get $5 trial credits first.
 
-**Result**: LLM API access configured
+**Add Payment Method:**
+
+1. Go to https://platform.openai.com/account/billing/overview
+2. Click "Billing" → "Payment methods"
+3. Click "Add payment method"
+4. Enter credit card details (Visa, Mastercard, etc.)
+5. Click "Add"
+
+**No upfront payment needed** - You only pay for what you use at end of month.
+
+**Set Monthly Spend Limit:**
+
+1. Go to https://platform.openai.com/account/billing/limits
+2. Under "Usage limits":
+   - Set "Hard limit" to: `$5.00` (prevents overspending)
+   - Set "Soft limit" to: `$4.00` (email notification at $4)
+
+3. Click "Save"
+
+**Budget Explanation:**
+
+| Item | Value |
+|------|-------|
+| Free Trial Credits | $5.00 |
+| Trial Expiration | 3 months from creation |
+| Expected Monthly Cost | ~$0.008 |
+| Monthly Limit Set | $5.00 |
+| Safety Buffer | 625x (won't accidentally spend more) |
+| Billing Cycle | End of month (automatic) |
+
+**How Billing Works:**
+- ✅ **No upfront payment**: You only pay for actual usage
+- ✅ **Automatic charging**: Card charged at end of billing cycle
+- ✅ **$5 trial first**: Free credits used before card charged
+- ✅ **After trial**: Usage automatically billed to your card
+- ✅ **Hard limit**: Won't exceed $5/month even if you try
+
+#### 6.3 Verify Setup
+
+1. Go to https://platform.openai.com/account/billing/overview
+2. Verify:
+   - [ ] Payment method added ✅
+   - [ ] Organization spend limit: $5.00 ✅
+   - [ ] API key created ✅
+
+**Result**: 
+- LLM API access configured
+- Billing safety limits set
+- Ready for production use
+- Monthly cost: ~$0.008 (extremely cheap)
 
 ---
 
