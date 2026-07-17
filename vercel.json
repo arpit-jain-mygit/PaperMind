@@ -1,0 +1,8 @@
+{
+  "buildCommand": "cd frontend && npm install && ng build --configuration production",
+  "outputDirectory": "frontend/dist/papermind",
+  "env": {
+    "NG_APP_API_BASE_URL": "@ng_app_api_base_url",
+    "NG_APP_ENVIRONMENT": "production"
+  }
+}
