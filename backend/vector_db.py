@@ -6,6 +6,7 @@ from qdrant_client.models import Distance, VectorParams, PointStruct
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", None)
 COLLECTION_NAME = "papermind-documents"
+# Vector mappings are stored in Qdrant, metadata in PostgreSQL vector_mappings table
 VECTOR_SIZE = 1536  # OpenAI Ada-3 embedding size
 
 

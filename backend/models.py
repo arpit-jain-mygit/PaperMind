@@ -45,8 +45,8 @@ class Extraction(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-class Embedding(Base):
-    __tablename__ = "embeddings"
+class VectorMapping(Base):
+    __tablename__ = "vector_mappings"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     doc_id = Column(String, index=True)
