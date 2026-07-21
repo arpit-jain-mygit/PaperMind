@@ -7,6 +7,7 @@ Curated collection of interview preparation materials organized by domain and fo
 ### [Java-And-MyProfessional-Projects-Interviews](./curated/Java-And-MyProfessional-Projects-Interviews)
 Interview preparation for Java backend development and professional projects:
 - Core Java concepts (OOPS, design patterns)
+- Spring Framework & SpringBoot ecosystem
 - Professional project experience (data-collection-platform, transcription-project)
 - Architecture and system design for microservices
 - Kafka and MicroServices concepts
@@ -14,6 +15,7 @@ Interview preparation for Java backend development and professional projects:
 - Interview guides and revision notes
 
 **Key Files:**
+- `Spring-framework.md` - Spring/SpringBoot 30 FAQs with modules overview and SpringBatch
 - `ARCHITECT_INTERVIEW_GUIDE.md` - Comprehensive architecture interview prep
 - `OOPS.md` - Object-oriented design principles
 - `Kafka-Questions.md` - Kafka/messaging concepts
@@ -65,15 +67,6 @@ Artificial Intelligence and Machine Learning interview preparation:
 ---
 
 ## 📖 Framework & Technology Guides
-
-### [Spring Framework & SpringBoot](./Spring-framework.md)
-Comprehensive guide to Spring Framework and SpringBoot:
-- Spring Framework modules overview (Core, AOP, Data Access, Web, Security)
-- SpringBoot ecosystem and auto-configuration
-- SpringBatch for batch job processing
-- **30 FAQs:** Dependency Injection, IoC, Beans, Controllers, Exception Handling, AOP, Transactions, JPA, REST APIs, Actuator, and more
-- Simple explanations with code examples
-- Architecture diagrams and quick reference tables
 
 ### [SQL Interview Guide](./SQL-Interview-Guide.md)
 SQL query patterns and Oracle ANSI SQL:
