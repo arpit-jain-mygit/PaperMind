@@ -1932,6 +1932,325 @@ public Order createOrder(OrderRequest req) {
 
 ---
 
+**PART E: WHEN TO USE CHECKED EXCEPTIONS IN MODERN HIGH-THROUGHPUT SYSTEMS**
+
+**Short Answer: RARELY (5-10% of cases). Only when there's NO ALTERNATIVE.**
+
+**Evolution of Exception Handling:**
+
+```
+1995 (Java 1.0):  "All failures must be declared" → Checked exceptions everywhere
+2000s:            "Checked exceptions are verbose" → APIs add unchecked wrappers
+2010s:            "High-throughput needs flexibility" → Spring eliminates checked exceptions
+2020s+ (NOW):     "Use only when forced" → Best practice
+```
+
+**The Honest Truth: Checked Exceptions Are NOT Used in Modern High-Throughput Systems**
+
+Examples:
+- **Amazon (1M+ req/sec)**: Unchecked exceptions everywhere
+- **Netflix (100M+ users)**: Spring Boot + unchecked exceptions
+- **Google (10B+ req/day)**: gRPC (no Java exceptions at all for distributed calls)
+- **Meta/Uber/Lyft**: All use unchecked exceptions
+
+**Modern frameworks abandoned checked exceptions:**
+- Spring Framework: `DataAccessException` is UNCHECKED
+- Hibernate: `HibernateException` is UNCHECKED  
+- MongoDB Java driver: `MongoException` is UNCHECKED
+- Kafka Java client: `KafkaException` is UNCHECKED
+- AWS SDK: All exceptions UNCHECKED
+
+---
+
+**The ONLY Legitimate Uses of Checked Exceptions Today:**
+
+**USE CASE 1: Implementing Interface That Forces Checked Exception**
+
+```java
+// Someone else's interface (JDBC from 1997) forces checked exception
+interface DataSource {
+    Connection getConnection() throws SQLException;  // Checked
+}
+
+// You MUST implement it with checked exception:
+class OracleDataSource implements DataSource {
+    @Override
+    public Connection getConnection() throws SQLException {
+        try {
+            return DriverManager.getConnection(url, user, pass);
+        } catch (SQLException e) {
+            // Immediately unwrap to unchecked
+            throw new DatabaseException("Failed to connect", e);
+        }
+    }
+}
+
+// Why OK: You didn't design interface (JDBC did). No choice. Immediately wrap.
+```
+
+**USE CASE 2: Wrap and Rethrow as Unchecked (Adapter Pattern)**
+
+```java
+// Legacy library forces checked exception
+class LegacyJDBCLibrary {
+    public ResultSet query(String sql) throws SQLException { }  // Checked
+}
+
+// Modern application: immediately unwrap
+public class QueryService {
+    public List<Record> getRecords(String sql) {
+        try {
+            return LegacyJDBCLibrary.query(sql)
+                .stream()
+                .map(this::mapRecord)
+                .collect(toList());
+        } catch (SQLException e) {
+            // Wrap in unchecked
+            throw new DataAccessException("Query failed", e);
+        }
+    }
+}
+
+// Caller never sees SQLException: only DataAccessException (unchecked)
+```
+
+**USE CASE 3: Resource Management (try-with-resources)**
+
+```java
+// Java forces IOException for file operations
+public void processFile(String path) {
+    try (FileReader reader = new FileReader(path);  // throws FileNotFoundException (checked)
+         BufferedReader br = new BufferedReader(reader)) {  // throws IOException (checked)
+        
+        String line;
+        while ((line = br.readLine()) != null) {
+            processLine(line);
+        }
+    } catch (IOException e) {
+        // Catch checked, wrap in unchecked
+        throw new FileProcessingException("Failed to read file", e);
+    }
+}
+
+// Why OK: Java forces IOException. You immediately catch and wrap.
+```
+
+---
+
+**When NOT to Use Checked Exceptions (in modern systems):**
+
+**DON'T: Declare custom checked exceptions**
+
+```java
+// ❌ BAD: Custom checked exception
+public class OrderProcessingException extends Exception {  // CHECKED!
+    public OrderProcessingException(String message) {
+        super(message);
+    }
+}
+
+public class OrderService {
+    public Order createOrder(OrderRequest req) throws OrderProcessingException {
+        // Forces ALL callers to catch/declare
+        // Pollutes method signatures
+    }
+}
+
+// ✅ GOOD: Custom unchecked exception
+public class OrderProcessingException extends RuntimeException {  // UNCHECKED!
+    public OrderProcessingException(String message, Throwable cause) {
+        super(message, cause);
+    }
+}
+
+public class OrderService {
+    public Order createOrder(OrderRequest req) {  // Clean signature!
+        // Callers choose to catch or not
+    }
+}
+```
+
+**Why checked is bad:**
+1. Pollutes method signatures: `throws OrderException, ValidationException, InventoryException, ...`
+2. Breaks async/lambdas: can't throw checked exception from lambda
+3. Inflexible: can't change handling without changing signature
+4. Every caller forced to declare/catch
+
+**Why unchecked is good:**
+1. Clean signatures: `public Order createOrder(OrderRequest req)`
+2. Works in streams/lambdas: `orders.stream().map(req -> orderService.createOrder(req))`
+3. Flexible: caller chooses to catch or let bubble up
+4. Works with async: `asyncExecutor.submit(() -> orderService.createOrder(req))`
+
+---
+
+**DON'T: Use checked exceptions for expected business conditions**
+
+```java
+// ❌ BAD: Checked exception for out of stock (expected condition)
+public class OutOfStockException extends Exception {  // CHECKED!
+    public OutOfStockException(String productId) {
+        super("Product " + productId + " out of stock");
+    }
+}
+
+public class InventoryService {
+    public void reserveStock(String productId, int qty) throws OutOfStockException {
+        // Forces API layer to declare/catch
+        // Implies unexpected condition (but it's expected!)
+    }
+}
+
+// ✅ GOOD: Unchecked exception for out of stock
+public class OutOfStockException extends RuntimeException {  // UNCHECKED
+    public OutOfStockException(String productId) {
+        super("Product " + productId + " out of stock");
+    }
+}
+
+public class InventoryService {
+    public void reserveStock(String productId, int qty) {
+        // No throws clause
+        // Treats it as expected business condition
+    }
+}
+```
+
+**Why checked is bad:**
+- Out of stock is EXPECTED (happens regularly: 2-30% of requests)
+- Checked exception implies "unexpected and must be handled"
+- Wrong signal to developers
+
+---
+
+**DON'T: Declare too many checked exceptions**
+
+```java
+// ❌ BAD: Method signature polluted
+public Order createOrder(OrderRequest req) 
+    throws ValidationException, OutOfStockException, 
+           DatabaseException, PaymentException {
+    // Forces caller to catch all 4 exceptions
+}
+
+// Caller nightmare:
+try {
+    order = orderService.createOrder(req);
+} catch (ValidationException e) { } 
+  catch (OutOfStockException e) { } 
+  catch (DatabaseException e) { } 
+  catch (PaymentException e) { }
+
+// ✅ GOOD: Unchecked exception hierarchy
+public Order createOrder(OrderRequest req) {
+    // No throws clause!
+}
+
+// Caller can catch all or specific:
+try {
+    order = orderService.createOrder(req);
+} catch (OutOfStockException e) {
+    // Handle specific case
+} catch (OrderException e) {
+    // Catch all order exceptions
+}
+```
+
+---
+
+**DON'T: Use checked exceptions in high-throughput async code**
+
+```java
+// ❌ BAD: Checked exception in lambda
+public void processAsync(Order order) {
+    asyncExecutor.submit(() -> {
+        try {
+            orderService.createOrder(order);  // Can't throw checked exception!
+            // Compiler error
+        } catch (Exception e) {
+            // Forced to catch Exception (too broad)
+        }
+    });
+}
+
+// ✅ GOOD: Unchecked exceptions work naturally
+public void processAsync(Order order) {
+    asyncExecutor.submit(() -> {
+        orderService.createOrder(order);  // May throw unchecked
+        // No try-catch needed
+        // Exception automatically propagates to executor's error handler
+    });
+}
+```
+
+---
+
+**Real-World Example: Spring Framework's Philosophy**
+
+Spring deliberately wrapped ALL checked exceptions in unchecked:
+
+```java
+// Spring's approach
+public class DataAccessException extends RuntimeException {  // UNCHECKED
+    // Wraps all checked exceptions from JDBC, JPA, etc.
+}
+
+@Repository
+public interface UserRepository extends JpaRepository<User, Long> {
+    User findById(Long id);  // No throws SQLException!
+    // Spring catches SQLException and wraps in DataAccessException
+}
+
+// Spring's rationale:
+// "We'll handle checked exceptions internally. 
+//  You focus on business logic, not exception plumbing."
+```
+
+**All modern frameworks follow this pattern** because it works better at scale.
+
+---
+
+**Summary: Checked Exceptions in Modern Systems**
+
+| Situation | Use? | Why |
+|-----------|------|-----|
+| **Implement interface requiring checked exception** | YES | No choice, immediately wrap |
+| **Wrap legacy library checked exceptions** | YES | Wrap in unchecked, hide from rest |
+| **Resource management (try-with-resources)** | YES | Java forces it, wrap immediately |
+| **Custom business exceptions** | NO | Use unchecked (extends RuntimeException) |
+| **Expected business conditions** | NO | Use unchecked |
+| **Infrastructure failures** | NO | Use unchecked |
+| **New API design** | NO | ALWAYS use unchecked |
+| **Async/lambda code** | NO | Checked exceptions don't work here |
+| **Microservices/distributed systems** | NO | Use unchecked + structured error responses |
+
+---
+
+**The Verdict:**
+
+**Checked exceptions: 5-10% of cases** (only when forced by external interface)
+- Wrap immediately in unchecked
+- Hide from rest of codebase
+
+**Unchecked exceptions: 90-95% of cases** (all your new code)
+- Business exceptions: return error code to user
+- Infrastructure exceptions: retry automatically
+- Both flow to global handler if not caught
+
+**Interview Answer:**
+
+"Checked exceptions were designed in 1995 when applications were monolithic and APIs stable. In modern high-throughput systems—Amazon, Netflix, Uber, Google—checked exceptions are RARELY used. The only legitimate cases are: (1) implementing interfaces that force them (JDBC, file I/O), and (2) wrapping legacy libraries that throw them.
+
+For all new code, use unchecked exceptions (extend RuntimeException). This allows:
+- Clean method signatures (no throws pollution)
+- Flexible error handling (each layer decides)
+- Async/lambda compatibility (impossible with checked)
+- Better recovery strategies (business vs. infrastructure handled differently)
+
+Spring, Hibernate, Kafka, AWS SDK—every modern framework abandoned checked exceptions. You should too."
+
+---
+
 **Real Interview Answer:**
 "For high-throughput systems, use UNCHECKED exceptions (extend RuntimeException). Business exceptions (OutOfStockException, OrderValidationException) should be unchecked so callers can handle strategically: checkout API returns 400 error, background job retries, async processor queues for retry. Infrastructure exceptions (DatabaseException, PaymentGatewayException) are unchecked so they bubble to global handler. This avoids polluting method signatures with throws clauses and allows each layer to handle exceptions appropriately without forced try-catch everywhere. Checked exceptions were from 1990s when APIs were designed differently; modern high-throughput systems prefer unchecked exceptions + global error handling."
 
