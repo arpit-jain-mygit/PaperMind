@@ -26,65 +26,65 @@ The 43 problems are organized into 5 difficulty levels to help with progressive 
 ### Level 1 (Easiest)
 | # | Problem | Status | Link |
 |---|---------|--------|------|
-| 1 | Normal Square Pattern | ✅ | [View](#level-1-easiest) |
-| 2 | Multiplication Table Pattern | ✅ | [View](#level-1-easiest) |
-| 3 | Normal Right Triangle | ✅ | [View](#level-1-easiest) |
-| 4 | Normal Inverted Triangle | ✅ | [View](#level-1-easiest) |
-| 5 | Normal Number Staircase | ✅ | [View](#level-1-easiest) |
-| 6 | Square Fill Pattern | ✅ | [View](#level-1-easiest) |
-| 7 | Right Half Pyramid | ✅ | [View](#level-1-easiest) |
+| 1 | Normal Square Pattern | ✅ | [View](#problem-1-normal-square-pattern) |
+| 2 | Multiplication Table Pattern | ✅ | [View](#problem-2-multiplication-table-pattern) |
+| 3 | Normal Right Triangle | ✅ | [View](#problem-3-normal-right-triangle) |
+| 4 | Normal Inverted Triangle | ✅ | [View](#problem-4-normal-inverted-triangle) |
+| 5 | Normal Number Staircase | ✅ | [View](#problem-5-normal-number-staircase) |
+| 6 | Square Fill Pattern | ✅ | [View](#problem-6-square-fill-pattern) |
+| 7 | Right Half Pyramid | ✅ | [View](#problem-7-right-half-pyramid) |
 
 ### Level 2 (Easy-Medium)
 | # | Problem | Status | Link |
 |---|---------|--------|------|
-| 8 | Normal Left-Aligned Triangle | ✅ | [View](#level-2-easy-medium) |
-| 9 | Normal Number Pyramid | ✅ | [View](#level-2-easy-medium) |
-| 10 | Checkerboard Pattern | ✅ | [View](#level-2-easy-medium) |
-| 11 | Number Triangular | ✅ | [View](#level-2-easy-medium) |
-| 12 | Reverse Right Half Pyramid | ✅ | [View](#level-2-easy-medium) |
+| 8 | Normal Left-Aligned Triangle | ✅ | [View](#problem-8-normal-left-aligned-triangle) |
+| 9 | Normal Number Pyramid | ✅ | [View](#problem-9-normal-number-pyramid) |
+| 10 | Checkerboard Pattern | ✅ | [View](#problem-10-checkerboard-pattern) |
+| 11 | Number Triangular | ✅ | [View](#problem-11-number-triangular) |
+| 12 | Reverse Right Half Pyramid | ✅ | [View](#problem-12-reverse-right-half-pyramid) |
 
 ### Level 3 (Medium)
 | # | Problem | Status | Link |
 |---|---------|--------|------|
-| 13 | Hollow Square Pattern | ✅ | [View](#level-3-medium) |
-| 14 | Hollow Right Triangle | ✅ | [View](#level-3-medium) |
-| 15 | Hollow Left-Aligned Triangle | ✅ | [View](#level-3-medium) |
-| 16 | Hollow Inverted Triangle | ✅ | [View](#level-3-medium) |
-| 17 | Hollow Rectangle | ✅ | [View](#level-3-medium) |
-| 18 | Hollow Rectangle (Tall) | ✅ | [View](#level-3-medium) |
-| 19 | Hollow Number Pyramid | ✅ | [View](#level-3-medium) |
-| 20 | Hollow Number Staircase | ✅ | [View](#level-3-medium) |
-| 21 | Left Half Pyramid | ✅ | [View](#level-3-medium) |
-| 22 | Reverse Left Half Pyramid | ✅ | [View](#level-3-medium) |
-| 23 | Triangle Star Pattern | ✅ | [View](#level-3-medium) |
-| 24 | Number Increasing Pyramid | ✅ | [View](#level-3-medium) |
-| 25 | Number Increasing Reverse Pyramid | ✅ | [View](#level-3-medium) |
-| 26 | Mirror Image Triangle Pattern | ✅ | [View](#level-3-medium) |
+| 13 | Hollow Square Pattern | ✅ | [View](#problem-13-hollow-square-pattern) |
+| 14 | Hollow Right Triangle | ✅ | [View](#problem-14-hollow-right-triangle) |
+| 15 | Hollow Left-Aligned Triangle | ✅ | [View](#problem-15-hollow-left-aligned-triangle) |
+| 16 | Hollow Inverted Triangle | ✅ | [View](#problem-16-hollow-inverted-triangle) |
+| 17 | Hollow Rectangle | ✅ | [View](#problem-17-hollow-rectangle) |
+| 18 | Hollow Rectangle (Tall) | ✅ | [View](#problem-18-hollow-rectangle-tall) |
+| 19 | Hollow Number Pyramid | ✅ | [View](#problem-19-hollow-number-pyramid) |
+| 20 | Hollow Number Staircase | ✅ | [View](#problem-20-hollow-number-staircase) |
+| 21 | Left Half Pyramid | ✅ | [View](#problem-21-left-half-pyramid) |
+| 22 | Reverse Left Half Pyramid | ✅ | [View](#problem-22-reverse-left-half-pyramid) |
+| 23 | Triangle Star Pattern | ✅ | [View](#problem-23-triangle-star-pattern) |
+| 24 | Number Increasing Pyramid | ✅ | [View](#problem-24-number-increasing-pyramid) |
+| 25 | Number Increasing Reverse Pyramid | ✅ | [View](#problem-25-number-increasing-reverse-pyramid) |
+| 26 | Mirror Image Triangle Pattern | ✅ | [View](#problem-26-mirror-image-triangle-pattern) |
 
 ### Level 4 (Hard)
 | # | Problem | Status | Link |
 |---|---------|--------|------|
-| 27 | Normal Diamond Pattern | ✅ | [View](#level-4-hard) |
-| 28 | Hollow Diamond Pattern | ✅ | [View](#level-4-hard) |
-| 29 | Right Arrow Pattern | ✅ | [View](#level-4-hard) |
-| 30 | Diamond/Arrow Pattern (Input 11) | ⏳ | [View](#level-4-hard) |
-| 31 | Diamond/Arrow Pattern (Input 12) | ⏳ | [View](#level-4-hard) |
-| 32 | Cross Pattern | ⏳ | [View](#level-4-hard) |
-| 33 | Rhombus Pattern | ⏳ | [View](#level-4-hard) |
-| 34 | Butterfly Star Pattern | ⏳ | [View](#level-4-hard) |
-| 35 | K Pattern | ⏳ | [View](#level-4-hard) |
-| 36 | Hollow Reverse Triangle Pattern | ⏳ | [View](#level-4-hard) |
+| 27 | Normal Diamond Pattern | ✅ | [View](#problem-27-normal-diamond-pattern) |
+| 28 | Hollow Diamond Pattern | ✅ | [View](#problem-28-hollow-diamond-pattern) |
+| 29 | Right Arrow Pattern | ✅ | [View](#problem-29-right-arrow-pattern) |
+| 30 | Diamond/Arrow Pattern (Input 11) | ⏳ | [View](#problem-30-diamondarrow-pattern-input-11) |
+| 31 | Diamond/Arrow Pattern (Input 12) | ⏳ | [View](#problem-31-diamondarrow-pattern-input-12) |
+| 32 | Cross Pattern | ⏳ | [View](#problem-32-cross-pattern) |
+| 33 | Rhombus Pattern | ⏳ | [View](#problem-33-rhombus-pattern) |
+| 34 | Butterfly Star Pattern | ⏳ | [View](#problem-34-butterfly-star-pattern) |
+| 35 | K Pattern | ⏳ | [View](#problem-35-k-pattern) |
+| 36 | Hollow Reverse Triangle Pattern | ⏳ | [View](#problem-36-hollow-reverse-triangle-pattern) |
 
 ### Level 5 (Advanced)
 | # | Problem | Status | Link |
 |---|---------|--------|------|
-| 37 | Number Changing Pattern | ⏳ | [View](#level-5-advanced) |
-| 38 | Zero-One Triangle | ⏳ | [View](#level-5-advanced) |
-| 39 | Palindrome Triangular | ⏳ | [View](#level-5-advanced) |
-| 40 | Reverse Number Triangle Pattern | ⏳ | [View](#level-5-advanced) |
-| 41 | Hollow Hourglass Pattern | ⏳ | [View](#level-5-advanced) |
-| 42 | Pascal's Triangle | ⏳ | [View](#level-5-advanced) |
-| 43 | Right Pascal's Triangle | ⏳ | [View](#level-5-advanced) |
+| 37 | Number Changing Pattern | ⏳ | [View](#problem-37-number-changing-pattern) |
+| 38 | Zero-One Triangle | ⏳ | [View](#problem-38-zero-one-triangle) |
+| 39 | Palindrome Triangular | ⏳ | [View](#problem-39-palindrome-triangular) |
+| 40 | Reverse Number Triangle Pattern | ⏳ | [View](#problem-40-reverse-number-triangle-pattern) |
+| 41 | Hollow Hourglass Pattern | ⏳ | [View](#problem-41-hollow-hourglass-pattern) |
+| 42 | Pascal's Triangle | ⏳ | [View](#problem-42-pascals-triangle) |
+| 43 | Right Pascal's Triangle | ⏳ | [View](#problem-43-right-pascals-triangle) |
 
 ---
 
