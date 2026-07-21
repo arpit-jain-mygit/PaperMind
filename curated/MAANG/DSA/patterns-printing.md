@@ -110,21 +110,20 @@ public class SquarePrinter {
 
 ### Solution with O(1) Space Complexity
 ```java
-public class SquarePrinter {
-    public static void main(String args[]) {
-        int rows = 5, cols = 5;
-        for (int i = 0; i < rows; i++) {
-            for (int j = 0; j < cols; j++) {
-                if (i == 0 || i == rows - 1) {
-                    System.out.print("*"); // * denotes borders    
-                } else if (j == 0 || j == cols - 1) {
-                    System.out.print("*"); // * denotes borders
-                } else {
-                    System.out.print("x"); // x denotes hollow
-                }
+public static void main(String args[]) {
+    int rows = 5;
+    int cols = 10;
+    for(int i=1; i <=rows; i++){
+        for(int j=1; j<=cols; j++){
+            if(i==1 || i==rows || j==1 || j==cols){
+                System.out.print("*");                    
             }
-            System.out.println();
+            else{
+                System.out.print(" ");                    
+            }
         }
+        if(i!=rows)
+         System.out.println();
     }
 }
 ```
