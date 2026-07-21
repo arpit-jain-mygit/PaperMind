@@ -1426,7 +1426,460 @@ public class GlobalExceptionHandler {
 
 ---
 
-**PART C: COMPARISON: CHECKED VS UNCHECKED IN HIGH-THROUGHPUT**
+**PART C: BUSINESS EXCEPTIONS vs INFRASTRUCTURE EXCEPTIONS**
+
+**What's the Difference?**
+
+```
+Business Exceptions = Expected business outcomes
+├── User's fault → return error, ask user to fix
+├── Predictable → happens regularly in production
+├── Recoverable by user → add funds, choose different product
+├── Recovery strategy → return error code to client
+└── Monitoring → track frequency, not alerts
+
+Infrastructure Exceptions = System failures
+├── System's fault → not user's action
+├── Unpredictable → happens occasionally/rarely
+├── Recoverable by system → retry, fallback, circuit breaker
+├── Recovery strategy → retry with backoff or alert ops
+└── Monitoring → alert immediately when occurs
+```
+
+**Detailed Comparison:**
+
+| Aspect | Business Exception | Infrastructure Exception |
+|--------|-------------------|--------------------------|
+| **What** | User action invalid or unavailable | System component failed |
+| **Who's responsible** | User / Product decision | Engineering / Ops team |
+| **Frequency** | ~10-30% of requests | <1% of requests (if healthy) |
+| **Example** | OutOfStockException, InsufficientFundsException | DatabaseException, PaymentGatewayTimeoutException |
+| **User sees** | Error message ("Out of stock") | Generic error ("Try again later") |
+| **Logging** | INFO level (expected) | ERROR level (unexpected) |
+| **Alerting** | No alert (expected) | Immediate alert to ops |
+| **Metrics** | Business metrics (conversion rate, inventory) | System health metrics (error rate, latency) |
+| **Retry strategy** | Don't retry (problem won't fix itself) | Retry with exponential backoff |
+| **SLA impact** | No (not our fault) | Yes (service unavailable) |
+
+---
+
+**DETAILED EXAMPLES:**
+
+**BUSINESS EXCEPTION 1: OutOfStockException**
+
+```java
+// Exception definition
+public class OutOfStockException extends OrderException {
+    private final String productId;
+    private final int requestedQuantity;
+    private final int availableQuantity;
+    
+    public OutOfStockException(String productId, int requested, int available) {
+        super("Product " + productId + " out of stock: requested " + requested + ", available " + available, null);
+        this.productId = productId;
+        this.requestedQuantity = requested;
+        this.availableQuantity = available;
+    }
+    
+    public String getProductId() { return productId; }
+    public int getAvailableQuantity() { return availableQuantity; }
+}
+
+// Service throws it (expected business condition)
+public class InventoryService {
+    public void reserveStock(String productId, int quantity) {
+        int available = database.getAvailableStock(productId);
+        
+        if (available < quantity) {
+            // This is EXPECTED in high-volume e-commerce
+            // Happens 20-30% of time during flash sales
+            throw new OutOfStockException(productId, quantity, available);
+        }
+        
+        database.decrementStock(productId, quantity);
+    }
+}
+
+// REST API handles business-appropriately
+@PostMapping("/checkout")
+public ResponseEntity<?> checkout(OrderRequest req) {
+    try {
+        Order order = orderService.createOrder(req);
+        return ResponseEntity.ok(new OrderResponse(order));
+    } catch (OutOfStockException e) {
+        // BUSINESS RESPONSE: inform user, suggest alternative
+        logger.info("Product " + e.getProductId() + " out of stock (availability: " + e.getAvailableQuantity() + ")");
+        
+        List<Product> alternatives = productService.findAlternatives(e.getProductId());
+        return ResponseEntity.status(409).body(new OutOfStockResponse(
+            e.getProductId(),
+            e.getAvailableQuantity(),
+            alternatives
+        ));
+    }
+}
+
+// Monitoring: track business metric (not a failure)
+metrics.recordOutOfStock(productId);
+dashboardService.updateInventoryAvailability(productId, availableQuantity);
+
+// Customer experience
+User sees: "Product out of stock. Similar products: [list alternatives]. Notify me when back in stock?"
+// User action: choose alternative or opt-in for notification
+// System action: queue notification job, no retry needed
+```
+
+**BUSINESS EXCEPTION 2: InsufficientFundsException**
+
+```java
+public class InsufficientFundsException extends OrderException {
+    private final String userId;
+    private final BigDecimal requested;
+    private final BigDecimal available;
+    
+    public InsufficientFundsException(String userId, BigDecimal requested, BigDecimal available) {
+        super("Insufficient funds: need $" + requested + ", have $" + available, null);
+        this.userId = userId;
+        this.requested = requested;
+        this.available = available;
+    }
+}
+
+// Service throws it (expected condition)
+public class PaymentService {
+    public void authorizePayment(String userId, BigDecimal amount) {
+        BigDecimal balance = accountService.getBalance(userId);
+        
+        if (balance.compareTo(amount) < 0) {
+            // EXPECTED: happens regularly (user runs out of money)
+            // Frequency: 5-10% of transactions
+            throw new InsufficientFundsException(userId, amount, balance);
+        }
+        
+        accountService.deductBalance(userId, amount);
+    }
+}
+
+// API handles (business-appropriately, no retry)
+@PostMapping("/checkout")
+public ResponseEntity<?> checkout(OrderRequest req) {
+    try {
+        Order order = orderService.createOrder(req);
+        return ResponseEntity.ok(order);
+    } catch (InsufficientFundsException e) {
+        // BUSINESS RESPONSE: tell user to add funds
+        logger.info("User " + e.getUserId() + " insufficient funds: need $" + e.getRequested() + ", have $" + e.getAvailable());
+        
+        return ResponseEntity.status(402).body(new ErrorResponse(
+            "Insufficient funds. Need $" + e.getRequested() + ", have $" + e.getAvailable() + ". Add funds and try again."
+        ));
+    }
+}
+
+// Monitoring: business metric, not failure
+metrics.recordInsufficientFunds(userId, shortfall);
+analyticsService.trackPaymentFailureReason("insufficient_funds", amount);
+
+// Customer experience
+User sees: "Insufficient balance. You need $150, you have $50. Add $100 to complete purchase?"
+// User action: add funds, retry payment
+// System action: nothing (retry will succeed after user adds funds)
+```
+
+**BUSINESS EXCEPTION 3: InvalidOrderException**
+
+```java
+public class OrderValidationException extends OrderException {
+    private final List<String> violations;
+    
+    public OrderValidationException(List<String> violations) {
+        super("Order validation failed: " + violations, null);
+        this.violations = violations;
+    }
+    
+    public List<String> getViolations() { return violations; }
+}
+
+// Service throws it (expected business rule)
+public class OrderService {
+    public void validateOrder(OrderRequest req) {
+        List<String> violations = new ArrayList<>();
+        
+        if (req.getItems().isEmpty()) {
+            violations.add("Order must contain at least one item");
+        }
+        if (req.getTotal().compareTo(BigDecimal.ZERO) <= 0) {
+            violations.add("Order total must be positive");
+        }
+        if (req.getDeliveryDate().isBefore(LocalDate.now())) {
+            violations.add("Delivery date must be in future");
+        }
+        
+        if (!violations.isEmpty()) {
+            // EXPECTED: user input error (happens frequently)
+            throw new OrderValidationException(violations);
+        }
+    }
+}
+
+// API returns validation error to user
+@PostMapping("/checkout")
+public ResponseEntity<?> checkout(OrderRequest req) {
+    try {
+        orderService.validateOrder(req);
+    } catch (OrderValidationException e) {
+        logger.info("Order validation failed: " + e.getViolations());
+        return ResponseEntity.badRequest().body(new ValidationErrorResponse(e.getViolations()));
+    }
+}
+
+// Monitoring: user UX issue
+metrics.recordValidationErrors(e.getViolations());
+analyticsService.trackMissingFields(req);
+
+// Customer experience
+User sees: "Please fix these errors:
+  - Order must contain items
+  - Delivery date must be tomorrow or later"
+// User action: fix fields and resubmit
+// System action: validate again
+```
+
+---
+
+**INFRASTRUCTURE EXCEPTION 1: DatabaseException**
+
+```java
+// Exception definition
+public class DatabaseException extends OrderServiceException {
+    private final String operation;  // "SELECT", "INSERT", "UPDATE"
+    private final String table;      // "orders", "customers", etc.
+    
+    public DatabaseException(String operation, String table, Throwable cause) {
+        super(operation + " on " + table + " failed", cause);
+        this.operation = operation;
+        this.table = table;
+    }
+}
+
+// Service throws it (unexpected infrastructure failure)
+public class OrderRepository {
+    public Order save(Order order) {
+        try {
+            return database.insert(order);
+        } catch (SQLException e) {
+            // UNEXPECTED: database should work
+            // Frequency: <1% of requests (if healthy)
+            // Cause: connection timeout, deadlock, disk full, etc.
+            throw new DatabaseException("INSERT", "orders", e);
+        }
+    }
+}
+
+// REST API handles (infrastructure-appropriately, with retry logic)
+@PostMapping("/checkout")
+public ResponseEntity<?> checkout(OrderRequest req) {
+    try {
+        Order order = orderService.createOrder(req);
+        return ResponseEntity.ok(order);
+    } catch (DatabaseException e) {
+        // INFRASTRUCTURE RESPONSE: retry or queue for retry
+        logger.error("Database error during order creation", e);
+        alertOps("Database error: " + e.getMessage());
+        
+        // Option 1: Retry immediately
+        try {
+            Thread.sleep(100);  // Brief delay
+            Order order = orderService.createOrder(req);  // Retry
+            return ResponseEntity.ok(order);
+        } catch (DatabaseException e2) {
+            // Second failure: queue for later retry
+            retryQueue.enqueue(new OrderRetryJob(req, System.currentTimeMillis()));
+            return ResponseEntity.status(503).body(new ErrorResponse(
+                "Service temporarily unavailable. Your order will be processed shortly."
+            ));
+        }
+    }
+}
+
+// Monitoring: alert immediately
+metrics.incrementDatabaseErrorCount();
+alerting.sendAlert("Database error rate elevated: " + errorCount + " errors in last 5 minutes");
+dashboardService.updateHealthStatus("database", "UNHEALTHY");
+
+// Customer experience
+User sees: "Your order is being processed. We'll confirm within 30 seconds."
+// User action: wait and refresh
+// System action: retry multiple times, queue if persistent, alert ops team
+```
+
+**INFRASTRUCTURE EXCEPTION 2: PaymentGatewayException**
+
+```java
+public class PaymentGatewayException extends OrderServiceException {
+    public enum Type {
+        TIMEOUT("Payment provider timeout - transient"),
+        CONNECTION_REFUSED("Cannot connect to payment provider - transient"),
+        INVALID_RESPONSE("Payment provider returned invalid response - transient"),
+        RATE_LIMIT("Payment provider rate limit - transient"),
+        INVALID_CREDENTIALS("Invalid payment credentials - permanent"),
+        ACCOUNT_SUSPENDED("Account suspended with provider - permanent");
+        
+        public final String description;
+        Type(String description) { this.description = description; }
+        
+        public boolean isTransient() {
+            return this.ordinal() < 4;  // First 4 are transient
+        }
+    }
+    
+    private final Type errorType;
+    
+    public PaymentGatewayException(Type errorType, Throwable cause) {
+        super("Payment gateway error: " + errorType.description, cause);
+        this.errorType = errorType;
+    }
+}
+
+// Service wraps provider errors
+public class StripePaymentGateway {
+    public void charge(String token, BigDecimal amount) {
+        try {
+            stripeApi.charge(token, amount);
+        } catch (StripeTimeoutException e) {
+            throw new PaymentGatewayException(Type.TIMEOUT, e);
+        } catch (StripeConnectionException e) {
+            throw new PaymentGatewayException(Type.CONNECTION_REFUSED, e);
+        } catch (StripeAuthException e) {
+            throw new PaymentGatewayException(Type.INVALID_CREDENTIALS, e);
+        }
+    }
+}
+
+// API handles differently based on error type
+@PostMapping("/checkout")
+public ResponseEntity<?> checkout(OrderRequest req) {
+    try {
+        Order order = orderService.createOrder(req);
+        return ResponseEntity.ok(order);
+    } catch (PaymentGatewayException e) {
+        if (e.getErrorType().isTransient()) {
+            // TRANSIENT: retry with exponential backoff
+            logger.warn("Transient payment error: " + e.getMessage() + " (will retry)");
+            retryQueue.enqueue(new PaymentRetryJob(req, 1));  // Retry count = 1
+            return ResponseEntity.status(503).body(new ErrorResponse(
+                "Payment processing temporarily unavailable. Please try again in a few seconds."
+            ));
+        } else {
+            // PERMANENT: ask user to use different payment method
+            logger.error("Permanent payment error: " + e.getMessage());
+            alertOps("Stripe account error: " + e.getMessage());
+            return ResponseEntity.status(402).body(new ErrorResponse(
+                "This payment method is not available. Please try another card or contact support."
+            ));
+        }
+    }
+}
+
+// Monitoring: alert on persistent errors
+metrics.incrementPaymentGatewayErrors(e.getErrorType());
+if (transientErrorCount > threshold) {
+    alerting.sendAlert("Payment gateway errors elevated: " + transientErrorCount + " timeouts in 5 minutes");
+}
+
+// Customer experience (transient)
+User sees: "Payment processing temporarily unavailable. Please try again in 10 seconds."
+// User action: wait and retry
+// System action: auto-retry on server side
+
+// Customer experience (permanent)
+User sees: "This payment method unavailable. Try another card or contact support."
+// User action: use different payment method
+// System action: alert ops team
+```
+
+---
+
+**HANDLING STRATEGY FLOWCHART:**
+
+```
+Exception occurs:
+
+Is it BUSINESS?
+  YES:
+    └─ Logger.INFO (expected occurrence)
+      └─ Return HTTP error code to user (400, 402, 409)
+      └─ User can fix (add funds, choose alternative product)
+      └─ No retry needed (won't fix itself)
+      └─ No alert (expected)
+      
+  NO (INFRASTRUCTURE):
+    └─ Logger.ERROR (unexpected failure)
+      └─ Return HTTP 503 Service Unavailable
+      └─ Retry with exponential backoff
+      └─ If transient: retry 3 times, then queue
+      └─ If permanent: alert ops team immediately
+      └─ Update health status / circuit breaker
+```
+
+---
+
+**MONITORING & ALERTING:**
+
+```java
+// Business exception monitoring (INFO level, business metrics)
+@ExceptionHandler(OutOfStockException.class)
+public void handleOutOfStock(OutOfStockException e) {
+    logger.info("Product out of stock", e);
+    metrics.recordOutOfStock(e.getProductId());
+    analytics.recordInventoryIssue(e.getProductId(), e.getAvailableQuantity());
+    // NO alert to ops (expected)
+}
+
+// Infrastructure exception monitoring (ERROR level, system alerts)
+@ExceptionHandler(DatabaseException.class)
+public void handleDatabase(DatabaseException e) {
+    logger.error("Database error", e);
+    metrics.incrementDatabaseErrors();
+    alerting.sendAlert("Database error: " + e.getMessage());
+    dashboardService.markDatabaseUnhealthy();
+    // YES alert to ops (unexpected)
+}
+```
+
+---
+
+**REAL-WORLD PERCENTAGES (1M orders/day):**
+
+```
+Business Exceptions (EXPECTED):
+  - OutOfStockException: 20,000 (2%)
+  - InsufficientFundsException: 50,000 (5%)
+  - OrderValidationException: 10,000 (1%)
+  Total: 80,000 per day (8% of requests) - NORMAL
+
+Infrastructure Exceptions (UNEXPECTED):
+  - DatabaseException: 100 (0.01%) - HIGH ALERT if >1%
+  - PaymentGatewayException: 50 (0.005%) - ALERT if >0.1%
+  - TimeoutException: 20 (0.002%) - ALERT if >0.05%
+  Total: 170 per day (0.017% of requests) - HEALTHY
+
+If infrastructure exceptions spike to 1%, immediate alert to on-call engineer.
+If business exceptions spike to 20%, investigate (maybe inventory system broken).
+```
+
+---
+
+**KEY TAKEAWAY:**
+
+Business exceptions = happy path failures (user action needed)
+Infrastructure exceptions = sad path failures (system problem)
+
+Handle differently:
+- Business: return error code, let user retry with fixed input
+- Infrastructure: retry automatically, alert ops if persistent
+
+---
 
 **Checked Exception Design (Old Way):**
 ```java
