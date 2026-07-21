@@ -94,15 +94,15 @@ public class SquarePrinter {
 
 ## Problem 2: Hollow Square Pattern
 
-**Description**: Print a 5×5 hollow square.
+**Description**: Print a hollow square (5 rows × 10 columns for visual square shape).
 
 **Expected Output**:
 ```
-*****
-*   *
-*   *
-*   *
-*****
+**********
+*        *
+*        *
+*        *
+**********
 ```
 
 ### Solution with O(n) Space Complexity
@@ -422,15 +422,13 @@ public class HollowNumberPyramid {
 
 ## Problem 11: Hollow Rectangle
 
-**Description**: Print a 5×5 hollow rectangle.
+**Description**: Print a hollow rectangle (3 rows × 9 columns - wider rectangle).
 
 **Expected Output**:
 ```
-*****
-*   *
-*   *
-*   *
-*****
+*********
+*       *
+*********
 ```
 
 ### Solution with O(n) Space Complexity
