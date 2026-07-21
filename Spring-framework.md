@@ -2,9 +2,48 @@
 
 ## Table of Contents
 1. [Spring Framework Modules Overview](#spring-framework-modules-overview)
+   - 1.1 [Spring Core (IoC Container)](#1-spring-core-ioc-container)
+   - 1.2 [Spring AOP](#2-spring-aop-aspect-oriented-programming)
+   - 1.3 [Spring Data Access/Integration](#3-spring-data-accessintegration)
+   - 1.4 [Spring Web MVC](#4-spring-web-mvc)
+   - 1.5 [Spring WebFlux](#5-spring-webflux)
+   - 1.6 [Spring Security](#6-spring-security)
+   - 1.7 [Spring Test](#7-spring-test)
 2. [SpringBoot in the Ecosystem](#springboot-in-the-ecosystem)
 3. [SpringBatch Overview](#springbatch-overview)
 4. [Top 30 Spring & SpringBoot FAQs](#top-30-spring--springboot-faqs)
+   - 4.1 [What is Dependency Injection (DI)?](#1-what-is-dependency-injection-di)
+   - 4.2 [What is IoC (Inversion of Control)?](#2-what-is-ioc-inversion-of-control)
+   - 4.3 [What is a Bean in Spring?](#3-what-is-a-bean-in-spring)
+   - 4.4 [Difference between @Component, @Service, @Repository, @Controller](#4-difference-between-component-service-repository-controller)
+   - 4.5 [What is @Autowired?](#5-what-is-autowired-and-how-does-it-work)
+   - 4.6 [@Bean vs @Component](#6-what-is-the-difference-between-bean-and-component)
+   - 4.7 [Singleton vs Prototype Scope](#7-what-is-the-difference-between-singleton-and-prototype-scope)
+   - 4.8 [What is ApplicationContext?](#8-what-is-applicationcontext)
+   - 4.9 [What is @Configuration?](#9-what-is-configuration)
+   - 4.10 [What is @SpringBootApplication?](#10-what-is-springbootapplication)
+   - 4.11 [Auto-configuration in SpringBoot](#11-what-is-auto-configuration-in-springboot)
+   - 4.12 [application.properties & application.yml](#12-what-is-applicationproperties-and-applicationyml)
+   - 4.13 [SpringBoot Profiles](#13-what-are-profiles-in-springboot)
+   - 4.14 [@RestController vs @Controller](#14-what-is-the-difference-between-restcontroller-and-controller)
+   - 4.15 [@RequestMapping & @GetMapping](#15-what-is-requestmapping-and-getmapping)
+   - 4.16 [@PathVariable & @RequestParam](#16-what-is-pathvariable-and-requestparam)
+   - 4.17 [@RequestBody & @ResponseBody](#17-what-is-requestbody-and-responsebody)
+   - 4.18 [Exception Handling](#18-how-does-spring-handle-exceptions)
+   - 4.19 [AOP (Aspect-Oriented Programming)](#19-what-is-aop-aspect-oriented-programming)
+   - 4.20 [@Transactional](#20-what-is-transactional)
+   - 4.21 [Spring Data JPA](#21-what-is-spring-data-jpa)
+   - 4.22 [JPA vs Hibernate](#22-what-is-the-difference-between-jpa-and-hibernate)
+   - 4.23 [Lazy vs Eager Loading](#23-what-is-lazy-loading-and-eager-loading)
+   - 4.24 [N+1 Problem](#24-what-is-n1-problem-in-jpa)
+   - 4.25 [MVC Request Flow](#25-what-is-spring-mvc-request-flow)
+   - 4.26 [DispatcherServlet](#26-what-is-the-purpose-of-dispatcherservlet)
+   - 4.27 [Content Negotiation](#27-what-is-content-negotiation)
+   - 4.28 [REST & RESTful Principles](#28-what-is-rest-and-restful-principles)
+   - 4.29 [CORS](#29-what-is-cors-and-how-to-handle-it-in-spring)
+   - 4.30 [Actuator](#30-what-is-actuator-in-springboot)
+5. [Summary Table & Architecture](#summary-table-spring-core-features)
+6. [How They Fit Together](#how-they-fit-together)
 
 ---
 
@@ -245,7 +284,7 @@ public class BatchConfig {
 
 # Top 30 Spring & SpringBoot FAQs
 
-## 1. What is Dependency Injection (DI)?
+## 1. What is Dependency Injection (DI)? {#1-what-is-dependency-injection-di}
 
 **Concept:** Instead of a class creating its dependencies, the framework provides (injects) them.
 
