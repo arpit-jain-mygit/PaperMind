@@ -26,7 +26,7 @@ All solutions have **O(n²) Time Complexity** (unavoidable due to output size).
 | 11 | Hollow Rectangle | ⏳ | [View](#problem-11-hollow-rectangle) |
 | 12 | Hollow Rectangle (Tall) | ⏳ | [View](#problem-12-hollow-rectangle-tall) |
 | 13 | Normal Diamond Pattern | ✅ | [View](#problem-13-normal-diamond-pattern) |
-| 14 | Hollow Diamond Pattern | ⏳ | [View](#problem-14-hollow-diamond-pattern) |
+| 14 | Hollow Diamond Pattern | ✅ | [View](#problem-14-hollow-diamond-pattern) |
 | 15 | Multiplication Table Pattern | ⏳ | [View](#problem-15-multiplication-table-pattern) |
 | 16 | Checkerboard Pattern | ⏳ | [View](#problem-16-checkerboard-pattern) |
 | 17 | Normal Number Staircase | ⏳ | [View](#problem-17-normal-number-staircase) |
@@ -517,11 +517,42 @@ public static void main(String args[]) {
     *
 ```
 
-### Solution with O(n) Space Complexity
-(To be added)
-
-### Solution with O(1) Space Complexity
-(To be added)
+```java
+public static void main(String args[]) {
+    int n = 3;
+    //1st half
+    for (int i = 1; i <=n; i++) {
+        //spaces
+        for (int j = 1 ; j <= n-i; j++){
+            System.out.print(" ");
+        }
+        //stars
+        for (int j = 1; j <= 2*i-1; j++){
+            if(j==1 || j==2*i-1)
+                System.out.print("*"); 
+            else
+                System.out.print(" ");
+        }
+        System.out.println("");               
+    }
+    
+   //2nd half
+    for (int i = n-1; i >= 1; i--) {
+        //spaces
+        for (int j = 1 ; j <= n-i; j++){
+            System.out.print(" ");
+        }
+        //stars
+        for (int j = 1; j <= 2*i-1; j++){
+            if(j==1 || j==2*i-1)
+                System.out.print("*"); 
+            else
+                System.out.print(" ");
+        }
+        System.out.println("");               
+    }
+}
+```
 
 ---
 
