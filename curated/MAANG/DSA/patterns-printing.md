@@ -1,9 +1,7 @@
 # Pattern Printing Problems
 
 ## Overview
-This document contains 43 essential pattern printing problems with solutions using two different space complexity approaches:
-- **O(n) Space Complexity**: Using StringBuilder to build strings before printing
-- **O(1) Space Complexity**: Direct printing without intermediate data structures
+This document contains 43 essential pattern printing problems with O(1) space complexity solutions using direct printing without intermediate data structures.
 
 All solutions have **O(n²) Time Complexity** (unavoidable due to output size).
 
@@ -103,9 +101,6 @@ The 43 problems are organized into 5 difficulty levels to help with progressive 
 *****
 ```
 
-### Solution with O(n) Space Complexity
-(To be added)
-
 ### Solution with O(1) Space Complexity
 ```java
 public class SquarePrinter {
@@ -166,9 +161,6 @@ public static void main(String args[]) {
 *****
 ```
 
-### Solution with O(n) Space Complexity
-(To be added)
-
 ### Solution with O(1) Space Complexity
 ```java
 public class RightAlignedRightTriangle {
@@ -198,9 +190,6 @@ public class RightAlignedRightTriangle {
 **
 *
 ```
-
-### Solution with O(n) Space Complexity
-(To be added)
 
 ### Solution with O(1) Space Complexity
 ```java
@@ -260,9 +249,6 @@ public static void main(String args[]) {
 * * * * *
 ```
 
-### Solution with O(n) Space Complexity
-(To be added)
-
 ### Solution with O(1) Space Complexity
 (To be added)
 
@@ -280,9 +266,6 @@ public static void main(String args[]) {
 * * * *
 * * * * *
 ```
-
-### Solution with O(n) Space Complexity
-(To be added)
 
 ### Solution with O(1) Space Complexity
 (To be added)
@@ -303,9 +286,6 @@ public static void main(String args[]) {
  ****
 *****
 ```
-
-### Solution with O(n) Space Complexity
-(To be added)
 
 ### Solution with O(1) Space Complexity
 ```java
@@ -339,9 +319,6 @@ public class LeftAlignedRightTriangle {
 1 2 3 4
 1 2 3 4 5
 ```
-
-### Solution with O(n) Space Complexity
-(To be added)
 
 ### Solution with O(1) Space Complexity
 ```java
@@ -403,9 +380,6 @@ public static void main(String args[]) {
 5 5 5 5 5
 ```
 
-### Solution with O(n) Space Complexity
-(To be added)
-
 ### Solution with O(1) Space Complexity
 (To be added)
 
@@ -423,9 +397,6 @@ public static void main(String args[]) {
 * *
 *
 ```
-
-### Solution with O(n) Space Complexity
-(To be added)
 
 ### Solution with O(1) Space Complexity
 (To be added)
@@ -446,9 +417,6 @@ public static void main(String args[]) {
 *        *
 **********
 ```
-
-### Solution with O(n) Space Complexity
-(To be added)
 
 ### Solution with O(1) Space Complexity
 ```java
@@ -485,9 +453,6 @@ public static void main(String args[]) {
 *   *
 ```
 
-### Solution with O(n) Space Complexity
-(To be added)
-
 ### Solution with O(1) Space Complexity
 ```java
 public class RightAlignedRightTriangle {
@@ -521,9 +486,6 @@ public class RightAlignedRightTriangle {
  *     *
 *       *
 ```
-
-### Solution with O(n) Space Complexity
-(To be added)
 
 ### Solution with O(1) Space Complexity
 ```java
@@ -560,9 +522,6 @@ public class LeftAlignedRightTriangle {
 **
 *
 ```
-
-### Solution with O(n) Space Complexity
-(To be added)
 
 ### Solution with O(1) Space Complexity
 ```java
@@ -668,9 +627,6 @@ public static void main(String args[]) {
 1       5
 ```
 
-### Solution with O(n) Space Complexity
-(To be added)
-
 ### Solution with O(1) Space Complexity
 ```java
 public class HollowNumberPyramid {
@@ -734,9 +690,6 @@ public static void main(String args[]) {
     *
 ```
 
-### Solution with O(n) Space Complexity
-(To be added)
-
 ### Solution with O(1) Space Complexity
 (To be added)
 
@@ -754,9 +707,6 @@ public static void main(String args[]) {
       * *
         *
 ```
-
-### Solution with O(n) Space Complexity
-(To be added)
 
 ### Solution with O(1) Space Complexity
 (To be added)
@@ -776,9 +726,6 @@ public static void main(String args[]) {
 * * * * *
 ```
 
-### Solution with O(n) Space Complexity
-(To be added)
-
 ### Solution with O(1) Space Complexity
 (To be added)
 
@@ -796,9 +743,6 @@ public static void main(String args[]) {
 1 2 3 4
 1 2 3 4 5
 ```
-
-### Solution with O(n) Space Complexity
-(To be added)
 
 ### Solution with O(1) Space Complexity
 (To be added)
@@ -818,9 +762,6 @@ public static void main(String args[]) {
 1
 ```
 
-### Solution with O(n) Space Complexity
-(To be added)
-
 ### Solution with O(1) Space Complexity
 (To be added)
 
@@ -838,9 +779,6 @@ public static void main(String args[]) {
 1 2 3 4
 1 2 3 4 5
 ```
-
-### Solution with O(n) Space Complexity
-(To be added)
 
 ### Solution with O(1) Space Complexity
 (To be added)
@@ -1005,9 +943,6 @@ public static void main(String args[]) {
 *
 ```
 
-### Solution with O(n) Space Complexity
-(To be added)
-
 ### Solution with O(1) Space Complexity
 (To be added)
 
@@ -1028,9 +963,6 @@ public static void main(String args[]) {
 * *
 ```
 
-### Solution with O(n) Space Complexity
-(To be added)
-
 ### Solution with O(1) Space Complexity
 (To be added)
 
@@ -1048,9 +980,6 @@ public static void main(String args[]) {
   * * *
     *
 ```
-
-### Solution with O(n) Space Complexity
-(To be added)
 
 ### Solution with O(1) Space Complexity
 ```java
@@ -1106,9 +1035,6 @@ public static void main(String args[]) {
     *
 ```
 
-### Solution with O(n) Space Complexity
-(To be added)
-
 ### Solution with O(1) Space Complexity
 (To be added)
 
@@ -1129,9 +1055,6 @@ public static void main(String args[]) {
 *           *
 ```
 
-### Solution with O(n) Space Complexity
-(To be added)
-
 ### Solution with O(1) Space Complexity
 (To be added)
 
@@ -1149,9 +1072,6 @@ public static void main(String args[]) {
 *   *
 *     *
 ```
-
-### Solution with O(n) Space Complexity
-(To be added)
 
 ### Solution with O(1) Space Complexity
 (To be added)
@@ -1172,9 +1092,6 @@ public static void main(String args[]) {
 *
 ```
 
-### Solution with O(n) Space Complexity
-(To be added)
-
 ### Solution with O(1) Space Complexity
 (To be added)
 
@@ -1194,9 +1111,6 @@ public static void main(String args[]) {
 7 8 9 10
 ```
 
-### Solution with O(n) Space Complexity
-(To be added)
-
 ### Solution with O(1) Space Complexity
 (To be added)
 
@@ -1214,9 +1128,6 @@ public static void main(String args[]) {
 0 1 0 1
 1 0 1 0 1
 ```
-
-### Solution with O(n) Space Complexity
-(To be added)
 
 ### Solution with O(1) Space Complexity
 (To be added)
@@ -1236,9 +1147,6 @@ public static void main(String args[]) {
 1 2 3 4 5 4 3 2 1
 ```
 
-### Solution with O(n) Space Complexity
-(To be added)
-
 ### Solution with O(1) Space Complexity
 (To be added)
 
@@ -1255,9 +1163,6 @@ public static void main(String args[]) {
 3 4
 4
 ```
-
-### Solution with O(n) Space Complexity
-(To be added)
 
 ### Solution with O(1) Space Complexity
 (To be added)
@@ -1281,9 +1186,6 @@ public static void main(String args[]) {
 * * * * * * * * *
 ```
 
-### Solution with O(n) Space Complexity
-(To be added)
-
 ### Solution with O(1) Space Complexity
 (To be added)
 
@@ -1302,9 +1204,6 @@ public static void main(String args[]) {
 1 4 6 4 1
 ```
 
-### Solution with O(n) Space Complexity
-(To be added)
-
 ### Solution with O(1) Space Complexity
 (To be added)
 
@@ -1322,9 +1221,6 @@ public static void main(String args[]) {
 1 3 3 1
 1 4 6 4 1
 ```
-
-### Solution with O(n) Space Complexity
-(To be added)
 
 ### Solution with O(1) Space Complexity
 (To be added)
