@@ -441,13 +441,17 @@ public class HollowNumberPyramid {
 
 ## Problem 12: Hollow Rectangle (Tall)
 
-**Description**: Print a 3×7 hollow rectangle.
+**Description**: Print a tall hollow rectangle (7 rows × 5 columns).
 
 **Expected Output**:
 ```
-*******
-*     *
-*******
+*****
+*   *
+*   *
+*   *
+*   *
+*   *
+*****
 ```
 
 ### Solution with O(n) Space Complexity
