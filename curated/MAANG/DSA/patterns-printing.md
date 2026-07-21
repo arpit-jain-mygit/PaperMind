@@ -27,7 +27,7 @@ All solutions have **O(n²) Time Complexity** (unavoidable due to output size).
 | 12 | Hollow Rectangle (Tall) | ✅ | [View](#problem-12-hollow-rectangle-tall) |
 | 13 | Normal Diamond Pattern | ✅ | [View](#problem-13-normal-diamond-pattern) |
 | 14 | Hollow Diamond Pattern | ✅ | [View](#problem-14-hollow-diamond-pattern) |
-| 15 | Multiplication Table Pattern | ⏳ | [View](#problem-15-multiplication-table-pattern) |
+| 15 | Multiplication Table Pattern | ✅ | [View](#problem-15-multiplication-table-pattern) |
 | 16 | Checkerboard Pattern | ⏳ | [View](#problem-16-checkerboard-pattern) |
 | 17 | Normal Number Staircase | ⏳ | [View](#problem-17-normal-number-staircase) |
 | 18 | Hollow Number Staircase | ⏳ | [View](#problem-18-hollow-number-staircase) |
@@ -596,11 +596,20 @@ public static void main(String args[]) {
 5 10 15 20 25
 ```
 
-### Solution with O(n) Space Complexity
-(To be added)
-
-### Solution with O(1) Space Complexity
-(To be added)
+```java
+public static void main(String args[]) {
+    int rows = 5;
+    int cols = 5;
+    for(int i=1; i <=rows; i++){
+        for(int j=1; j<=cols; j++){
+            if(j>1) System.out.print(" ");                    
+            System.out.print(i*j);                    
+        }
+        if(i!=rows)
+         System.out.println();
+    }
+}
+```
 
 ---
 
