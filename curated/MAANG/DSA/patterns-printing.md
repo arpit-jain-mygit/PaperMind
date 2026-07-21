@@ -720,7 +720,7 @@ public static void main(String args[]) {
     int n = 5;
     for(int i=0; i<n; i++){
         for(int j = 0; j < i; j++){
-            System.out.print("  ");//2 spaces per level for alignment
+            System.out.print("  ");//Count unit width: each element is "* " = 2 chars, so indent by 2 per level
         }
         for(int j = 0; j < n-i; j++){
             System.out.print("*");
@@ -730,7 +730,7 @@ public static void main(String args[]) {
     }
     for(int i=n-2; i>=0; i--){
         for(int j = 0; j < i; j++){
-            System.out.print("  ");//2 spaces per level for alignment
+            System.out.print("  ");//Count unit width: each element is "* " = 2 chars, so indent by 2 per level
         }
         for(int j = 0; j < n-i; j++){
             System.out.print("*");
