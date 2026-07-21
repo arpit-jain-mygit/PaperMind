@@ -1083,6 +1083,353 @@ Exception: Major decision (rewrite legacy monolith) requires sync meeting. But 8
 
 ---
 
+## 8. Core Java Concepts for Architects
+
+### Comparator, Comparable - Sorting and Ordering
+
+#### Q1: You have 100,000 orders in a system. You need to sort them by: (1) creation date, (2) customer name, (3) total amount. How do you design this without duplicating sorting logic?
+
+**Explanation (Simple):**
+`Comparable` is "I know how to compare myself" (natural ordering). `Comparator` is "Someone else decides how to compare me" (flexible ordering). Order has natural ordering (by creation date). But you also want to sort by customer name (different order). Use Comparable for natural order, Comparator for alternate orders.
+
+**Real Business Use Case:**
+E-commerce order system. Order naturally sorted by creation date (most recent first). But admin dashboard needs: sort by customer name (A-Z), sort by total amount (highest first), sort by status (pending → processing → shipped).
+
+**Design:**
+```java
+class Order implements Comparable<Order> {
+    LocalDateTime createdAt;
+    String customerName;
+    BigDecimal totalAmount;
+    String status;
+    
+    // Natural ordering: by creation date (most recent first)
+    @Override
+    public int compareTo(Order other) {
+        return other.createdAt.compareTo(this.createdAt);
+    }
+}
+
+// Flexible orderings: use Comparators
+List<Order> orders = getAllOrders();
+
+// Sort by customer name
+orders.sort(Comparator.comparing(Order::getCustomerName));
+
+// Sort by total amount (highest first)
+orders.sort(Comparator.comparing(Order::getTotalAmount).reversed());
+
+// Sort by status (custom order)
+orders.sort(Comparator.comparingInt(order -> statusPriority(order.getStatus())));
+```
+
+**Real Benefit:**
+- **Flexibility**: Sort 10 different ways without 10 different data structures
+- **Maintainability**: Sorting logic centralized, not scattered across code
+- **Performance**: Collections.sort() is optimized (Timsort, O(n log n))
+- **Reusability**: Sort the same collection multiple ways
+
+---
+
+### hashCode(), equals() Methods - Object Identity & Equality
+
+#### Q1: You're building a user deduplication system. Users can sign up with email, phone, or name. How do you detect duplicates without iterating through all 10M users?
+
+**Explanation (Simple):**
+HashMap uses `hashCode()` to find bucket (fast), then `equals()` to verify match (accurate). Overriding both allows object to be used as HashMap key. Poor hashCode() = collisions = slow lookups.
+
+**Real Business Use Case:**
+User signup system: 10M existing users. New signup: email = john@example.com. Check if user exists (can't iterate all 10M). HashMap<Email, User> with custom Email class.
+
+**Design:**
+```java
+class Email {
+    String value;
+    
+    @Override
+    public int hashCode() {
+        return value.toLowerCase().hashCode(); // Normalize case
+    }
+    
+    @Override
+    public boolean equals(Object obj) {
+        if (!(obj instanceof Email)) return false;
+        Email other = (Email) obj;
+        return this.value.equalsIgnoreCase(other.value); // Case-insensitive
+    }
+}
+
+// Usage
+Map<Email, User> users = new HashMap<>();
+Email lookup = new Email("john@example.com");
+
+if (users.containsKey(lookup)) {
+    // Duplicate detected (O(1) instead of O(n))
+    return "Email already exists";
+}
+```
+
+**Real Benefit:**
+- **Speed**: Duplicate detection in O(1) (constant time) vs O(n) (linear)
+- **Scale**: Can handle 10M users without slowdown
+- **Correctness**: Business logic (case-insensitive emails) embedded in hashCode/equals
+- **Consistency**: If object is HashMap key, must implement both methods consistently
+
+**Golden Rule:** If `a.equals(b)`, then `a.hashCode() == b.hashCode()` (violating this breaks HashMap)
+
+---
+
+### Interface vs Abstract Class - When to Use Which
+
+#### Q1: You're designing a payment system. You have: PaymentProcessor (process payment, record transaction), ReportGenerator (generate reports), etc. Should these be interfaces or abstract classes?
+
+**Explanation (Simple):**
+Interface: "What can you do?" (contract only, no state). Abstract class: "What are you?" (contract + shared behavior). PaymentProcessor is abstract class (all processors record transaction, validate amount, log errors). ReportGenerator is interface (implementations wildly different: PDF, Excel, JSON).
+
+**Real Business Use Case:**
+Payment system:
+- Abstract class `PaymentProcessor`: all processors must validate amount, record transaction, send confirmation. Share this logic.
+- Interface `PaymentMethod`: credit card, wallet, bank transfer implement differently. No shared code.
+
+**Design:**
+```java
+// Abstract class: shared behavior + contract
+abstract class PaymentProcessor {
+    public final void process(Payment p) {
+        validate(p);
+        executePayment(p); // Subclasses implement
+        recordTransaction(p); // Shared
+        sendConfirmation(p); // Shared
+    }
+    
+    protected abstract void executePayment(Payment p);
+    
+    private void recordTransaction(Payment p) {
+        database.insert("transactions", p);
+    }
+}
+
+// Interface: just contract
+interface ReportGenerator {
+    byte[] generate(ReportParams params);
+    void send(byte[] report, String recipient);
+}
+
+// Implementation: combines abstract class + interface
+class CreditCardProcessor extends PaymentProcessor implements ReportGenerator {
+    @Override
+    protected void executePayment(Payment p) {
+        // Credit card specific logic
+    }
+    
+    @Override
+    public byte[] generate(ReportParams params) {
+        // PDF generation
+    }
+}
+```
+
+**Real Benefit:**
+- **Code reuse**: Shared behavior (recordTransaction) in abstract class, not duplicated
+- **Clarity**: Interface = contract, abstract class = contract + shared code
+- **Flexibility**: Implement multiple interfaces, extend one abstract class
+- **Maintenance**: Change shared logic once (in abstract class), all subclasses benefit
+
+---
+
+### String Comparison Techniques - Performance & Correctness
+
+#### Q1: Your system compares customer names 10M times/day. Should you use .equals(), .equalsIgnoreCase(), or .compareTo()? What's the performance difference?
+
+**Explanation (Simple):**
+`.equals()`: exact match (fastest). `.equalsIgnoreCase()`: ignores case (slightly slower). `.compareTo()`: ordering (used for sorting). At scale, choose right method or pay 10x penalty.
+
+**Real Business Use Case:**
+Customer database: find user by name. Name = "John Smith", search = "john smith" (user typed lowercase). Should match.
+
+**Performance comparison:**
+```java
+// Method 1: equals() - exact match (fastest)
+if (customerName.equals(searchTerm)) { } // O(n) but minimal overhead
+
+// Method 2: equalsIgnoreCase() - ignore case (slightly slower)
+if (customerName.equalsIgnoreCase(searchTerm)) { } // O(n) + case conversion
+
+// Method 3: compareTo() - ordering (slowest for matching)
+if (customerName.compareTo(searchTerm) == 0) { } // Unnecessary
+
+// Method 4: normalize first, then compare (best for repeated comparisons)
+String normalized = customerName.toLowerCase();
+if (normalized.equals(searchTerm.toLowerCase())) { } // Normalize once, compare many
+
+// Method 5: Regex - flexible but slow (avoid unless needed)
+if (customerName.matches("(?i)" + searchTerm)) { } // Regex overhead
+```
+
+**Real Business Use Case:**
+Scenario: 10M customer lookups/day, each doing `equalsIgnoreCase()`.
+
+Cost analysis:
+- 10M × equalsIgnoreCase() = 10M case conversions (wasteful)
+- Better: normalize name once at creation, compare with equals() (10M exact matches, faster)
+- Result: 20% faster query response, 5% less CPU
+
+**Real Benefit:**
+- **Performance**: exact equals() > equalsIgnoreCase() > compareTo() (for matching)
+- **Scale**: 10M operations × small difference = big impact
+- **Correctness**: Know which method does what (avoid wrong tools)
+- **Best practice**: normalize at data entry, use equals() for lookups
+
+---
+
+### Pass by Value vs Pass by Reference - Common Misconception
+
+#### Q1: You pass an Order object to a method. Inside the method, you modify the order. Does the original object change? Why?
+
+**Explanation (Simple):**
+Java is always pass-by-value, but the value is the reference (memory address) to object. Modifying object contents changes the original. Reassigning the reference (object = new Order()) doesn't.
+
+**Real Business Use Case:**
+Order processing system:
+```java
+Order order = new Order(100); // Create order with amount $100
+applyDiscount(order, 0.10); // Apply 10% discount
+
+// Question: Is order.amount now $90?
+// Answer: YES (object modified through reference)
+
+void applyDiscount(Order order, double discount) {
+    order.setAmount(order.getAmount() * (1 - discount)); // Modifies original
+    // order = new Order(0); // This would NOT affect caller's order
+}
+```
+
+**Correct understanding:**
+```java
+Order order = new Order(100); // Reference at memory address 0x1000
+processOrder(order); // Passes value: 0x1000 (reference copied)
+
+void processOrder(Order orderRef) {
+    // orderRef = 0x1000 (same memory address as caller's order)
+    orderRef.setAmount(90); // Changes object at 0x1000 (original affected)
+    
+    orderRef = new Order(0); // orderRef now = 0x2000 (new address)
+    // Caller's order still at 0x1000 with amount $90 (not affected by reassignment)
+}
+```
+
+**Real Benefit:**
+- **Correctness**: Know when methods affect original objects (avoid bugs)
+- **Design**: Return new objects or modify in-place based on intent
+- **Performance**: No unnecessary copying of large objects
+
+---
+
+### Garbage Collection - Introduction & Algorithms
+
+#### Q1: Your application creates 1M temporary Order objects/day, then discards them. Memory usage grows. Why? How does GC help?
+
+**Explanation (Simple):**
+Objects are created on heap. Without GC, heap fills with unreferenced dead objects (memory leak). GC periodically finds unreferenced objects and reclaims memory.
+
+**Real Business Use Case:**
+Order processing system:
+- Each order processing: create temp objects (JSON parser, validators, formatters)
+- Process completes: objects no longer referenced
+- Without GC: memory fills, OutOfMemoryError crashes app
+- With GC: unreferenced objects deleted, memory reclaimed
+
+**GC Algorithms:**
+
+1. **Mark-and-Sweep (Generational GC - default)**
+   - Mark: trace all reachable objects from GC roots (live objects)
+   - Sweep: delete unreachable objects
+   - Generational: young objects collected frequently, old rarely (works because most objects die young)
+   - Stop-the-world pause: brief (100ms-1s depending on heap size)
+
+2. **G1GC (Garbage First - low latency)**
+   - Divides heap into regions
+   - Collects regions with most garbage first (predictable)
+   - Lower pause times (< 200ms) → better for real-time systems
+
+3. **ZGC (Z Garbage Collector - ultra-low latency)**
+   - Pauses < 10ms even with multi-TB heaps
+   - Use when latency critical (trading post, payment system)
+
+**Real Business Use Case:**
+Payment system: 1M transactions/day.
+- Generational GC: pause every 100ms × 10 = 1 second/day paused (acceptable for batch)
+- Trading system: pause must be < 10ms (ZGC needed to avoid missed trades)
+
+**Real Benefit:**
+- **Reliability**: Automatic memory management (no manual free() bugs)
+- **Performance**: Tuned GC minimizes pauses
+- **Scale**: Handles millions of objects without memory leaks
+- **Tradeoff**: GC overhead (choose algorithm based on latency requirements)
+
+---
+
+### Collections Framework - Interfaces, Classes, Performance
+
+#### Q1: You need to store 1M products: lookup by ID (fast), iterate in order, add/remove during iteration. Which collection?
+
+**Explanation (Simple):**
+Collection interfaces: Collection (basic), List (ordered), Set (unique), Map (key-value). Each has implementations with different performance: ArrayList (fast lookup), LinkedList (fast add/remove), HashMap (fast search), TreeMap (sorted).
+
+**Real Business Use Case:**
+E-commerce product catalog:
+- Lookup product by ID → HashMap (O(1))
+- Display products sorted by price → TreeMap (O(log n))
+- Remove duplicates → HashSet (O(1))
+- Process in order, add/remove simultaneously → LinkedList (O(1) add/remove)
+
+**Performance Table:**
+
+| Operation | HashMap | TreeMap | HashSet | ArrayList | LinkedList |
+|-----------|---------|---------|---------|-----------|------------|
+| **Add** | O(1) | O(log n) | O(1) | O(n) | O(1) |
+| **Remove** | O(1) | O(log n) | O(1) | O(n) | O(n) |
+| **Lookup** | O(1) | O(log n) | O(1) | O(n) | O(n) |
+| **Sorted** | ❌ | ✅ | ❌ | ❌ | ❌ |
+| **Iteration** | O(n) | O(n) | O(n) | O(n) | O(n) |
+
+**Real Business Use Case:**
+Scenario: 1M products, perform all operations frequently.
+
+Wrong: ArrayList for everything → lookup 1M products = O(n) × 1M = 1 trillion operations (10 seconds)
+Right: HashMap for lookups (O(1)), TreeMap for sorted display (O(n log n) for initial sort, then O(1) iteration)
+Result: 1 million lookups = O(1) × 1M = 1M operations (10 milliseconds)
+
+**Real Benefit:**
+- **Speed**: Right collection = 1000x faster at scale
+- **Memory**: HashMap smaller than ArrayList for sparse data
+- **Simplicity**: Collections API does heavy lifting (sorting, deduplication, etc.)
+- **Flexibility**: Plug in different implementations based on access patterns
+
+**Key Pattern:**
+- Need unique, unordered: HashSet
+- Need unique, sorted: TreeSet
+- Need key-value, unordered: HashMap
+- Need key-value, sorted: TreeMap
+- Need ordered (duplicates allowed): ArrayList (fast at end), LinkedList (fast in middle)
+
+---
+
+## Summary: Core Concepts for Architects
+
+**All these concepts tie together:**
+- Comparable/Comparator (sorting logic)
+- hashCode/equals (object identity in collections)
+- Interface/Abstract class (design flexibility)
+- String comparison (performance at scale)
+- Pass by value/reference (avoiding bugs)
+- Garbage collection (memory reliability)
+- Collections framework (choosing right tool for job)
+
+Master these deeply, and you handle enterprise systems with confidence.
+
+---
+
 **Good luck with Solera interview!** Focus on: leadership + technical depth + pragmatism (not ivory-tower architecture). They want someone who can balance scale with reality.
 
 **Behavioral questions extracted to → behavioral-mock.md** (7 STAR-method questions covering leadership, conflict resolution, trust, technical advocacy, difficult decisions, change adoption, and stakeholder management).
