@@ -462,85 +462,45 @@ public class HollowNumberPyramid {
 
 ## Problem 13: Normal Diamond Pattern
 
-**Description**: Print a filled diamond with 5 rows.
-
 **Expected Output**:
 ```
-    *
-   ***
-  *****
- *******
-  *****
-   ***
-    *
+  *
+ ***
+*****
+ ***
+  *
 ```
 
-### Solution with O(n) Space Complexity
 ```java
 public static void main(String args[]) {
-    int n = 4;
-    StringBuilder sb;
-    
-    // Upper half (including middle)
-    for (int i = 1; i <= n; i++) {
-        sb = new StringBuilder();
-        for (int j = 1; j <= n - i; j++) {
-            sb.append(" ");
+    int n = 3;
+    //1st half
+    for (int i = 1; i <=n; i++) {
+        //spaces
+        for (int j = 1 ; j <= n-i; j++){
+            System.out.print(" ");
         }
-        for (int j = 1; j <= 2 * i - 1; j++) {
-            sb.append("*");
+        //stars
+        for (int j = 1; j <= 2*i-1; j++){
+            System.out.print("*");               
         }
-        System.out.println(sb.toString());
+        System.out.println("");               
     }
     
-    // Lower half
-    for (int i = n - 1; i >= 1; i--) {
-        sb = new StringBuilder();
-        for (int j = 1; j <= n - i; j++) {
-            sb.append(" ");
+    //1st half
+    for (int i = n-1; i >=1; i--) {//start with n, if need symmetry for middle line, o/w n-1
+        //spaces
+        for (int j = 1 ; j <= n-i; j++){
+            System.out.print(" ");
         }
-        for (int j = 1; j <= 2 * i - 1; j++) {
-            sb.append("*");
+        //stars
+        for (int j = 1; j <= 2*i-1; j++){
+            System.out.print("*");               
         }
-        System.out.println(sb.toString());
+        System.out.println("");               
     }
 }
 ```
-
-### Solution with O(1) Space Complexity
-```java
-public static void main(String args[]) {
-    int n = 4;
-    
-    // Upper half (including middle)
-    for (int i = 1; i <= n; i++) {
-        for (int j = 1; j <= n - i; j++) {
-            System.out.print(" ");
-        }
-        for (int j = 1; j <= 2 * i - 1; j++) {
-            System.out.print("*");
-        }
-        System.out.println();
-    }
-    
-    // Lower half (start from n-1 to avoid repeating middle row)
-    for (int i = n - 1; i >= 1; i--) {
-        for (int j = 1; j <= n - i; j++) {
-            System.out.print(" ");
-        }
-        for (int j = 1; j <= 2 * i - 1; j++) {
-            System.out.print("*");
-        }
-        System.out.println();
-    }
-}
-```
-
-**Key Points**:
-- Upper half: `i` goes from 1 to n (creates top half + middle row)
-- Lower half: `i` goes from n-1 to 1 (creates bottom half, excluding middle)
-- Spaces: `n - i` spaces before each row
-- Stars: `2*i - 1` stars in each row
 
 ---
 
