@@ -1521,3 +1521,24 @@ Master these deeply, and you handle enterprise systems with confidence.
 **Good luck with Solera interview!** Focus on: leadership + technical depth + pragmatism (not ivory-tower architecture). They want someone who can balance scale with reality.
 
 **Behavioral questions extracted to → behavioral-mock.md** (7 STAR-method questions covering leadership, conflict resolution, trust, technical advocacy, difficult decisions, change adoption, and stakeholder management).
+
+---
+
+## TOC Maintenance Guide
+
+**When adding new sections/questions to this document:**
+1. Add content in appropriate section (Part 1 or Part 2)
+2. Update the TABLE OF CONTENTS at the top
+3. Increment question count in section header (e.g., "3 Qs" → "4 Qs")
+4. Add new Q sub-item with brief description
+5. Ensure section anchor links match (use `#` format: `#1-oops-concepts`)
+6. Run: `grep -n "^## \|^### Q" java-mock.md` to verify section structure
+7. Commit with message: "Update: TOC - Added [Topic] with [X] new questions"
+
+**Current Stats:**
+- Part 1: 21 questions (7 sections)
+- Part 2: 21 questions (7 sections + 2 tips sections)
+- Core Concepts: 7 deep-dive topics
+- **Total: 49 questions + comprehensive examples**
+
+Last updated: 2026-07-22
