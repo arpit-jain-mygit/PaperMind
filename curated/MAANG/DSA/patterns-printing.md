@@ -76,7 +76,7 @@ The 43 problems are organized into 5 difficulty levels to help with progressive 
 ### Level 5 (Advanced)
 | # | Problem | Status | Link |
 |---|---------|--------|------|
-| 37 | Number Changing Pattern | ⏳ | [View](#problem-37-number-changing-pattern) |
+| 37 | Number Changing Pattern | ✅ | [View](#problem-37-number-changing-pattern) |
 | 38 | Zero-One Triangle | ⏳ | [View](#problem-38-zero-one-triangle) |
 | 39 | Palindrome Triangular | ⏳ | [View](#problem-39-palindrome-triangular) |
 | 40 | Reverse Number Triangle Pattern | ⏳ | [View](#problem-40-reverse-number-triangle-pattern) |
@@ -1186,7 +1186,19 @@ public static void main(String args[]) {
 ```
 
 ### Solution with O(1) Space Complexity
-(To be added)
+```java
+public static void main(String args[]) {
+    int cnt=1;
+    int n = 4;
+    for(int i=1; i<=n; i++){
+        for(int j=1; j<=i; j++){
+            System.out.print(cnt++);
+            if (j<i) System.out.print(" ");//print space after each number, except last one
+        }
+        System.out.println();
+    }
+}
+```
 
 ---
 
