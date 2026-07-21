@@ -1,5 +1,93 @@
 # Java Architect Interview - 21 Years Experience
 
+---
+
+## TABLE OF CONTENTS
+
+### Part 1: Core Java Fundamentals (21 Questions)
+1. [OOPS Concepts](#1-oops-concepts) - 3 Qs
+   - Q1: Payment system design with OOP pillars
+   - Q2: Polymorphism in inventory management
+   - Q3: Encapsulation & authentication system design
+
+2. [Exception Handling](#2-exception-handling) - 3 Qs
+   - Q1: Recoverable vs. non-recoverable errors in payments
+   - Q2: Checked vs. unchecked exceptions in high-throughput systems
+   - Q3: Preventing exception swallowing & meaningful error logging
+
+3. [Multithreading](#3-multithreading) - 3 Qs
+   - Q1: Preventing double-booking in ticket systems
+   - Q2: Async optimization in checkout processes
+   - Q3: wait(), notify(), notifyAll() in producer-consumer
+
+4. [Collections](#4-collections) - 3 Qs
+   - Q1: HashMap vs. ConcurrentHashMap for sessions
+   - Q2: Cache eviction strategies (LRU)
+   - Q3: ArrayList vs. LinkedList for ordered data
+
+5. [Concurrent API](#5-concurrent-api) - 3 Qs
+   - Q1: ExecutorService thread pool sizing
+   - Q2: CompletableFuture for parallel API calls
+   - Q3: Thread pool exhaustion prevention
+
+6. [Data Structures](#6-data-structures) - 3 Qs
+   - Q1: Leaderboard design (Array/Tree/Sorted List)
+   - Q2: Lookup in 10M users (ArrayList vs. HashSet)
+   - Q3: Cache with expiry (HashMap + PriorityQueue)
+
+7. [Algorithms](#7-algorithms) - 3 Qs
+   - Q1: Linear vs. Binary search trade-offs
+   - Q2: Shortest path algorithms (Dijkstra vs. A*)
+   - Q3: Sorting algorithms in production (Quicksort/Mergesort/Heapsort)
+
+8. [Core Java Concepts](#8-core-java-concepts-for-architects) - 7 Topics
+   - Comparator, Comparable - Sorting & Ordering
+   - hashCode(), equals() - Object Identity & Equality
+   - Interface vs. Abstract Class - Design Decision
+   - String Comparison Techniques - Performance Optimization
+   - Pass by Value/Reference - Avoiding Misconceptions
+   - Garbage Collection - Memory Management
+   - Collections Framework - Choosing Right Data Structure
+
+### Part 2: Solera Software Development Director Questions (21 Questions)
+9. [Leadership & Global Team Management](#1-leadership--global-team-management) - 3 Qs
+   - Q1: Establishing trust across 150+ engineers globally
+   - Q2: Managing legacy vs. microservices team conflict
+   - Q3: Addressing engineer burnout & context-switching
+
+10. [Legacy to Modern SDLC & Modernization](#2-legacy-to-modern-sdlc--modernization-strategy) - 3 Qs
+    - Q1: Balancing stability with modernization (strangle pattern)
+    - Q2: Business case for technical debt paydown
+    - Q3: Adopting DDD across global teams
+
+11. [CICD/DevOps & Platform as Service](#3-cicddevops--platform-as-a-service) - 3 Qs
+    - Q1: 10x deployments/day without risk
+    - Q2: AWS vs. Azure vs. On-premise evaluation
+    - Q3: Docker/Kubernetes adoption strategy
+
+12. [Enterprise Architecture & Technical Strategy](#4-enterprise-architecture--technical-strategy) - 2 Qs
+    - Q1: Doubling feature delivery without hiring
+    - Q2: Architectural Manifesto alignment across teams
+
+13. [Quality, Performance & Observability](#5-quality-performance--observability) - 3 Qs
+    - Q1: Distributed tracing for root-cause analysis
+    - Q2: Quality gates for legacy systems (pragmatic approach)
+    - Q3: Auto-scaling for 5x peak load
+
+14. [Program & Product Management](#6-program--product-management) - 2 Qs
+    - Q1: Coordinating shared services across squads
+    - Q2: Staffing new product line (8-month launch)
+
+15. [Global Product Delivery & Multi-lingual](#7-global-product-delivery--multi-lingual-platforms) - 2 Qs
+    - Q1: Supporting 12 languages without code fragmentation
+    - Q2: Async decision-making across time zones
+
+### Part 3: Interview Tips & Strategy
+16. [Interview Tips for 21-Year Veteran](#interview-tips-for-21-year-veteran) - 5 Strategies
+17. [Interview Tips for Director Level](#interview-tips-for-director-level-21-years-experience) - 8 Strategies
+
+---
+
 ## 1. OOPS Concepts
 
 ### Q1: Design a real-world payment system using OOP principles. What pillars would you apply and why?
