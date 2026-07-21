@@ -49,7 +49,7 @@
    - Garbage Collection - Memory Management
    - Collections Framework - Choosing Right Data Structure
 
-### Part 2: Solera Software Development Director Questions (21 Questions)
+### Part 2: Software Development Director Questions (21 Questions)
 9. [Leadership & Global Team Management](#1-leadership--global-team-management) - 3 Qs
    - Q1: Establishing trust across 150+ engineers globally
    - Q2: Managing legacy vs. microservices team conflict
@@ -67,7 +67,7 @@
 
 12. [Enterprise Architecture & Technical Strategy](#4-enterprise-architecture--technical-strategy) - 2 Qs
     - Q1: Doubling feature delivery without hiring
-    - Q2: Architectural Manifesto alignment across teams
+    - Q2: Architectural vision alignment across teams
 
 13. [Quality, Performance & Observability](#5-quality-performance--observability) - 3 Qs
     - Q1: Distributed tracing for root-cause analysis
@@ -471,17 +471,17 @@ Daily order reconciliation: sort 1 million orders. Quicksort: usually 20 seconds
 
 ---
 
-# SOLERA - Software Development Director Interview Questions
+# Software Development Director Software Development Director Interview Questions
 
 ## 1. Leadership & Global Team Management
 
-### Q1: You're inheriting a global engineering team across Madrid, US, and APAC spanning 150+ engineers with varying skill levels and productivity metrics. How do you establish trust and transparency within 30 days?
+### Q1: You're inheriting a global engineering team across 3+ offices spanning 150+ engineers with varying skill levels and productivity metrics. How do you establish trust and transparency within 30 days?
 
 **Explanation (Simple):**
 Global teams have timezone delays, communication gaps, and local context. Quick wins: establish daily standup cadence (rotating times), create transparent KPI dashboard (burndown, deployment frequency, defect rates visible to all), one-on-ones with each squad lead to understand blockers and culture.
 
 **Real Business Use Case:**
-Solera scenario: Madrid team frustrated because US team's architectural decisions slow them down. APAC feels ignored in priority planning. Solution: weekly cross-timezone sync (recorded), shared decision log in Confluence, each region has voice in roadmap. Within month, deployment velocity increases 40%, sprint retrospectives show increased trust scores.
+Global platform scenario: Team in one office frustrated because another office's architectural decisions slow them down. Third office feels ignored in priority planning. Solution: weekly cross-timezone sync (recorded), shared decision log in Confluence, each region has voice in roadmap. Within month, deployment velocity increases 40%, sprint retrospectives show increased trust scores.
 
 **Real Benefit:**
 - **Retention**: Engineers feel heard; attrition drops from 15% to 5% annually
@@ -490,13 +490,13 @@ Solera scenario: Madrid team frustrated because US team's architectural decision
 
 ---
 
-### Q2: How would you navigate conflict between a legacy J2EE team (risk-averse, slow delivery) and a microservices team (moving fast, less documentation)? What metrics would you track?
+### Q2: How would you navigate conflict between a legacy team (risk-averse, slow delivery) and a microservices team (moving fast, less documentation)? What metrics would you track?
 
 **Explanation (Simple):**
 Two cultures won't merge by mandating one approach. Respect both: legacy team's risk management prevents data corruption, microservices team's speed enables innovation. Create clear domains: legacy handles core transactional systems (payments, ledger), microservices handles new features (reports, notifications). Measure both teams fairly: legacy by uptime/data integrity, microservices by feature delivery/time-to-market.
 
 **Real Business Use Case:**
-Solera's global insurance/automotive solutions: core claims processing (30 years old, J2EE, critical). New customer portal (6 months old, microservices, agile). Instead of forcing migration, coexist: legacy team owns claims stability (SLA: 99.99% uptime, zero data loss), microservices team owns UX velocity (release weekly). Share SDK library so they communicate. Legacy team learns about deployment automation gradually; microservices team learns data integrity concerns.
+Enterprise platform scenario: core transaction processing (15+ years old, legacy, critical). New customer portal (6 months old, microservices, agile). Instead of forcing migration, coexist: legacy team owns core stability (SLA: 99.99% uptime, zero data loss), microservices team owns UX velocity (release weekly). Share SDK library so they communicate. Legacy team learns about deployment automation gradually; microservices team learns data integrity concerns.
 
 **Real Benefit:**
 - **Risk Reduction**: Zero incidents from forcing legacy onto microservices
@@ -517,7 +517,7 @@ Solera's global insurance/automotive solutions: core claims processing (30 years
 Context-switching = death by a thousand cuts. Investigate: Why 4 projects? Missing specialists? Unclear priorities? Poor resource allocation? Solution: assign to one critical project, reduce meetings (async-first), empower them to say no. Track: morale surveys, 1-1 frequency increase, workload distribution across team.
 
 **Real Business Use Case:**
-Solera: Senior architect spread thin across microservices migration, cloud PaaS evaluation, and legacy claims system optimization. Burnout visible: longer code reviews (quality slips), skips ceremonies, considers leaving. Director action: reassign to lead microservices modernization only (strategic priority), hire cloud consultant (reduces evaluation load), have peer reviews microservices code (reduces sole-expert burden). Result: engineer re-energized, mentors 2 juniors in 3 months, proposes optimization saving $500K annually.
+Enterprise platform: Senior architect spread thin across microservices migration, cloud PaaS evaluation, and legacy transaction system optimization. Burnout visible: longer code reviews (quality slips), skips ceremonies, considers leaving. Director action: reassign to lead microservices modernization only (strategic priority), hire cloud consultant (reduces evaluation load), have peer reviews microservices code (reduces sole-expert burden). Result: engineer re-energized, mentors 2 juniors in 3 months, proposes optimization saving $500K annually.
 
 **Real Benefit:**
 - **Retention**: Keep $500K+ experienced engineer (hiring replacement costs 6 months + 200%)
@@ -528,16 +528,16 @@ Solera: Senior architect spread thin across microservices migration, cloud PaaS 
 
 ## 2. Legacy to Modern SDLC & Modernization Strategy
 
-### Q1: Solera has 20+ legacy J2EE monoliths running critical insurance/automotive operations for 15 years. How do you balance stability (can't afford downtime) with modernization (need faster feature delivery)?
+### Q1: Enterprise platform has 20+ legacy J2EE monoliths running critical financial services operations for 15 years. How do you balance stability (can't afford downtime) with modernization (need faster feature delivery)?
 
 **Explanation (Simple):**
 Can't rip-replace—business depends on zero-downtime. Can't ignore—tech debt slows feature delivery 50%. Strategy: strangle pattern. Build new microservices alongside legacy, gradually route customer traffic from monolith to new service. Legacy remains stable (only bug fixes), new service gets enhancements. Over 3 years, monolith shrinks.
 
 **Real Business Use Case:**
-Solera's claims processing system: 1M+ claims daily, 99.99% uptime SLA, 500+ engineers familiar with codebase, written in J2EE (EJB, JSP, Oracle DB). Goal: enable new features (API-first, mobile support) without breaking existing workflows.
+Enterprise platform's transaction processing system: 1M+ orders daily, 99.99% uptime SLA, 500+ engineers familiar with codebase, written in J2EE (EJB, JSP, Oracle DB). Goal: enable new features (API-first, mobile support) without breaking existing workflows.
 
 Strategy:
-- Year 1: Build claims API (microservice, Node.js/Go) alongside monolith. Route 10% new claims through API, 90% through legacy. Monitor closely. Fix API bugs. Build confidence.
+- Year 1: Build transaction API (microservice, Node.js/Go) alongside monolith. Route 10% new orders through API, 90% through legacy. Monitor closely. Fix API bugs. Build confidence.
 - Year 2: Route 50% through API. Legacy team sizes down, focuses on edge cases legacy handles (old policy formats, legacy integrations).
 - Year 3: Route 90% through API. Legacy in maintenance mode only (handle old data formats, provide read-only APIs for reporting).
 
@@ -560,13 +560,13 @@ Benefits:
 
 ---
 
-### Q2: Your Madrid team says "We don't have time to refactor legacy code while shipping features." How do you make the business case for technical debt paydown?
+### Q2: Your Regional office team says "We don't have time to refactor legacy code while shipping features." How do you make the business case for technical debt paydown?
 
 **Explanation (Simple):**
 Teams see refactoring as cost (slows features). Directors see it as investment (prevents future slowdown). Quantify: measure velocity drop over time (used to deliver 40 points/sprint, now 25 due to complexity). Refactoring isn't "nice to have"—it's business continuity. One week of refactoring (reduce complexity from 20 to 15 points) buys back 3 weeks of velocity over next quarter.
 
 **Real Business Use Case:**
-Solera's claims system: when system was 5 years old, team delivered 50 story points/sprint. Now 15 years old, 30 points/sprint. Why? Each new feature requires understanding 10x more legacy code, each bug fix risks 5 other components, onboarding takes 6 months instead of 3. Business sees: "Team is slower, hire more engineers!" Wrong solution—adding more engineers slows it further (complexity grows). Right solution: allocate 20% of capacity (10 points/sprint) to refactoring.
+Enterprise platform's transaction system: when system was 5 years old, team delivered 50 story points/sprint. Now 15 years old, 30 points/sprint. Why? Each new feature requires understanding 10x more legacy code, each bug fix risks 5 other components, onboarding takes 6 months instead of 3. Business sees: "Team is slower, hire more engineers!" Wrong solution—adding more engineers slows it further (complexity grows). Right solution: allocate 20% of capacity (10 points/sprint) to refactoring.
 
 Pitch to leadership:
 - "Today: 30 points delivered. Goal: 40 points by Q4."
@@ -574,7 +574,7 @@ Pitch to leadership:
 - "Option B: Invest 10 points/sprint in refactoring (reduced by 5 velocity points). Q1: 25 points. Q2: 28. Q3: 32. Q4: 38. Reach 40+ points by Q1 next year."
 - "Option B costs zero (we already have engineers), fixes root cause, leaves time for upskilling."
 
-Result: Leadership approves refactoring allocation. 6 months later, team velocity climbs back to 40+. Madrid team morale improves (code is enjoyable to work with).
+Result: Leadership approves refactoring allocation. 6 months later, team velocity climbs back to 40+. Regional office team morale improves (code is enjoyable to work with).
 
 **Real Benefit:**
 - **Cost Savings**: Avoid hiring 3 engineers ($450K + 3x onboarding time)
@@ -590,17 +590,17 @@ Result: Leadership approves refactoring allocation. 6 months later, team velocit
 DDD is architectural thinking (ubiquitous language, bounded contexts, aggregates) not just coding. Forcing it causes: training overhead, arguments about domain boundaries, short-term velocity drop. Better: pilot with one squad, show results, let other squads adopt when ready. One squad using DDD well beats five squads confused about DDD.
 
 **Real Business Use Case:**
-Solera's global platform: Claims team (Madrid), Policies team (US), Payments team (APAC) all in one codebase, no clear boundaries. Claims team changes payment code, breaks Payments team in production. Policies team doesn't know if their change affects Claims. Chaos.
+Enterprise platform's global platform: Transaction team (Office 1), Policies team (Office 2), Payments team (Office 3) all in one codebase, no clear boundaries. Transaction team changes payment code, breaks Payments team in production. Policies team doesn't know if their change affects Claims. Chaos.
 
 DDD solution:
-- Define bounded contexts: Claims domain, Policies domain, Payments domain (separate codebases or strict package boundaries)
-- Ubiquitous language: Claims team says "claim created," not "insert into CLAIM table"
+- Define bounded contexts: Transaction domain, Policies domain, Payments domain (separate codebases or strict package boundaries)
+- Ubiquitous language: Transaction team says "order created," not "insert into CLAIM table"
 - Anti-corruption layer: When Claims needs Policy info, go through anti-corruption layer (not direct DB query), translate Policy concepts to Claims concepts
-- Pilot with Claims team: dedicated architect, training, retrospectives every 2 weeks
+- Pilot with Transaction team: dedicated architect, training, retrospectives every 2 weeks
 - Show results: incident rate drops 70% (no accidental cross-domain changes), feature delivery stable, team confidence improves
 - Spread: Policies and Payments adopt when they see benefits
 
-Year 1: Claims team shifts to DDD, velocity stable (training offset by clarity gains). Policies/Payments remain transaction-script.
+Year 1: Transaction team shifts to DDD, velocity stable (training offset by clarity gains). Policies/Payments remain transaction-script.
 Year 2: Policies team adopts DDD, benefits accrue. Payments team learning from early teams.
 Year 3: Entire global platform is DDD-oriented; cross-team coordination simpler; incidents rare.
 
@@ -614,15 +614,15 @@ Year 3: Entire global platform is DDD-oriented; cross-team coordination simpler;
 
 ## 3. CICD/DevOps & Platform as a Service
 
-### Q1: Solera's deployment process today: manual testing (2 weeks), change advisory board approval (1 week), production deployment (1 day). You want to achieve deployment 10x/day without increasing risk. How?
+### Q1: Enterprise platform's deployment process today: manual testing (2 weeks), change advisory board approval (1 week), production deployment (1 day). You want to achieve deployment 10x/day without increasing risk. How?
 
 **Explanation (Simple):**
 Today = risky-hand approach (long cycles create monster PRs, testing is manual so bugs hide, approvals are political, deployment is stressful). Solution: automation throughout. Automated tests (unit, integration, contract, performance) catch bugs before humans. Infrastructure-as-code ensures staging = production. CICD pipeline (every commit triggers tests, staging deploy, production deploy if tests pass) removes manual steps. Feature flags allow deployment without exposure (release 0% traffic, test internally, gradually ramp to 100%).
 
 **Real Business Use Case:**
-Solera's claims API team (microservice, built with modern stack):
+Enterprise platform's transaction API team (microservice, built with modern stack):
 - Developer pushes code
-- GitHub Actions (CICD pipeline) runs: unit tests, integration tests (real DB), contract tests (verifies claims API talks correctly to Policy API), load test (10K requests/second)
+- GitHub Actions (CICD pipeline) runs: unit tests, integration tests (real DB), contract tests (verifies transaction API talks correctly to Policy API), load test (10K requests/second)
 - If all tests pass, code deploys to staging (same config as production, but test data)
 - Team runs smoke tests (manual, 10 minutes)
 - If successful, code auto-deploys to production with feature flag (0% traffic initially)
@@ -650,7 +650,7 @@ Results:
 
 ---
 
-### Q2: You're evaluating Azure vs. AWS vs. on-premise for Solera's global platform. What trade-offs do you present to VP of Engineering and CFO?
+### Q2: You're evaluating Azure vs. AWS vs. on-premise for Enterprise platform's global platform. What trade-offs do you present to VP of Engineering and CFO?
 
 **Explanation (Simple):**
 No one-size-fits-all answer. Trade-offs:
@@ -660,7 +660,7 @@ No one-size-fits-all answer. Trade-offs:
 - **On-premise**: Full control, predictable costs (CapEx), compliance-friendly (data stays local). Downside: hiring ops team, 2-year hardware refresh cycles, lower availability (single data center), higher operational load
 
 **Real Business Use Case:**
-Solera's current state: Mostly on-premise (legacy J2EE monoliths in company data centers), some legacy .Net/C# services on Azure (reason: company-wide Azure agreement). New microservices team (claims API) evaluating cloud.
+Enterprise platform's current state: Mostly on-premise (legacy J2EE monoliths in company data centers), some legacy .Net/C# services on Azure (reason: company-wide Azure agreement). New microservices team (transaction API) evaluating cloud.
 
 Decision framework:
 
@@ -673,16 +673,16 @@ Decision framework:
 | Vendor lock-in | Medium (AWS services hard to migrate) | Medium (Azure services hard to migrate) | None (yours) |
 | Scalability | Infinite (auto-scaling) | High (auto-scaling) | Limited (manual scale, lead time) |
 
-**Recommendation for Solera:**
+**Recommendation for Enterprise platform:**
 - **Legacy monoliths (on-premise for now)**: Cost of migration > benefit; stay on-prem until end-of-life (5-10 years). Build orchestration tooling to treat on-prem like cloud (IaC, CICD).
-- **New microservices (AWS)**: Faster time-to-market, global multi-region support, excellent tooling. Partner with AWS (Solera likely gets enterprise pricing). Use managed services (RDS for DB, SQS for queues, Lambda for occasional tasks) to reduce ops overhead.
+- **New microservices (AWS)**: Faster time-to-market, global multi-region support, excellent tooling. Partner with AWS (Enterprise platform likely gets enterprise pricing). Use managed services (RDS for DB, SQS for queues, Lambda for occasional tasks) to reduce ops overhead.
 - **Legacy .Net services (Azure)**: Keep on Azure (already invested, Enterprise agreement). Gradually migrate to cloud-native if beneficial.
 
 **Real Benefit:**
 - **Speed**: New services on AWS reach production in weeks (vs. months on-prem procurement)
 - **Cost**: Hybrid approach (legacy on-prem, new on AWS) optimizes both; pure cloud would cost more for legacy; pure on-prem would slow new features
 - **Risk**: Multi-cloud doesn't increase risk if clear architecture (AWS for new, on-prem for legacy, Azure for legacy .Net)
-- **Scalability**: New services auto-scale during peaks (insurance claims spike after disasters); legacy systems don't need to scale (stable workload)
+- **Scalability**: New services auto-scale during peaks (insurance orders spike after disasters); legacy systems don't need to scale (stable workload)
 
 ---
 
@@ -692,13 +692,13 @@ Decision framework:
 Technically, nearly everything is containerizable. Practically, it depends on cost vs. benefit. Docker/Kubernetes are valuable for: microservices (many small services, independent deploy), auto-scaling (traffic varies), multi-region deployment. Legacy monolith gets minimal benefit—it's one large application, doesn't scale horizontally (monoliths don't parallelize well), deployed quarterly.
 
 **Real Business Use Case:**
-Solera's claims monolith (15 years, 5M LOC, J2EE, EJB, Oracle DB):
+Enterprise platform's transaction monolith (15 years, 5M LOC, J2EE, EJB, Oracle DB):
 - Could containerize: Wrap in Docker image, run 5 instances, load-balance with Kubernetes
 - Benefit: Slightly easier deployment, easier multi-environment setup
 - Cost: Containerizing monolith is 2-3 week effort (developers unused to Docker, deployment pipelines need rewriting), Kubernetes ops overhead, all 5 instances must be identical (can't do gradual config changes)
 - Result: Effort > benefit. Legacy monolith stays on traditional servers (good enough).
 
-Better use of Kubernetes effort: Modernized microservices (claims API, policies API, reporting engine) run on Kubernetes. Legacy monolith runs on traditional VM infrastructure. Over time, legacy shrinks (fewer instances needed), no pressure to containerize.
+Better use of Kubernetes effort: Modernized microservices (transaction API, policies API, reporting engine) run on Kubernetes. Legacy monolith runs on traditional VM infrastructure. Over time, legacy shrinks (fewer instances needed), no pressure to containerize.
 
 **Real Benefit:**
 - **Pragmatism**: Don't containerize everything; focus effort on services where it matters
@@ -709,13 +709,13 @@ Better use of Kubernetes effort: Modernized microservices (claims API, policies 
 
 ## 4. Enterprise Architecture & Technical Strategy
 
-### Q1: Solera's CEO says "We need to double feature delivery in 12 months." Your global engineering team is already at capacity. How do you make this happen without burning out teams or compromising quality?
+### Q1: Enterprise platform's CEO says "We need to double feature delivery in 12 months." Your global engineering team is already at capacity. How do you make this happen without burning out teams or compromising quality?
 
 **Explanation (Simple):**
 Doubling capacity without doubling headcount requires: (1) removing inefficiencies (meetings, silos, waiting), (2) building leverage (automation, reusable components, self-service), (3) focusing (saying no to low-impact work). Hiring doesn't solve this—new engineers require onboarding (3-6 months before productivity), increase communication complexity.
 
 **Real Business Use Case:**
-Solera's global teams: 150 engineers, shipping 40 story points/sprint, goal is 80 by year-end.
+Enterprise platform's global teams: 150 engineers, shipping 40 story points/sprint, goal is 80 by year-end.
 
 Current state diagnosis:
 - Meetings: teams spend 15 hours/week in syncs (timezone coordination, design reviews, dependency coordination). Waste: 30%
@@ -765,16 +765,16 @@ Total: 5 + 10 + 8 + 5 + 5 = 33 point/sprint gain (from 40 to 73 points). Close t
 
 ---
 
-### Q2: Solera's "Architectural Manifesto" (mentioned in JD) emphasizes scalability, security, and compliance. How would you ensure architectural decisions across Madrid, US, APAC teams align to it?
+### Q2: Enterprise platform's "Architectural Manifesto" (mentioned in JD) emphasizes scalability, security, and compliance. How would you ensure architectural decisions across Regional office, Office 2, Office 3 teams align to it?
 
 **Explanation (Simple):**
 Architectural principles are abstract ("scalability") until you make them concrete (DDD, microservices, event-driven). Without enforcement, teams interpret differently: one team builds monolith (violates scalability principle), another builds microservices (aligns). Solution: architecture review board (ARB), concrete patterns, and measurements.
 
 **Real Business Use Case:**
-Solera's Architectural Manifesto (imagined based on modern enterprise needs):
+Enterprise platform's Architectural Manifesto (imagined based on modern enterprise needs):
 - **Scalability**: Horizontal scaling (add more instances). No monoliths. Stateless services. Distributed databases (not single Oracle DB).
 - **Security**: Zero-trust (verify every request). Encryption in transit and at rest. No hardcoded credentials. Regular security audits.
-- **Compliance**: GDPR (EU), CCPA (US), local regulations (APAC). Data residency (EU data in EU). Audit logging.
+- **Compliance**: GDPR (EU), CCPA (Office 2), local regulations (Office 3). Data residency (EU data in EU). Audit logging.
 
 Enforcement mechanisms:
 
@@ -810,17 +810,17 @@ Enforcement mechanisms:
 
 ## 5. Quality, Performance & Observability
 
-### Q1: Solera's global platform has 500+ microservices deployed across Madrid, US, APAC. When a customer reports "Slow claims processing," how do you diagnose root cause quickly across distributed systems?
+### Q1: Enterprise platform's global platform has 500+ microservices deployed across Regional office, Office 2, Office 3. When a customer reports "Slow transaction processing," how do you diagnose root cause quickly across distributed systems?
 
 **Explanation (Simple):**
-Single-machine debugging (breakpoints, logs) doesn't work at scale. Need distributed tracing (every request traced through all services), metrics (latency, error rate per service), and logs (structured, searchable). When "claims slow," trace shows: request went to Claims API (10ms) → called Policies API (100ms, slow!) → called Payments API (5ms). Root cause: Policies API. Check Policies metrics: database CPU at 95%. Check logs: "Connection pool exhausted." Fix: increase pool size or scale Policies API instances.
+Single-machine debugging (breakpoints, logs) doesn't work at scale. Need distributed tracing (every request traced through all services), metrics (latency, error rate per service), and logs (structured, searchable). When "orders slow," trace shows: request went to Transaction API (10ms) → called Policies API (100ms, slow!) → called Payments API (5ms). Root cause: Policies API. Check Policies metrics: database CPU at 95%. Check logs: "Connection pool exhausted." Fix: increase pool size or scale Policies API instances.
 
 **Real Business Use Case:**
-Solera customer reports: "My claim processing used to take 5 seconds, now 30 seconds." Incident response:
+Enterprise platform customer reports: "My order processing used to take 5 seconds, now 30 seconds." Incident response:
 
 1. **Distributed Tracing (Jaeger, Datadog, or Honeycomb)**
-   - Query: show me 99th percentile claim requests from last hour
-   - Trace shows: Claims API (5ms) → Policies API (450ms!) → Payments API (10ms) → Notification Service (5ms)
+   - Query: show me 99th percentile order requests from last hour
+   - Trace shows: Transaction API (5ms) → Policies API (450ms!) → Payments API (10ms) → Notification Service (5ms)
    - Root cause: Policies API is slow (was 50ms before, now 450ms)
 
 2. **Metrics (Prometheus/Grafana)**
@@ -857,10 +857,10 @@ Solera customer reports: "My claim processing used to take 5 seconds, now 30 sec
 ### Q2: You want to establish quality gates for the global platform: "No code deploys to production unless it passes automated tests." Your legacy team says "Our system has no tests; it'll take 6 months to write them." How do you handle this?
 
 **Explanation (Simple):**
-100% tests from day one is ideal but unrealistic for legacy code. Pragmatic approach: (1) Stop the bleeding: new code requires tests (prevents problem growing). (2) Gradually cover: write tests for high-risk areas (payments, claims approval). (3) Use contract tests: verify legacy system talks correctly to modern systems (no need to test legacy internals, just interfaces). (4) Invest incrementally: 10% capacity to testing each quarter.
+100% tests from day one is ideal but unrealistic for legacy code. Pragmatic approach: (1) Stop the bleeding: new code requires tests (prevents problem growing). (2) Gradually cover: write tests for high-risk areas (payments, orders approval). (3) Use contract tests: verify legacy system talks correctly to modern systems (no need to test legacy internals, just interfaces). (4) Invest incrementally: 10% capacity to testing each quarter.
 
 **Real Business Use Case:**
-Solera's legacy claims monolith: 15 years old, 0% test coverage, processes $1B in claims annually. Adding test requirement stops all deployments (team can't write 50k tests in 6 months).
+Enterprise platform's legacy transaction monolith: 15 years old, 0% test coverage, processes $1B in orders annually. Adding test requirement stops all deployments (team can't write 50k tests in 6 months).
 
 Path forward:
 
@@ -870,20 +870,20 @@ Path forward:
    - Benefit: at least new features are protected against regression
 
 2. **High-risk areas (month 1-2)**
-   - Focus: payments module (processes $100M/year), claims approval logic (regulatory requirements)
+   - Focus: payments module (processes $100M/year), orders approval logic (regulatory requirements)
    - Retrofit tests for existing code in these areas (2-3 week effort)
    - Benefit: highest risk areas protected; reduces incident probability by 80%
 
 3. **Contract tests (month 1)**
-   - Modern services (claims API, policies API) integrate with legacy monolith via API/DB
+   - Modern services (transaction API, policies API) integrate with legacy monolith via API/DB
    - Write contract tests: verify modern service sends what legacy expects, vice versa
-   - Example: Claims API sends claim XML in format legacy expects; contract test verifies structure
+   - Example: Transaction API sends order XML in format legacy expects; contract test verifies structure
    - Benefit: catch integration bugs without testing legacy internals
    - Effort: minimal (focused on interfaces)
 
 4. **Gradual investment (ongoing)**
    - Quarter 1: allocate 10% capacity to testing (4 engineers out of 40)
-   - They test high-value areas (claims approval, payment processing, error handling)
+   - They test high-value areas (orders approval, payment processing, error handling)
    - Quarter 2: 20% capacity (8 engineers)
    - By year-end: 30% capacity (12 engineers focused on testing/quality)
    - Coverage grows from 0% → 5% → 15% → 30% over year
@@ -901,17 +901,17 @@ Path forward:
 
 ---
 
-### Q3: Solera's performance SLA: "99.99% availability globally." You have peak load (5M claims/day) and baseline load (1M claims/day). How do you architect for both without over-provisioning?
+### Q3: Enterprise platform's performance SLA: "99.99% availability globally." You have peak load (5M orders/day) and baseline load (1M orders/day). How do you architect for both without over-provisioning?
 
 **Explanation (Simple):**
-5x peak load but only 1-2 weeks/year. Over-provision for peak = waste $500K/year on idle servers. Better: auto-scaling. Scale to 5x peak when needed (disaster strikes, claims surge), scale back down when not. Requires: stateless services (can start/stop instances), load balancing, and monitoring (auto-scale before you hit limits, not after).
+5x peak load but only 1-2 weeks/year. Over-provision for peak = waste $500K/year on idle servers. Better: auto-scaling. Scale to 5x peak when needed (disaster strikes, orders surge), scale back down when not. Requires: stateless services (can start/stop instances), load balancing, and monitoring (auto-scale before you hit limits, not after).
 
 **Real Business Use Case:**
-Solera's claims API (processed $1B annually):
-- Baseline: 1M claims/day = 12 claims/second = 5 microservice instances (2.4 req/instance/sec, comfortable)
-- Peak: 5M claims/day = 60 claims/second = 25 instances needed (2.4 req/instance/sec, same comfort level)
+Enterprise platform's transaction API (processed $1B annually):
+- Baseline: 1M orders/day = 12 orders/second = 5 microservice instances (2.4 req/instance/sec, comfortable)
+- Peak: 5M orders/day = 60 orders/second = 25 instances needed (2.4 req/instance/sec, same comfort level)
 - Seasonal: Hurricane season (summer) = sustained peak for 3 months. Other times = baseline.
-- Unexpected: Major earthquake = 48-hour surge to 10M claims/day = 50 instances needed (worst case)
+- Unexpected: Major earthquake = 48-hour surge to 10M orders/day = 50 instances needed (worst case)
 
 Architecture:
 1. **Stateless services**: each instance processes independently (no sticky sessions, no local state)
@@ -933,7 +933,7 @@ Results:
 
 SLA compliance:
 - 99.99% = 52 minutes downtime/year
-- Incident: "Claims API down 15 minutes due to database connection leak"
+- Incident: "Transaction API down 15 minutes due to database connection leak"
 - With 3 min instances: one dies, traffic reroutes to 2 others (degraded but available); incident resolved in 5 min
 - Remaining budget: 47 minutes for other incidents through year (well-managed)
 
@@ -947,30 +947,30 @@ SLA compliance:
 
 ## 6. Program & Product Management
 
-### Q1: Three global squads need a shared authentication service (microservice). Squad A (Madrid) is ready to integrate in 2 weeks. Squad B (US) in 4 weeks. Squad C (APAC) in 8 weeks. How do you coordinate this to avoid three separate auth implementations?
+### Q1: Three global squads need a shared authentication service (microservice). Squad A (Office 1) is ready to integrate in 2 weeks. Squad B (Office 2) in 4 weeks. Squad C (Office 3) in 8 weeks. How do you coordinate this to avoid three separate auth implementations?
 
 **Explanation (Simple):**
 Sequential delivery = wasted time (Squad A waits 6 weeks for others). Better: Squad A pioneers, others follow. Auth service built by Squad A (or shared team), deployed early. Squad B integrates as soon as API stable. Squad C integrates when ready. Single implementation, phased adoption.
 
 **Real Business Use Case:**
-Solera scenario: Claims squad (Madrid) building new claims processing microservice, needs auth for claim adjudicators. Policies squad (US) building new policy management API. Reporting squad (APAC) building analytics service. All three need user authentication (who is this user, what can they do?).
+Enterprise platform scenario: Transaction squad (Office 1) building new transaction processing microservice, needs auth for order adjudicators. Policies squad (Office 2) building new policy management API. Reporting squad (Office 3) building analytics service. All three need user authentication (who is this user, what can they do?).
 
 Problem:
-- Claims squad: builds embedded auth (quick, but specific to claims)
-- Policies squad: builds different auth (quick, but incompatible with claims)
-- Reporting squad: integrates with claims auth (wrong choice; tight coupling)
+- Transaction squad: builds embedded auth (quick, but specific to orders)
+- Policies squad: builds different auth (quick, but incompatible with orders)
+- Reporting squad: integrates with orders auth (wrong choice; tight coupling)
 - Result: three auth implementations, tech debt, cross-team friction
 
 Better approach:
 
-1. **Week 1-2 (Madrid leads)**
-   - Claims squad + shared infra team design Auth microservice
+1. **Week 1-2 (Office 1 leads)**
+   - Transaction squad + shared infra team design Auth microservice
    - Scope: user authentication (is user valid?), authorization (what can user do?), token management
    - Define OpenAPI spec (what the service provides)
    - Build service + tests
 
 2. **Week 2-4 (Claims integrates)**
-   - Claims squad integrates Auth service (using OpenAPI spec)
+   - Transaction squad integrates Auth service (using OpenAPI spec)
    - Tests: auth works, tokens valid, unauthorized requests rejected
    - Deploy auth service to production (behind feature flag initially, 10% traffic)
    - Gradually increase traffic (10% → 50% → 100%)
@@ -988,28 +988,28 @@ Better approach:
 
 Result:
 - Single auth implementation (not three); reduced tech debt
-- Claims squad not blocked (pioneers quickly, learnings shared)
+- Transaction squad not blocked (pioneers quickly, learnings shared)
 - Policies/Reporting squads faster (spec + reference implementations remove guesswork)
 - Cross-team knowledge: auth ownership clear (whoever built it owns)
 
 **Real Benefit:**
 - **Speed**: Policies squad ships 2 weeks faster (uses proven auth, not building own)
 - **Quality**: Auth service battle-tested by 3 teams; security vetted
-- **Consistency**: Users experience same authentication across claims, policies, reporting
+- **Consistency**: Users experience same authentication across orders, policies, reporting
 - **Cost**: Auth microservice maintenance = 1 team, not 3
 
 ---
 
-### Q2: Solera CEO wants to launch a new line of business (B2B platform for insurance brokers) in 8 months. Your global teams are 80% committed to existing products. How do you staff and deliver this?
+### Q2: Enterprise platform CEO wants to launch a new line of business (B2B platform for insurance brokers) in 8 months. Your global teams are 80% committed to existing products. How do you staff and deliver this?
 
 **Explanation (Simple):**
 Can't staff entirely from existing teams (they'd abandon existing products, revenue drops). Can't staff entirely new (hiring 50 engineers takes 6 months, all junior). Better: hybrid. Core platform team (10-15 experienced engineers) builds foundation (auth, API layer, analytics). Existing teams (10% capacity) contribute domain expertise (what brokers need). New junior engineers (hired now, trained by core team) build features on foundation.
 
 **Real Business Use Case:**
-Solera's 8-month timeline for B2B broker platform:
+Enterprise platform's 8-month timeline for B2B broker platform:
 
 Month 1-2: **Foundation (core platform team, 10 engineers)**
-- APIs: quote API, policy API, claims API (adapted from existing systems)
+- APIs: quote API, policy API, transaction API (adapted from existing systems)
 - Auth: broker login, policy agent access control
 - Analytics: what do brokers do (dashboards, usage tracking)
 - Database schema: multi-tenant (one DB, many brokers)
@@ -1028,7 +1028,7 @@ Month 5-7: **Hardening & scaling**
 - Beta launch (internal + partner brokers, 100 users)
 - Core team: performance testing, security audit, compliance
 - Juniors: bug fixes, feature enhancements based on feedback
-- Existing teams: integration with legacy systems (payment processing, claims workflow)
+- Existing teams: integration with legacy systems (payment processing, orders workflow)
 
 Month 8: **General availability launch**
 - Marketing push
@@ -1052,25 +1052,25 @@ Results:
 
 ## 7. Global Product Delivery & Multi-lingual Platforms
 
-### Q1: Solera's global platform must support 12 languages, multiple currencies, and local regulations (GDPR EU, data residency APAC). How do you architect without fragmenting into 12 separate code bases?
+### Q1: Enterprise platform's global platform must support 12 languages, multiple currencies, and local regulations (GDPR EU, data residency Office 3). How do you architect without fragmenting into 12 separate code bases?
 
 **Explanation (Simple):**
-Temptation: separate code bases for each region (EU version, US version, APAC version). Wrong: 12x maintenance burden, inconsistent features. Better: single code base + configuration. Language/currency/regulation as data-driven features, not code-driven.
+Temptation: separate code bases for each region (EU version, Office 2 version, Office 3 version). Wrong: 12x maintenance burden, inconsistent features. Better: single code base + configuration. Language/currency/regulation as data-driven features, not code-driven.
 
 **Real Business Use Case:**
-Solera's claims platform (used globally):
+Enterprise platform's transaction platform (used globally):
 
 1. **Single code base + configuration approach**
-   - Code: English implementation (payment processing, claims approval workflow)
+   - Code: English implementation (payment processing, orders approval workflow)
    - Config (database, not code): maps rules to regions
-   - Example: claim approval requires human review if amount > $10K (US rule), $20K (EU rule), $50K (APAC rule)
+   - Example: order approval requires human review if amount > $10K (Office 2 rule), $20K (EU rule), $50K (Office 3 rule)
    - Implementation: `if (claimAmount > getApprovalThreshold(region)) { requireHumanReview(); }`
-   - Threshold from database: `SELECT approval_threshold FROM regional_config WHERE region='US'`
+   - Threshold from database: `SELECT approval_threshold FROM regional_config WHERE region='Office 2'`
    - To add new region: insert one row into regional_config (instead of forking code)
 
 2. **Language/localization (i18n)**
    - Externalize all text (UI strings, error messages) into properties files
-   - English text in `messages_en.properties`: "Claim approved", "Error: Invalid claim ID"
+   - English text in `messages_en.properties`: "Claim approved", "Error: Invalid order ID"
    - Spanish text in `messages_es.properties`: "Reclamación aprobada", "Error: ID de reclamación no válido"
    - At runtime: detect browser language, load appropriate properties file
    - To add French: create `messages_fr.properties` (no code change)
@@ -1084,16 +1084,16 @@ Solera's claims platform (used globally):
    - Configuration: `SELECT exchange_rate FROM fx_rates WHERE from='USD' TO='EUR'`
 
 4. **Compliance/data residency**
-   - Sensitive data (claims, personal info) stored in region where user is located
+   - Sensitive data (orders, personal info) stored in region where user is located
    - EU user's data in EU data center (GDPR requirement)
-   - APAC user's data in APAC data center
+   - Office 3 user's data in Office 3 data center
    - Implementation: `dataStore = getRegionalDataStore(userRegion)` 
    - At startup: connect to correct DB based on region (transparent to business logic)
 
 5. **Local regulations**
    - Approval rules, required documents, audit requirements differ by region
    - Store as configuration: `SELECT required_documents FROM regional_config WHERE region='EU'`
-   - Example: EU requires 30-day audit trail (GDPR); US requires 7-day. Configuration drives behavior.
+   - Example: EU requires 30-day audit trail (GDPR); Office 2 requires 7-day. Configuration drives behavior.
 
 Results:
 - Single code base (one repo, one deploy pipeline)
@@ -1109,32 +1109,32 @@ Results:
 
 ---
 
-### Q2: Your Madrid, US, and APAC teams operate in different time zones. Async decision-making is critical. How do you prevent decision delays while keeping quality high?
+### Q2: Your Regional office, Office 2, and Office 3 teams operate in different time zones. Async decision-making is critical. How do you prevent decision delays while keeping quality high?
 
 **Explanation (Simple):**
 Synchronous decisions (meeting required) = slowest team member + timezones = delays. Better: async-first. Document decisions (Confluence ADRs), explain reasoning, provide feedback windows (24-48 hours for objections), auto-proceed if no objections. Fast for most decisions; sync meeting only for major decisions (rare).
 
 **Real Business Use Case:**
-Solera scenario: 
-- Madrid (UTC+1)
-- US (UTC-5, 6-hour lag behind Madrid)
-- APAC (UTC+8, 7 hours ahead of Madrid)
+Enterprise platform scenario: 
+- Office 1 (UTC+0)
+- Office 2 (UTC-5, 6-hour lag behind Office 1)
+- Office 3 (UTC+8, 7 hours ahead of Office 1)
 
 Decision needed: "Should we use PostgreSQL or Oracle for new analytics service?"
 
 **Bad approach (sync meeting):**
-- Schedule meeting: Madrid 9am, US 3am, APAC 5pm → US team misses (too early)
-- Reschedule: Madrid 9am, US 3am, APAC 5pm → APAC team misses
+- Schedule meeting: Office 1 9am, Office 2 3am, Office 3 5pm → Office 2 team misses (too early)
+- Reschedule: Office 1 9am, Office 2 3am, Office 3 5pm → Office 3 team misses
 - Result: always someone unhappy, decision delayed 1 week waiting for all-hands meeting
 
 **Good approach (async):**
-- Madrid engineer posts decision: "We should use PostgreSQL for analytics (reasons: cost, Solera already uses it for microservices, ops team familiar, APAC team has prior experience)."
+- Regional office team posts decision: "We should use PostgreSQL for analytics (reasons: cost, Enterprise platform already uses it for microservices, ops team familiar, Office 3 team has prior experience)."
 - Post in shared Confluence doc (not email, persists)
 - Set feedback window: "Feedback due by 2026-07-24 noon UTC"
-- US team reviews next morning (6 hours later), comments: "PostgreSQL good, we have 3 engineers familiar."
-- APAC team reviews tomorrow evening (24 hours later), comments: "We use PostgreSQL for recommendations service, can share operational patterns."
+- Office 2 team reviews next morning (6 hours later), comments: "PostgreSQL good, we have 3 engineers familiar."
+- Office 3 team reviews tomorrow evening (24 hours later), comments: "We use PostgreSQL for recommendations service, can share operational patterns."
 - By deadline: no objections (consensus achieved)
-- Proceed: Madrid engineer records decision: "Decision made 2026-07-24: use PostgreSQL. Rationale: cost, team familiarity, consistency. Alternatives considered: Oracle (cost too high), MySQL (less enterprise-friendly)."
+- Proceed: Regional office team records decision: "Decision made 2026-07-24: use PostgreSQL. Rationale: cost, team familiarity, consistency. Alternatives considered: Oracle (cost too high), MySQL (less enterprise-friendly)."
 - All teams informed, aligned, decision documented
 
 Time-to-decision: 48 hours (vs. 1 week sync-meeting approach).
@@ -1151,7 +1151,7 @@ Exception: Major decision (rewrite legacy monolith) requires sync meeting. But 8
 
 ## Interview Tips for Director Level (21 Years Experience)
 
-### For Solera specifically:
+### For Enterprise platform specifically:
 
 1. **Acknowledge complexity**: "Global platforms are complex. Legacy + modern architectures, timezone coordination, regulatory compliance. I'd focus on:" [show you've thought through complexity]
 
@@ -1418,7 +1418,7 @@ void processOrder(Order orderRef) {
 #### Q1: Your application creates 1M temporary Order objects/day, then discards them. Memory usage grows. Why? How does GC help?
 
 **Explanation (Simple):**
-Objects are created on heap. Without GC, heap fills with unreferenced dead objects (memory leak). GC periodically finds unreferenced objects and reclaims memory.
+Objects are created on heap. Without GC, heap fills with unreferenced dead objects (memory leak). GC periodically finds unreferenced objects and reorders memory.
 
 **Real Business Use Case:**
 Order processing system:
@@ -1518,7 +1518,7 @@ Master these deeply, and you handle enterprise systems with confidence.
 
 ---
 
-**Good luck with Solera interview!** Focus on: leadership + technical depth + pragmatism (not ivory-tower architecture). They want someone who can balance scale with reality.
+**Good luck with Enterprise platform interview!** Focus on: leadership + technical depth + pragmatism (not ivory-tower architecture). They want someone who can balance scale with reality.
 
 **Behavioral questions extracted to → behavioral-mock.md** (7 STAR-method questions covering leadership, conflict resolution, trust, technical advocacy, difficult decisions, change adoption, and stakeholder management).
 
