@@ -1147,16 +1147,340 @@ try {
 
 ### Q2: In a high-throughput order processing system, should you use checked or unchecked exceptions? Design the exception hierarchy.
 
-**Explanation (Simple):**
-Checked exceptions force handling everywhere (payment.process() throws PaymentException). For high-throughput systems, this is verbose. Unchecked exceptions bubble up naturally. But business exceptions should force developer awareness (OrderNotFoundException must be handled).
+**PART A: Java Exception Hierarchy Foundation**
 
-**Real Business Use Case:**
-Order service: OrderNotFoundException (unchecked but documented—developer must handle). OutOfStockException extends RuntimeException because it's a business rule, not a programming error. Network failures can bubble up to global exception handler rather than polluting method signatures.
+```
+Throwable (checked at compile-time, but not "checked exception")
+├── Error (serious, non-recoverable)
+│   ├── OutOfMemoryError
+│   ├── StackOverflowError
+│   └── VirtualMachineError
+│
+└── Exception (recoverable, can be caught)
+    ├── Checked Exceptions (MUST catch or declare throws)
+    │   ├── IOException
+    │   ├── SQLException
+    │   └── FileNotFoundException
+    │
+    └── RuntimeException (OPTIONAL to catch, unchecked)
+        ├── NullPointerException
+        ├── ArrayIndexOutOfBoundsException
+        ├── IllegalArgumentException
+        └── Custom unchecked exceptions extend RuntimeException
+```
 
-**Real Benefit:**
-- **Performance**: No try-catch overhead in normal path
-- **Clarity**: Method signature isn't cluttered with exception lists
-- **Separation**: Business exceptions vs. infrastructure exceptions clear
+**Key Distinctions:**
+
+| Aspect | **Checked Exception** | **Unchecked Exception** | **Error** |
+|--------|----------------------|------------------------|-----------|
+| **Extends** | Exception (not RuntimeException) | RuntimeException | Error |
+| **Must Handle?** | YES (compiler forces) | NO (optional) | NO (don't catch) |
+| **Decision Time** | COMPILE-TIME | COMPILE-TIME (but optional) | RUNTIME |
+| **Typical Cause** | External issue (file not found, DB down) | Code error (null pointer, bad logic) | System failure (heap exhausted) |
+| **Example** | IOException, SQLException | IllegalArgumentException, NullPointerException | OutOfMemoryError |
+| **Recoverable?** | Usually YES | Rare (usually indicates bug) | NO |
+
+---
+
+**PART B: HIGH-THROUGHPUT ORDER PROCESSING SYSTEM**
+
+**Scenario:** Amazon-scale order processing: 1M orders/day, must handle failures gracefully without blocking.
+
+**Bad Design: Using Checked Exceptions Everywhere**
+
+```java
+// Forces try-catch in EVERY method (verbose, cluttered)
+public class OrderService {
+    // Every method throws checked exceptions
+    public Order createOrder(OrderRequest req) throws OrderValidationException, OutOfStockException, DatabaseException {
+        validateOrder(req);  // throws OrderValidationException
+        checkInventory(req);  // throws OutOfStockException
+        saveToDatabase(req);  // throws DatabaseException
+        // ...
+    }
+}
+
+// Calling code forced to handle/declare:
+public void processCheckout(OrderRequest req) throws OrderValidationException, OutOfStockException, DatabaseException {
+    try {
+        Order order = orderService.createOrder(req);
+        // ...
+    } catch (OrderValidationException e) {
+        // Handle
+    } catch (OutOfStockException e) {
+        // Handle
+    } catch (DatabaseException e) {
+        // Handle
+    }
+}
+
+// Problems in high-throughput:
+// 1. Every method signature polluted with throws clauses
+// 2. Forced try-catch in every layer (business logic, API layer, scheduler, etc.)
+// 3. Method signature changes break all callers
+// 4. No flexibility for recovery strategy (retry? log? notify?)
+// 5. Performance overhead: exception object creation for expected failures
+```
+
+**Good Design: Checked vs Unchecked Exception Hierarchy**
+
+```java
+// Exception Hierarchy (custom)
+public abstract class OrderException extends RuntimeException {
+    // Base: all order exceptions are unchecked (no forced handling)
+    protected OrderException(String message, Throwable cause) {
+        super(message, cause);
+    }
+}
+
+// UNCHECKED BUSINESS EXCEPTIONS (expected failures, recoverable)
+public class OrderValidationException extends OrderException {
+    // Invalid order format, missing fields
+    // Developer should handle (but isn't forced)
+    // Typical: return error to user
+    public OrderValidationException(String message) {
+        super(message, null);
+    }
+}
+
+public class OutOfStockException extends OrderException {
+    // Product not available
+    // Expected in high-volume scenarios
+    // Typical: suggest alternative product or notify when back in stock
+    public OutOfStockException(String productId) {
+        super("Product " + productId + " out of stock", null);
+    }
+}
+
+public class InsufficientFundsException extends OrderException {
+    // User's account has insufficient balance
+    // Expected, recoverable (user adds funds)
+    public InsufficientFundsException(String userId, BigDecimal needed, BigDecimal available) {
+        super("Insufficient funds: need $" + needed + ", have $" + available, null);
+    }
+}
+
+// UNCHECKED INFRASTRUCTURE EXCEPTIONS (unexpected failures, optional handling)
+public class OrderServiceException extends OrderException {
+    // Wrapper for external failures (DB, payment gateway, etc.)
+    // Caller can choose to handle or let bubble up to global handler
+    public OrderServiceException(String message, Throwable cause) {
+        super(message, cause);
+    }
+}
+
+public class DatabaseException extends OrderServiceException {
+    // Database connection failed, query failed
+    // Usually needs retry or circuit breaker
+    public DatabaseException(String message, Throwable cause) {
+        super("Database error: " + message, cause);
+    }
+}
+
+public class PaymentGatewayException extends OrderServiceException {
+    // Payment provider unavailable or failed
+    // Transient: retry with backoff
+    // Permanent: user tries different payment method
+    public PaymentGatewayException(String message, Throwable cause) {
+        super("Payment gateway error: " + message, cause);
+    }
+}
+
+// Main service: NO throws clauses (clean signature)
+public class OrderService {
+    public Order createOrder(OrderRequest req) {
+        // No try-catch in happy path
+        validateOrder(req);           // May throw OrderValidationException
+        checkInventory(req);           // May throw OutOfStockException
+        Order order = saveToDatabase(req);  // May throw DatabaseException
+        processPayment(req);           // May throw PaymentGatewayException or InsufficientFundsException
+        return order;
+    }
+    
+    private void validateOrder(OrderRequest req) {
+        if (req.getItems().isEmpty()) {
+            throw new OrderValidationException("Order must contain items");
+        }
+        if (req.getTotal().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new OrderValidationException("Order total must be positive");
+        }
+    }
+    
+    private void checkInventory(OrderRequest req) {
+        for (OrderItem item : req.getItems()) {
+            if (inventoryService.getStock(item.getProductId()) < item.getQuantity()) {
+                throw new OutOfStockException(item.getProductId());
+            }
+        }
+    }
+    
+    private Order saveToDatabase(OrderRequest req) {
+        try {
+            return database.saveOrder(req);
+        } catch (SQLException e) {
+            throw new DatabaseException("Failed to save order", e);
+        }
+    }
+    
+    private void processPayment(OrderRequest req) {
+        try {
+            paymentGateway.charge(req.getTotal());
+        } catch (PaymentGatewayTimeoutException e) {
+            throw new PaymentGatewayException("Payment timeout (transient)", e);
+        } catch (InsufficientFundsException e) {
+            throw new InsufficientFundsException(req.getUserId(), req.getTotal(), e.getAvailableBalance());
+        }
+    }
+}
+
+// Calling code: handles exceptions strategically, not forced
+public class OrderController {
+    public ResponseEntity<?> checkout(OrderRequest req) {
+        try {
+            Order order = orderService.createOrder(req);
+            return ResponseEntity.ok(new OrderResponse(order));
+        } catch (OrderValidationException e) {
+            // User input error: return 400 Bad Request
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        } catch (OutOfStockException e) {
+            // Expected: suggest alternatives
+            return ResponseEntity.status(409).body(new ErrorResponse("Out of stock: " + e.getMessage()));
+        } catch (InsufficientFundsException e) {
+            // Expected: user adds funds
+            return ResponseEntity.status(402).body(new ErrorResponse("Insufficient funds"));
+        } catch (PaymentGatewayException e) {
+            // Transient: retry, don't block user
+            logger.warn("Payment gateway error (will retry): " + e.getMessage());
+            return ResponseEntity.status(503).body(new ErrorResponse("Payment service temporarily unavailable"));
+        } catch (DatabaseException e) {
+            // Infrastructure error: alert ops
+            logger.error("Database error", e);
+            alertOps("Order processing database failure");
+            return ResponseEntity.status(503).body(new ErrorResponse("Service unavailable"));
+        }
+    }
+}
+
+// Scheduled background job: handles exceptions gracefully
+public class OrderProcessingJob {
+    @Scheduled(fixedRate = 60000)  // Every minute
+    public void processPendingOrders() {
+        List<Order> pending = orderService.getPendingOrders();
+        
+        for (Order order : pending) {
+            try {
+                orderService.finalizeOrder(order);
+            } catch (OrderValidationException e) {
+                // Bug in our code (shouldn't happen), alert
+                logger.error("Validation error on order " + order.getId(), e);
+                alertOps("Order validation bug: " + e.getMessage());
+            } catch (OutOfStockException e) {
+                // Expected: notify customer, offer alternative
+                logger.info("Order " + order.getId() + " out of stock");
+                notificationService.sendOutOfStockNotification(order);
+            } catch (PaymentGatewayException e) {
+                // Transient: retry next run
+                logger.warn("Order " + order.getId() + " payment retry needed");
+                // Don't throw, continue processing other orders
+            } catch (DatabaseException e) {
+                // Infrastructure: skip this order, continue
+                logger.error("Order " + order.getId() + " database error", e);
+                // Don't throw, continue processing other orders
+            }
+        }
+    }
+}
+
+// Async processing: errors don't block request
+public class OrderProcessor {
+    public void submitOrderAsync(Order order) {
+        asyncExecutor.submit(() -> {
+            try {
+                processOrder(order);
+            } catch (OrderValidationException e) {
+                logger.warn("Order " + order.getId() + " validation failed: " + e.getMessage());
+            } catch (OutOfStockException e) {
+                logger.info("Order " + order.getId() + " out of stock, notifying customer");
+                notificationService.notifyOutOfStock(order);
+            } catch (PaymentGatewayException e) {
+                logger.warn("Order " + order.getId() + " payment failed, queuing for retry");
+                retryQueue.enqueue(order);
+            } catch (OrderException e) {
+                logger.error("Order " + order.getId() + " failed: " + e.getMessage(), e);
+            }
+        });
+    }
+}
+
+// Global exception handler (for unexpected exceptions)
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<?> handleUnexpected(Exception e) {
+        logger.error("Unexpected exception", e);
+        alertOps("Unexpected error: " + e.getMessage());
+        return ResponseEntity.status(500).body(new ErrorResponse("Internal server error"));
+    }
+}
+```
+
+---
+
+**PART C: COMPARISON: CHECKED VS UNCHECKED IN HIGH-THROUGHPUT**
+
+**Checked Exception Design (Old Way):**
+```java
+public Order createOrder(OrderRequest req) throws OrderException, OutOfStockException, DatabaseException, PaymentException {
+    // Every caller forced to declare/catch
+    // Method signature changes = breaks all callers
+    // Try-catch pollution in every layer
+}
+```
+
+**Unchecked Exception Design (Modern Way):**
+```java
+public Order createOrder(OrderRequest req) {
+    // Clean signature
+    // Caller chooses to catch or not
+    // Errors flow to global handler if not caught
+    // More flexible for retries, logging, recovery
+}
+```
+
+---
+
+**PART D: WHEN TO USE EACH**
+
+| Type | Decision | Example |
+|------|----------|---------|
+| **Checked Exception** | Use RARELY (only external forces compliance) | Implementing interface that declares checked exception (IOException) |
+| **Unchecked Exception** | Use for business logic and infrastructure errors | OrderValidationException, DatabaseException, OutOfStockException |
+| **Error** | NEVER catch or throw (system only) | OutOfMemoryError, StackOverflowError |
+
+**Real Benefits for High-Throughput Systems:**
+
+1. **No Exception Pollution in Method Signatures**
+   - Checked: `method() throws Ex1, Ex2, Ex3, Ex4, Ex5`
+   - Unchecked: `method()` (clean!)
+
+2. **Flexible Error Handling**
+   - Can choose to handle at API layer, background job layer, or global handler
+   - Same method works in sync (checkout) and async (scheduled job)
+
+3. **Performance**
+   - Unchecked exceptions don't require stack unwinding in caller's try-catch
+   - Can use circuit breaker pattern without exception creation overhead
+
+4. **Recovery Strategies**
+   - OutOfStockException: notify customer, suggest alternative
+   - PaymentGatewayException: retry with backoff
+   - OrderValidationException: return error to user
+   - Each can be handled differently without forcing the same exception up stack
+
+---
+
+**Real Interview Answer:**
+"For high-throughput systems, use UNCHECKED exceptions (extend RuntimeException). Business exceptions (OutOfStockException, OrderValidationException) should be unchecked so callers can handle strategically: checkout API returns 400 error, background job retries, async processor queues for retry. Infrastructure exceptions (DatabaseException, PaymentGatewayException) are unchecked so they bubble to global handler. This avoids polluting method signatures with throws clauses and allows each layer to handle exceptions appropriately without forced try-catch everywhere. Checked exceptions were from 1990s when APIs were designed differently; modern high-throughput systems prefer unchecked exceptions + global error handling."
 
 ---
 
