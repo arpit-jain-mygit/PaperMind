@@ -81,6 +81,13 @@ SQL query patterns and Oracle ANSI SQL:
 - Self joins, aggregations, window functions
 - Oracle-specific ANSI syntax
 
+### [Cloud Architecture & Multi-Cloud Strategy](./curated/Java-And-MyProfessional-Projects-Interviews/clouds.md)
+Cloud infrastructure, modernization, and multi-cloud strategies:
+- **Cloud Types:** Public (AWS/Azure/GCP), Private (OpenStack/VMware), Hybrid (Outposts/Anthos)
+- **Modernization Challenges:** Legacy monolith migration, real-time analytics scaling
+- **Multi-Cloud & Active-Active:** Data consistency, session management, failover orchestration, compliance, cost optimization
+- Real-world scenarios with trade-offs and operational complexity analysis
+
 ---
 
 ## 📖 Other Materials
@@ -146,5 +153,5 @@ interview-preparation/
 
 ---
 
-**Last Updated:** 2026-07-21  
+**Last Updated:** 2026-07-22  
 **Purpose:** Comprehensive interview preparation resource for multiple specializations
