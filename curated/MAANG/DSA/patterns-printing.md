@@ -28,7 +28,7 @@ All solutions have **O(n²) Time Complexity** (unavoidable due to output size).
 | 13 | Normal Diamond Pattern | ✅ | [View](#problem-13-normal-diamond-pattern) |
 | 14 | Hollow Diamond Pattern | ✅ | [View](#problem-14-hollow-diamond-pattern) |
 | 15 | Multiplication Table Pattern | ✅ | [View](#problem-15-multiplication-table-pattern) |
-| 16 | Checkerboard Pattern | ⏳ | [View](#problem-16-checkerboard-pattern) |
+| 16 | Checkerboard Pattern | ✅ | [View](#problem-16-checkerboard-pattern) |
 | 17 | Normal Number Staircase | ⏳ | [View](#problem-17-normal-number-staircase) |
 | 18 | Hollow Number Staircase | ⏳ | [View](#problem-18-hollow-number-staircase) |
 | 19 | Right Arrow Pattern | ⏳ | [View](#problem-19-right-arrow-pattern) |
@@ -626,11 +626,19 @@ public static void main(String args[]) {
 * * * * *
 ```
 
-### Solution with O(n) Space Complexity
-(To be added)
-
-### Solution with O(1) Space Complexity
-(To be added)
+```java
+public static void main(String args[]) {
+    int rows = 5, cols = 5;
+    for(int i=1; i<=rows; i++){
+        if(i%2 ==0) System.out.print (" ");
+        for(int j = 1; j <= cols; j++){
+            System.out.print ("*");
+            if (j!=cols) System.out.print (" ");//cosmetic spaces b/w stars except for the last one
+        }
+        System.out.println();
+    }
+}
+```
 
 ---
 
