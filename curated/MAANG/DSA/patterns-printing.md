@@ -70,8 +70,8 @@ The 43 problems are organized into 5 difficulty levels to help with progressive 
 | 32 | Cross Pattern | ✅ | [View](#problem-32-cross-pattern) |
 | 33 | Rhombus Pattern | ✅ | [View](#problem-33-rhombus-pattern) |
 | 34 | Butterfly Star Pattern | ⏳ | [View](#problem-34-butterfly-star-pattern) |
-| 35 | K Pattern | ⏳ | [View](#problem-35-k-pattern) |
-| 36 | Hollow Reverse Triangle Pattern | ⏳ | [View](#problem-36-hollow-reverse-triangle-pattern) |
+| 35 | K Pattern | ✅ | [View](#problem-35-k-pattern) |
+| 36 | Hollow Reverse Triangle Pattern | ✅ | [View](#problem-36-hollow-reverse-triangle-pattern) |
 
 ### Level 5 (Advanced)
 | # | Problem | Status | Link |
@@ -1137,7 +1137,6 @@ public static void main(String args[]) {
 **Expected Output**:
 ```
 * * * * *
-*       *
 *     *
 *   *
 * *
@@ -1145,7 +1144,32 @@ public static void main(String args[]) {
 ```
 
 ### Solution with O(1) Space Complexity
-(To be added)
+```java
+public static void main(String args[]) {
+    int n = 5;
+    
+    for(int i=1; i<=n; i++){
+        int elements = n - i + 1;
+        int width = 2*elements - 1;
+        
+        if(i==1 || i==n){
+            // Print filled row: * * * ... *
+            for(int j=1; j<=elements; j++){
+                System.out.print("*");
+                if(j!=elements) System.out.print(" ");
+            }
+        } else {
+            // Print hollow row: * ... *
+            System.out.print("*");
+            for(int j=1; j<=width-2; j++){
+                System.out.print(" ");
+            }
+            System.out.print("*");
+        }
+        System.out.println();
+    }
+}
+```
 
 ---
 
