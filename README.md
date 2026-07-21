@@ -64,6 +64,25 @@ Artificial Intelligence and Machine Learning interview preparation:
 
 ---
 
+## 📖 Framework & Technology Guides
+
+### [Spring Framework & SpringBoot](./Spring-framework.md)
+Comprehensive guide to Spring Framework and SpringBoot:
+- Spring Framework modules overview (Core, AOP, Data Access, Web, Security)
+- SpringBoot ecosystem and auto-configuration
+- SpringBatch for batch job processing
+- **30 FAQs:** Dependency Injection, IoC, Beans, Controllers, Exception Handling, AOP, Transactions, JPA, REST APIs, Actuator, and more
+- Simple explanations with code examples
+- Architecture diagrams and quick reference tables
+
+### [SQL Interview Guide](./SQL-Interview-Guide.md)
+SQL query patterns and Oracle ANSI SQL:
+- 20 essential SQL interview questions
+- Self joins, aggregations, window functions
+- Oracle-specific ANSI syntax
+
+---
+
 ## 📖 Other Materials
 
 Remaining materials for review:
