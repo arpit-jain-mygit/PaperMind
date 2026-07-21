@@ -23,7 +23,7 @@ All solutions have **O(n²) Time Complexity** (unavoidable due to output size).
 | 8 | Hollow Inverted Triangle | ✅ | [View](#problem-8-hollow-inverted-triangle) |
 | 9 | Normal Number Pyramid | ✅ | [View](#problem-9-normal-number-pyramid) |
 | 10 | Hollow Number Pyramid | ✅ | [View](#problem-10-hollow-number-pyramid) |
-| 11 | Hollow Rectangle | ⏳ | [View](#problem-11-hollow-rectangle) |
+| 11 | Hollow Rectangle | ✅ | [View](#problem-11-hollow-rectangle) |
 | 12 | Hollow Rectangle (Tall) | ⏳ | [View](#problem-12-hollow-rectangle-tall) |
 | 13 | Normal Diamond Pattern | ✅ | [View](#problem-13-normal-diamond-pattern) |
 | 14 | Hollow Diamond Pattern | ✅ | [View](#problem-14-hollow-diamond-pattern) |
@@ -430,11 +430,24 @@ public class HollowNumberPyramid {
 *********
 ```
 
-### Solution with O(n) Space Complexity
-(To be added)
-
-### Solution with O(1) Space Complexity
-(To be added)
+```java
+public static void main(String args[]) {
+    int rows = 3;
+    int cols = 9;
+    for(int i=1; i <=rows; i++){
+        for(int j=1; j<=cols; j++){
+            if(i==1 || i==rows || j==1 || j==cols){
+                System.out.print("*");                    
+            }
+            else{
+                System.out.print(" ");                    
+            }
+        }
+        if(i!=rows)
+         System.out.println();
+    }
+}
+```
 
 ---
 
