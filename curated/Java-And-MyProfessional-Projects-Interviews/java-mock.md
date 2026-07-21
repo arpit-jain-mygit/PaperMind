@@ -3252,45 +3252,380 @@ Exception: Major decision (rewrite legacy monolith) requires sync meeting. But 8
 
 #### Q1: You have 100,000 orders in a system. You need to sort them by: (1) creation date, (2) customer name, (3) total amount. How do you design this without duplicating sorting logic?
 
-**Explanation (Simple):**
-`Comparable` is "I know how to compare myself" (natural ordering). `Comparator` is "Someone else decides how to compare me" (flexible ordering). Order has natural ordering (by creation date). But you also want to sort by customer name (different order). Use Comparable for natural order, Comparator for alternate orders.
+**PART A: Comparable vs Comparator - Key Difference**
 
-**Real Business Use Case:**
-E-commerce order system. Order naturally sorted by creation date (most recent first). But admin dashboard needs: sort by customer name (A-Z), sort by total amount (highest first), sort by status (pending → processing → shipped).
+```
+COMPARABLE:                          COMPARATOR:
+"I know how to compare myself"       "Someone else decides how to compare me"
+Natural ordering                     Flexible ordering
+One way (built-in)                   Multiple ways (flexible)
+Modifies class (implements)          Doesn't modify class (external)
+```
 
-**Design:**
+**Simple Analogy:**
+
+Imagine people lining up:
+- **Comparable**: Person knows their natural position (height). Everyone lines up by height.
+- **Comparator**: Different people come and say "line up by age!" or "line up by name!" Same people, different orderings.
+
+---
+
+**PART B: Comparable - Natural Ordering (One Way)**
+
+**Concept:** Object defines ITS OWN comparison logic. "This is how I should be compared."
+
 ```java
+// Example: Order class defines natural ordering (by creation date)
 class Order implements Comparable<Order> {
-    LocalDateTime createdAt;
-    String customerName;
-    BigDecimal totalAmount;
-    String status;
+    private LocalDateTime createdAt;
+    private String customerName;
+    private BigDecimal totalAmount;
     
     // Natural ordering: by creation date (most recent first)
+    @Override
+    public int compareTo(Order other) {
+        // Return: negative (this < other), zero (equal), positive (this > other)
+        return other.createdAt.compareTo(this.createdAt);  // Reverse order
+    }
+}
+
+// Using Comparable
+List<Order> orders = new ArrayList<>();
+orders.add(new Order("2026-01-15", "Alice", 100));
+orders.add(new Order("2026-01-10", "Bob", 50));
+orders.add(new Order("2026-01-20", "Charlie", 200));
+
+// One line of code: Collections.sort() uses compareTo() method
+Collections.sort(orders);  // Automatically uses Order.compareTo()
+
+// Result: sorted by creation date (most recent first)
+// Order: Charlie (2026-01-20), Alice (2026-01-15), Bob (2026-01-10)
+```
+
+**When to Use Comparable:**
+- ✅ There's ONE obvious natural ordering for the class
+- ✅ That ordering rarely/never changes
+- ✅ Most code sorts by that ordering
+
+**Examples:**
+- User: natural ordering = by user ID
+- Person: natural ordering = by age
+- Product: natural ordering = by product ID
+- Employee: natural ordering = by hire date
+
+---
+
+**PART C: Comparator - Flexible Ordering (Multiple Ways)**
+
+**Concept:** External object defines comparison logic. "Compare these objects this way."
+
+```java
+// Order class - NO comparison logic inside
+class Order {
+    private LocalDateTime createdAt;
+    private String customerName;
+    private BigDecimal totalAmount;
+    
+    // NO compareTo() method!
+    // Comparators will define how to compare
+}
+
+// Define multiple Comparators (flexible sorting strategies)
+List<Order> orders = getAllOrders();
+
+// Strategy 1: Sort by customer name (A-Z)
+Comparator<Order> byName = Comparator.comparing(Order::getCustomerName);
+orders.sort(byName);
+
+// Strategy 2: Sort by total amount (highest first)
+Comparator<Order> byAmountDesc = Comparator.comparing(Order::getTotalAmount).reversed();
+orders.sort(byAmountDesc);
+
+// Strategy 3: Sort by creation date (most recent first)
+Comparator<Order> byDateDesc = Comparator.comparing(Order::getCreatedAt).reversed();
+orders.sort(byDateDesc);
+
+// Strategy 4: Sort by status priority (custom)
+Comparator<Order> byStatus = Comparator.comparingInt(order -> statusPriority(order.getStatus()));
+orders.sort(byStatus);
+
+// Strategy 5: Chained sorting (multiple criteria)
+// First by status, then by date if status same
+Comparator<Order> byStatusThenDate = Comparator
+    .comparingInt(order -> statusPriority(order.getStatus()))
+    .thenComparing(Order::getCreatedAt);
+orders.sort(byStatusThenDate);
+```
+
+**When to Use Comparator:**
+- ✅ Multiple sorting strategies needed
+- ✅ Sorting order varies by context (admin view, customer view, reporting, etc.)
+- ✅ You want to keep class simple (no sorting logic)
+
+**Examples:**
+- Orders: sort by date, by amount, by customer, by status
+- Products: sort by price, by rating, by popularity, by name
+- Search results: sort by relevance, by date, by price, by rating
+
+---
+
+**PART D: Real-World Scenario: E-Commerce Order System**
+
+```java
+class Order {
+    private LocalDateTime createdAt;
+    private String customerName;
+    private BigDecimal totalAmount;
+    private String status;  // PENDING, PROCESSING, SHIPPED, DELIVERED
+}
+
+// Natural ordering: by creation date (most recent first)
+// Why? Most common use case: "Show me recent orders"
+class Order implements Comparable<Order> {
     @Override
     public int compareTo(Order other) {
         return other.createdAt.compareTo(this.createdAt);
     }
 }
 
-// Flexible orderings: use Comparators
-List<Order> orders = getAllOrders();
-
-// Sort by customer name
-orders.sort(Comparator.comparing(Order::getCustomerName));
-
-// Sort by total amount (highest first)
-orders.sort(Comparator.comparing(Order::getTotalAmount).reversed());
-
-// Sort by status (custom order)
-orders.sort(Comparator.comparingInt(order -> statusPriority(order.getStatus())));
+// Different views of same orders - use Comparators
+public class OrderDashboard {
+    
+    // Admin dashboard needs different sortings
+    private List<Order> orders;
+    
+    public List<Order> getRecentOrders() {
+        // Natural ordering (Comparable)
+        return orders.stream()
+            .sorted()  // Uses Order.compareTo()
+            .limit(10)
+            .collect(toList());
+    }
+    
+    public List<Order> getOrdersByCustomer() {
+        // Comparator: sort by customer name
+        return orders.stream()
+            .sorted(Comparator.comparing(Order::getCustomerName))
+            .collect(toList());
+    }
+    
+    public List<Order> getHighValueOrders() {
+        // Comparator: sort by amount (highest first)
+        return orders.stream()
+            .sorted(Comparator.comparing(Order::getTotalAmount).reversed())
+            .limit(10)
+            .collect(toList());
+    }
+    
+    public List<Order> getPendingOrders() {
+        // Comparator: filter pending, sort by creation date
+        return orders.stream()
+            .filter(o -> "PENDING".equals(o.getStatus()))
+            .sorted(Comparator.comparing(Order::getCreatedAt).reversed())
+            .collect(toList());
+    }
+    
+    public List<Order> getOrdersByStatus() {
+        // Comparator: custom status priority (PENDING → PROCESSING → SHIPPED → DELIVERED)
+        return orders.stream()
+            .sorted(Comparator.comparingInt(this::statusPriority))
+            .collect(toList());
+    }
+    
+    private int statusPriority(Order order) {
+        switch (order.getStatus()) {
+            case "PENDING": return 1;      // Urgent
+            case "PROCESSING": return 2;
+            case "SHIPPED": return 3;
+            case "DELIVERED": return 4;    // Complete
+            default: return 5;
+        }
+    }
+}
 ```
 
-**Real Benefit:**
-- **Flexibility**: Sort 10 different ways without 10 different data structures
-- **Maintainability**: Sorting logic centralized, not scattered across code
-- **Performance**: Collections.sort() is optimized (Timsort, O(n log n))
-- **Reusability**: Sort the same collection multiple ways
+---
+
+**PART E: Decision Tree: Comparable vs Comparator**
+
+```
+Do you need ONE obvious natural ordering?
+├─ YES
+│  └─ Does that ordering almost never change?
+│     ├─ YES
+│     │  └─ Use COMPARABLE (implement in class)
+│     │     Example: User by ID, Product by ID
+│     └─ NO
+│        └─ Use COMPARATOR (keep class simple)
+│           Example: Employee by hire date (might change to by seniority)
+│
+└─ NO (need multiple sortings)
+   └─ Use COMPARATOR (multiple strategies)
+      Example: Orders by date/amount/customer/status
+```
+
+---
+
+**PART F: Common Mistakes**
+
+**MISTAKE 1: Comparable for Multiple Sorting Strategies**
+
+```java
+// ❌ BAD: Comparable hard-coded to one sorting strategy
+class Order implements Comparable<Order> {
+    @Override
+    public int compareTo(Order other) {
+        // What if I want different sorting? Can't change this!
+        return this.createdAt.compareTo(other.createdAt);
+    }
+}
+
+// Now you're stuck with date sorting. Want to sort by amount?
+// Have to create OrderByAmountComparable class (wrong approach)
+
+// ✅ GOOD: Use Comparator for flexibility
+class Order {
+    // No compareTo() - keep class simple
+}
+
+// Multiple Comparators for different strategies
+Comparator<Order> byDate = Comparator.comparing(Order::getCreatedAt);
+Comparator<Order> byAmount = Comparator.comparing(Order::getTotalAmount);
+```
+
+**MISTAKE 2: Breaking Comparable Contract**
+
+```java
+// ❌ BAD: Inconsistent compareTo() logic
+class Order implements Comparable<Order> {
+    private String orderId;
+    
+    @Override
+    public int compareTo(Order other) {
+        // Inconsistent: doesn't properly define total order
+        if (this.orderId.equals(other.orderId)) {
+            return 0;
+        }
+        return this.orderId.compareTo(other.orderId);
+    }
+}
+
+// If transitivity broken: a < b, b < c, but a > c (CHAOS!)
+
+// ✅ GOOD: Consistent comparison
+@Override
+public int compareTo(Order other) {
+    return this.orderId.compareTo(other.orderId);
+}
+```
+
+**MISTAKE 3: Using == instead of compareTo()**
+
+```java
+// ❌ BAD: Comparing using ==
+if (order1 == order2) {  // Wrong! Checks object identity, not values
+    // ...
+}
+
+// ✅ GOOD: Use compareTo() or equals()
+if (order1.compareTo(order2) == 0) {  // Correct
+    // ...
+}
+```
+
+---
+
+**PART G: Java 8+ Features - Cleaner Syntax**
+
+**Old Way (Java 7):**
+```java
+// Verbose anonymous Comparator
+Collections.sort(orders, new Comparator<Order>() {
+    @Override
+    public int compare(Order o1, Order o2) {
+        return o1.getCreatedAt().compareTo(o2.getCreatedAt());
+    }
+});
+```
+
+**Modern Way (Java 8+):**
+```java
+// Lambda syntax
+orders.sort((o1, o2) -> o1.getCreatedAt().compareTo(o2.getCreatedAt()));
+
+// Comparator.comparing() (even cleaner)
+orders.sort(Comparator.comparing(Order::getCreatedAt));
+
+// Reversed
+orders.sort(Comparator.comparing(Order::getCreatedAt).reversed());
+
+// Chained (multiple criteria)
+orders.sort(Comparator
+    .comparing(Order::getStatus)
+    .thenComparing(Order::getCreatedAt)
+    .thenComparing(Order::getCustomerName));
+```
+
+---
+
+**PART H: Performance & Collections Integration**
+
+**Collections.sort() uses Timsort (optimized for real-world data):**
+- Time: O(n log n) worst case
+- Space: O(n) for merges
+- Best case: O(n) if data already sorted
+
+```java
+// Efficient sorting of 100K orders
+List<Order> orders = getAllOrders();  // 100K orders
+orders.sort(Comparator.comparing(Order::getCreatedAt));  // ~50ms for 100K items
+```
+
+**How Collections uses Comparable vs Comparator:**
+```java
+// Comparable (from class)
+Collections.sort(list);  // Uses compareTo()
+
+// Comparator (external)
+Collections.sort(list, comparator);  // Uses compare()
+
+// Stream API
+list.stream().sorted();  // Uses compareTo()
+list.stream().sorted(comparator);  // Uses compare()
+```
+
+---
+
+**PART I: Decision Matrix - When to Use Each**
+
+| Scenario | Use | Why | Example |
+|----------|-----|-----|---------|
+| **One obvious ordering** | Comparable | Natural, built-in | User by ID |
+| **Multiple orderings needed** | Comparator | Flexible, external | Orders by date/amount/status |
+| **Ordering varies by context** | Comparator | Context-specific | Admin vs. customer view |
+| **Sorting third-party classes** | Comparator | Can't modify their code | Sorting TreeSet of Strings |
+| **Simple data class** | Comparable | Clean, simple | Integer, String (built-in) |
+| **Complex domain object** | Comparator | Avoid coupling | Order with multiple sort strategies |
+
+---
+
+**PART J: Real-World Interview Answer**
+
+> "Use **Comparable** when there's ONE obvious natural ordering for the class that rarely changes—like User sorted by ID or Date sorted chronologically. Implement it in the class itself.
+>
+> Use **Comparator** when you need MULTIPLE sorting strategies or when sorting needs vary by context. For example, an Order can be sorted by creation date (natural), but an admin dashboard needs to sort by customer name, amount, or status. Keep the class simple, define Comparators externally.
+>
+> In practice, modern Java (8+) makes Comparator so convenient with lambdas (`.sorted(Comparator.comparing(Order::getAmount))`) that I often skip Comparable entirely unless there's a clear natural ordering."
+
+---
+
+**Key Takeaways:**
+
+1. **Comparable** = one natural ordering, defined inside class
+2. **Comparator** = multiple/flexible orderings, defined outside class
+3. **Comparable** for simple, obvious, unchanging orderings
+4. **Comparator** for complex, multiple, context-dependent orderings
+5. **Java 8+** makes Comparator almost always better (lambda syntax)
 
 ---
 
