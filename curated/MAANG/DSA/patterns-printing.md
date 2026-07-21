@@ -1144,32 +1144,7 @@ public static void main(String args[]) {
 ```
 
 ### Solution with O(1) Space Complexity
-```java
-public static void main(String args[]) {
-    int n = 5;
-    
-    for(int i=1; i<=n; i++){
-        int elements = n - i + 1;
-        int width = 2*elements - 1;
-        
-        if(i==1 || i==n){
-            // Print filled row: * * * ... *
-            for(int j=1; j<=elements; j++){
-                System.out.print("*");
-                if(j!=elements) System.out.print(" ");
-            }
-        } else {
-            // Print hollow row: * ... *
-            System.out.print("*");
-            for(int j=1; j<=width-2; j++){
-                System.out.print(" ");
-            }
-            System.out.print("*");
-        }
-        System.out.println();
-    }
-}
-```
+(To be added)
 
 ---
 
