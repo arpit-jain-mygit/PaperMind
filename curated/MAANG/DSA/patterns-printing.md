@@ -31,7 +31,7 @@ All solutions have **O(n²) Time Complexity** (unavoidable due to output size).
 | 16 | Checkerboard Pattern | ✅ | [View](#problem-16-checkerboard-pattern) |
 | 17 | Normal Number Staircase | ✅ | [View](#problem-17-normal-number-staircase) |
 | 18 | Hollow Number Staircase | ✅ | [View](#problem-18-hollow-number-staircase) |
-| 19 | Right Arrow Pattern | ⏳ | [View](#problem-19-right-arrow-pattern) |
+| 19 | Right Arrow Pattern | ✅ | [View](#problem-19-right-arrow-pattern) |
 | 20 | Diamond/Arrow Pattern (Input 11) | ⏳ | [View](#problem-20-diamondarrow-pattern-input-11) |
 | 21 | Diamond/Arrow Pattern (Input 12) | ⏳ | [View](#problem-21-diamondarrow-pattern-input-12) |
 | 22 | Cross Pattern | ⏳ | [View](#problem-22-cross-pattern) |
@@ -715,11 +715,31 @@ public static void main(String args[]) {
 * * * * *
 ```
 
-### Solution with O(n) Space Complexity
-(To be added)
-
-### Solution with O(1) Space Complexity
-(To be added)
+```java
+public static void main(String args[]) {
+    int n = 5;
+    for(int i=0; i<n; i++){
+        for(int j = 0; j < i; j++){
+            System.out.print("  ");//2 spaces per level for alignment
+        }
+        for(int j = 0; j < n-i; j++){
+            System.out.print("*");
+            if(j!=n-i-1) System.out.print(" ");
+        }
+        System.out.println();
+    }
+    for(int i=n-2; i>=0; i--){
+        for(int j = 0; j < i; j++){
+            System.out.print("  ");//2 spaces per level for alignment
+        }
+        for(int j = 0; j < n-i; j++){
+            System.out.print("*");
+            if(j!=n-i-1) System.out.print(" ");
+        }
+        System.out.println();
+    }
+}
+```
 
 ---
 
