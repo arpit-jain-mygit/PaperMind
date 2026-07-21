@@ -274,16 +274,311 @@ PaymentProcessorFactory.register("apple-pay", new ApplePayProcessor());
 
 ### Q2: Explain Polymorphism with a practical inventory management scenario. When would you use method overriding vs. method overloading?
 
-**Explanation (Simple):**
-Imagine a warehouse that processes different product types. A book reduces stock by 1, a liquid reduces by volume (liters), an electronic reduces by quantity plus records fragility. Same action (updateStock), different behaviors—that's polymorphism.
+**Key Distinction:**
+- **Method Overriding**: Different classes, same method name, different behavior (RUNTIME polymorphism)
+- **Method Overloading**: Same class, same method name, different parameters (COMPILE-TIME polymorphism)
 
-**Real Business Use Case:**
-Inventory system calculates shipping cost differently: physical goods by weight (kg), digital products are free, hazardous materials have surcharges. One method calculateShippingCost() adapts behavior based on product type without if-else chains.
+---
+
+## **Part A: METHOD OVERRIDING (Runtime Polymorphism)**
+
+**Concept:** Subclass provides different implementation of parent class method. Decision of which method to call made at RUNTIME based on actual object type.
+
+**Inventory Scenario:**
+Different product types update stock differently:
+- Book: reduce quantity by 1
+- Liquid: reduce quantity by volume (liters)
+- Electronic: reduce quantity + record fragility level
+- Digital: don't reduce stock (infinite inventory)
+
+**Good Design - Uses Method Overriding:**
+```java
+// Parent class: defines contract
+abstract class Product {
+    protected int stockLevel;
+    
+    // Same method name, abstract (child must implement)
+    public abstract void updateStock(int amount);
+}
+
+// Concrete implementations: override with different behaviors
+class Book extends Product {
+    @Override
+    public void updateStock(int amount) {
+        // Books: simple quantity reduction
+        this.stockLevel -= amount;
+        logEvent("Book stock reduced: " + amount);
+    }
+}
+
+class Liquid extends Product {
+    private double volumeInLiters;
+    
+    @Override
+    public void updateStock(int volumeToRemove) {
+        // Liquids: reduce by volume, check container capacity
+        if (volumeToRemove > volumeInLiters) {
+            throw new InsufficientStockException("Not enough liquid volume");
+        }
+        this.volumeInLiters -= volumeToRemove;
+        logEvent("Liquid volume reduced: " + volumeToRemove + "L");
+    }
+}
+
+class Electronic extends Product {
+    private int fragilityLevel;  // 1-10, 10 = most fragile
+    
+    @Override
+    public void updateStock(int amount) {
+        // Electronics: reduce stock + record fragility
+        this.stockLevel -= amount;
+        recordFragilityReport(amount, fragilityLevel);
+        logEvent("Electronic stock reduced: " + amount + ", fragility: " + fragilityLevel);
+    }
+}
+
+class Digital extends Product {
+    @Override
+    public void updateStock(int amount) {
+        // Digital: don't reduce stock (infinite inventory)
+        // Just log access, don't modify stockLevel
+        logEvent("Digital product accessed: " + amount + " downloads");
+        // stockLevel remains unchanged (no physical inventory)
+    }
+}
+
+// Client code: RUNTIME polymorphism - doesn't know/care which subclass
+class InventoryManager {
+    public void removeFromStock(Product product, int amount) {
+        // Same method call works for ALL product types
+        // At RUNTIME, correct override is called based on actual object
+        product.updateStock(amount);  // Book? Liquid? Electronic? Digital?
+    }
+}
+
+// Usage:
+Product book = new Book();
+book.updateStock(5);  // Calls Book.updateStock() at runtime
+
+Product liquid = new Liquid();
+liquid.updateStock(10);  // Calls Liquid.updateStock() at runtime
+
+Product electronic = new Electronic();
+electronic.updateStock(3);  // Calls Electronic.updateStock() at runtime
+
+Product digital = new Digital();
+digital.updateStock(1000);  // Calls Digital.updateStock() at runtime (stock unchanged)
+
+// Polymorphic behavior: same call, different behaviors based on object type
+List<Product> inventory = List.of(book, liquid, electronic, digital);
+for (Product p : inventory) {
+    p.updateStock(1);  // Correct override called for each product type
+}
+```
+
+**When to Use Method Overriding:**
+- ✅ Different classes, same concept (all are Products)
+- ✅ Behavior differs significantly based on type (Book vs. Liquid vs. Digital)
+- ✅ Type determined at RUNTIME (user chooses which product to buy)
+- ✅ Want to avoid if-else chains (if book then... else if liquid then...)
+- ✅ Adding new product type shouldn't modify existing code
+
+**Real Benefit of Overriding:**
+```java
+// Add new product type: NO changes to InventoryManager
+class Subscription extends Product {
+    @Override
+    public void updateStock(int amount) {
+        // Subscription-specific logic
+        recordSubscriptionActivation(amount);
+    }
+}
+
+// InventoryManager.removeFromStock() still works without modification!
+Product subscription = new Subscription();
+inventoryManager.removeFromStock(subscription, 100);  // Works!
+```
+
+---
+
+## **Part B: METHOD OVERLOADING (Compile-Time Polymorphism)**
+
+**Concept:** Same class, same method name, DIFFERENT PARAMETERS. Decision of which method to call made at COMPILE-TIME based on parameter types/count.
+
+**Inventory Scenario:**
+Calculate shipping cost for different order configurations:
+- By weight (kg): shipping = weight × $2/kg
+- By quantity: shipping = quantity × $5/item
+- By distance: shipping = distance × $0.5/km
+- Complex: weight + quantity + distance + hazmat surcharge
+
+**Good Design - Uses Method Overloading:**
+```java
+class ShippingCalculator {
+    // Overload 1: weight-based
+    public double calculateShipping(double weightKg) {
+        return weightKg * 2.0;  // $2 per kg
+    }
+    
+    // Overload 2: quantity-based
+    public double calculateShipping(int quantity) {
+        return quantity * 5.0;  // $5 per item
+    }
+    
+    // Overload 3: distance-based
+    public double calculateShipping(double distanceKm, String unit) {
+        if ("km".equals(unit)) {
+            return distanceKm * 0.5;  // $0.50 per km
+        }
+        throw new IllegalArgumentException("Unknown unit: " + unit);
+    }
+    
+    // Overload 4: complex (weight + quantity + distance + hazmat)
+    public double calculateShipping(double weightKg, int quantity, double distanceKm, boolean isHazmat) {
+        double baseCost = (weightKg * 2.0) + (quantity * 5.0) + (distanceKm * 0.5);
+        if (isHazmat) {
+            baseCost *= 1.5;  // 50% surcharge for hazardous materials
+        }
+        return baseCost;
+    }
+}
+
+// Usage: same method name, different parameters
+ShippingCalculator calc = new ShippingCalculator();
+
+// Overload 1: by weight
+double shippingByWeight = calc.calculateShipping(10.5);  // 10.5 kg → $21
+System.out.println("By weight: $" + shippingByWeight);
+
+// Overload 2: by quantity
+double shippingByQuantity = calc.calculateShipping(3);  // 3 items → $15
+System.out.println("By quantity: $" + shippingByQuantity);
+
+// Overload 3: by distance
+double shippingByDistance = calc.calculateShipping(100.0, "km");  // 100 km → $50
+System.out.println("By distance: $" + shippingByDistance);
+
+// Overload 4: complex
+double complexShipping = calc.calculateShipping(10.5, 3, 100.0, true);
+// weight: $21, quantity: $15, distance: $50, hazmat: +50% = (21+15+50)*1.5 = $127.50
+System.out.println("Complex: $" + complexShipping);
+```
+
+**Compiler chooses which overload based on PARAMETER TYPES at compile time:**
+```java
+calc.calculateShipping(10.5);           // double → calls overload 1
+calc.calculateShipping(3);              // int → calls overload 2
+calc.calculateShipping(100.0, "km");    // double + String → calls overload 3
+calc.calculateShipping(10.5, 3, 100.0, true);  // double + int + double + boolean → calls overload 4
+```
+
+**When to Use Method Overloading:**
+- ✅ Same conceptual operation (all calculate shipping)
+- ✅ Different parameter types or counts
+- ✅ Caller determines which overload at COMPILE-TIME (developer decides parameters)
+- ✅ Want convenience (single method name instead of calculateShippingByWeight(), calculateShippingByDistance())
+- ✅ Logic is related but takes different inputs
+
+---
+
+## **Part C: COMPARING OVERRIDING vs OVERLOADING**
+
+| Aspect | **Method Overriding** | **Method Overloading** |
+|--------|----------------------|----------------------|
+| **When Used** | Different classes (parent/child) | Same class |
+| **Method Name** | Same | Same |
+| **Parameters** | Same | Different (type or count) |
+| **Decision Time** | RUNTIME (actual object type) | COMPILE-TIME (parameter types) |
+| **Polymorphism Type** | Runtime polymorphism | Compile-time polymorphism |
+| **Example** | Book.updateStock() vs. Liquid.updateStock() | calculateShipping(weight) vs. calculateShipping(quantity) |
+| **Override Keyword** | @Override required | No keyword needed |
+| **Common in** | OOP inheritance hierarchies | Convenience methods |
+
+---
+
+## **Part D: INVENTORY SCENARIO - COMBINED EXAMPLE**
+
+**Real Warehouse System Using BOTH:**
+
+```java
+// OVERRIDING: Different product types, different stock update logic
+abstract class Product {
+    protected int id;
+    protected String name;
+    
+    public abstract void updateStock(int amount);  // OVERRIDE in subclasses
+}
+
+class Book extends Product {
+    @Override
+    public void updateStock(int amount) {
+        this.stockLevel -= amount;
+    }
+}
+
+class Liquid extends Product {
+    private double volumeInLiters;
+    
+    @Override
+    public void updateStock(int volumeToRemove) {
+        this.volumeInLiters -= volumeToRemove;
+    }
+}
+
+// OVERLOADING: Different ways to calculate shipping
+class ShippingService {
+    // Overload 1: Simple - by quantity
+    public double calculateShippingCost(int quantity) {
+        return quantity * 5.0;
+    }
+    
+    // Overload 2: Complex - by product type and weight
+    public double calculateShippingCost(Product product, double weight) {
+        double baseCost = weight * 2.0;
+        if (product instanceof Electronic) {
+            baseCost *= 1.2;  // 20% surcharge for electronics
+        }
+        return baseCost;
+    }
+    
+    // Overload 3: Super complex - multiple factors
+    public double calculateShippingCost(Product product, double weight, int quantity, boolean expedited) {
+        double cost = (weight * 2.0) + (quantity * 5.0);
+        if (expedited) {
+            cost *= 2.0;  // 2x for expedited shipping
+        }
+        return cost;
+    }
+}
+
+// Real usage combining BOTH:
+Product book = new Book();
+Product liquid = new Liquid();
+
+// OVERRIDING in action: same method, different behaviors
+book.updateStock(5);      // Book.updateStock() called
+liquid.updateStock(10);   // Liquid.updateStock() called
+
+ShippingService shipping = new ShippingService();
+
+// OVERLOADING in action: same method name, different parameters
+double simpleShipping = shipping.calculateShippingCost(5);              // $25
+double complexShipping = shipping.calculateShippingCost(book, 2.5);    // $5
+double superShipping = shipping.calculateShippingCost(liquid, 2.0, 5, true);  // $28
+```
+
+---
 
 **Real Benefit:**
-- **Scalability**: Add new product types without modifying shipping logic
-- **Readability**: Code reads naturally (product.calculateCost() instead of if-else)
-- **Testing**: Each product type tested independently
+- **Scalability**: Add new product type (Overriding) → zero changes to ShippingService
+- **Flexibility**: Add new shipping calculation (Overloading) → zero changes to Product classes
+- **Code Reuse**: Shipping logic works for all product types via overriding
+- **Convenience**: Single method name (calculateShippingCost) handles all variations via overloading
+
+---
+
+**Interview Answer Pattern:**
+"In inventory management, use METHOD OVERRIDING when product types behave differently (Book vs. Liquid stock updates). Use METHOD OVERLOADING when the SAME operation takes different input formats (shipping by weight vs. quantity). Overriding handles polymorphic behavior (what the object is), overloading handles flexible parameters (how you call the method). Together they create flexible, scalable systems."
 
 ---
 
