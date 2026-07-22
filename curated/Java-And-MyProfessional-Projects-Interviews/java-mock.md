@@ -2572,84 +2572,429 @@ With timeout (tryLock):
 
 ---
 
-## **TECHNIQUE 3: ATOMIC VARIABLES (Compare-and-Swap)**
+## **TECHNIQUE 3: ATOMIC VARIABLES (Compare-and-Swap - CAS)**
 
-**Lock-Free Approach:**
+**What is Compare-and-Swap?**
+
+Compare-and-Swap (CAS) is a CPU-level atomic instruction that does 3 things at once (atomically):
+1. Read current value from memory
+2. Compare it with expected value
+3. If they match, write new value; if not, fail
+All three steps happen WITHOUT locks (no thread blocking).
+
+**Lock-Free Simple Example:**
+
 ```java
 public class SeatBooking {
-    private final AtomicInteger[] seatStatus = new AtomicInteger[10000];
-    // 0 = available, >0 = booked
+    private final AtomicInteger seatAvailable = new AtomicInteger(1);
+    // 0 = booked, 1 = available
     
-    public boolean bookSeat(int seatId, String userId) {
-        // Atomic check-and-set: if current is 0, set to userId hash
-        return seatStatus[seatId].compareAndSet(0, userId.hashCode());
-    }
-    
-    // For more complex state
-    public class Seat {
-        private String bookedBy;  // null = available
-        private LocalDateTime bookedAt;
-    }
-    
-    private final AtomicReference<Seat>[] seats = new AtomicReference[10000];
-    
-    public boolean bookSeatComplex(int seatId, String userId) {
-        while (true) {
-            Seat oldSeat = seats[seatId].get();
-            if (oldSeat.bookedBy != null) {
-                return false;  // Already booked
-            }
-            
-            Seat newSeat = new Seat(userId, LocalDateTime.now());
-            if (seats[seatId].compareAndSet(oldSeat, newSeat)) {
-                return true;  // Successfully booked
-            }
-            // CAS failed (someone else booked), retry
-        }
+    public boolean bookSeat(String userId) {
+        // compareAndSet(expectedValue, newValue)
+        // If seatAvailable == 1 (available), set to 0 (booked) → return true
+        // If seatAvailable == 0 (already booked), do nothing → return false
+        return seatAvailable.compareAndSet(1, 0);
     }
 }
 ```
 
-**Performance Characteristics:**
-| Metric | Value |
-|--------|-------|
-| Throughput (100 threads) | 500,000+ bookings/sec |
-| Lock acquisition time | 0ns (no lock!) |
-| Memory overhead | Very low |
-| Fairness | None (last writer wins) |
-| Reentrancy | N/A (no lock) |
+---
+
+### **STEP-BY-STEP: How CAS Works (Simple Case)**
+
+```
+Initial state: seatAvailable = 1 (available)
+
+Thread A: bookSeat("alice")
+├─ Read current value: 1
+├─ Compare: does 1 == 1 (expected)? YES ✓
+├─ CPU writes: seatAvailable = 0 (booked)
+└─ Return TRUE (successfully booked)
+
+Thread B: bookSeat("bob")
+├─ Read current value: 0 (because A already changed it)
+├─ Compare: does 0 == 1 (expected)? NO ✗
+├─ CPU does NOT write (CAS failed)
+└─ Return FALSE (failed to book)
+```
+
+**Key Point:** All three steps (read, compare, write) happen at CPU level without any thread blocking!
+
+---
+
+### **STEP-BY-STEP: How CAS Works (Complex Case)**
+
+Real-world scenario with Seat object:
+
+```java
+public class Seat {
+    String bookedBy;      // null = available, "alice" = booked
+    LocalDateTime bookedAt;
+}
+
+private AtomicReference<Seat> seat = new AtomicReference<>(new Seat());
+
+public boolean bookSeat(String userId) {
+    while (true) {  // Retry loop
+        // STEP 1: Read current seat state
+        Seat currentSeat = seat.get();
+        System.out.println("Read: " + currentSeat.bookedBy);
+        
+        // STEP 2: Check if available
+        if (currentSeat.bookedBy != null) {
+            System.out.println("Already booked by " + currentSeat.bookedBy);
+            return false;
+        }
+        
+        // STEP 3: Create new booked seat
+        Seat newSeat = new Seat();
+        newSeat.bookedBy = userId;
+        newSeat.bookedAt = LocalDateTime.now();
+        
+        // STEP 4: Atomic compare-and-set
+        // If seat still matches currentSeat (not changed by other thread),
+        // set it to newSeat
+        if (seat.compareAndSet(currentSeat, newSeat)) {
+            System.out.println("✓ " + userId + " booked successfully");
+            return true;  // SUCCESS
+        }
+        
+        // STEP 5: CAS failed (someone else booked between Step 1 and Step 4)
+        System.out.println("✗ CAS failed, retrying...");
+        // Loop continues, try again
+    }
+}
+```
+
+---
+
+### **DETAILED EXECUTION WITH TIMELINE**
+
+```
+Scenario: Seat A-5, Thread A and Thread B both trying to book simultaneously
+
+INITIAL: seat = Seat(bookedBy=null)
+
+TIME    Thread A                           Thread B
+───────────────────────────────────────────────────────────
+ 0ms    currentSeat = get()                currentSeat = get()
+        (reads: bookedBy=null)             (reads: bookedBy=null)
+        
+10ms    newSeat = new Seat("alice")       newSeat = new Seat("bob")
+        
+20ms    compareAndSet(null → "alice")     compareAndSet(null → "bob")
+        Expected: null                      Expected: null
+        Actual: null ✓                      Actual: null ✓
+        CAS succeeds → write "alice"       
+        ↓ seat.bookedBy = "alice"
+        
+30ms    return TRUE                        Actual: "alice" (not null!) ✗
+        (Thread A booked successfully)     CAS fails → NO write!
+                                          return FALSE (back to loop)
+        
+40ms                                      Loop iteration 2
+                                          currentSeat = get()
+                                          (reads: bookedBy="alice")
+                                          
+50ms                                      Check: if "alice" != null? YES
+                                          return FALSE
+                                          (Already booked)
+
+RESULT:
+├─ Thread A: SUCCESS (booked at 20ms)
+├─ Thread B: FAILED (detected already booked)
+└─ NO locks used, NO threads blocked!
+```
+
+---
+
+### **WHY NO LOCKS NEEDED?**
+
+Traditional Locking Approach:
+```java
+synchronized void bookSeat(String userId) {
+    if (!seat.isBooked) {
+        seat.bookedBy = userId;
+    }
+}
+// Thread A locks entire object
+// Thread B WAITS for lock (blocked, CPU wasted)
+// Thread A releases
+// Thread B acquires, completes
+```
+
+Atomic CAS Approach:
+```java
+void bookSeat(String userId) {
+    while (!seat.compareAndSet(null, userId)) {
+        // No lock acquired
+        // No thread waiting
+        // Just retry if CAS failed
+    }
+}
+// Thread A: CAS succeeds, returns
+// Thread B: CAS fails immediately, retries (no wait!)
+// Both finish in microseconds (no blocking)
+```
+
+**No locks = No waiting = 10x higher throughput**
+
+---
+
+### **WHEN CAS SUCCEEDS vs. FAILS**
+
+```java
+AtomicInteger counter = new AtomicInteger(5);
+
+// CAS SUCCEEDS
+boolean result = counter.compareAndSet(5, 10);
+// Expected: 5
+// Actual: 5 ✓
+// Result: counter becomes 10, returns true
+
+// CAS FAILS
+boolean result = counter.compareAndSet(7, 10);
+// Expected: 7
+// Actual: 10 (was changed to 10 in previous CAS)
+// Result: counter stays 10, returns false (no change)
+```
+
+---
+
+### **THE ABA PROBLEM (Why Retry Loops Matter)**
+
+```java
+// Seat value changes: null → "alice" → null
+// But CAS might think "nothing changed"!
+
+AtomicReference<String> seat = new AtomicReference<>(null);
+
+// Thread A reads: "null"
+String currentSeat = seat.get();  // null
+
+// Thread B: Books seat
+seat.set("bob");                  // null → "bob"
+
+// Thread C: Cancels booking
+seat.set(null);                   // "bob" → null
+
+// Thread A: Tries CAS
+if (seat.compareAndSet(currentSeat, "alice")) {
+    // CAS succeeds because seat is still null!
+    // But seat was actually changed (null → bob → null)
+    // This is ABA problem
+}
+```
+
+**Solution: Use AtomicStampedReference**
+```java
+// Tracks version/stamp along with value
+AtomicStampedReference<String> seat = 
+    new AtomicStampedReference<>(null, 0);  // value=null, stamp=0
+
+// When updating:
+int stamp = seat.getStamp();  // 0
+seat.compareAndSet(null, "alice", stamp, stamp+1);
+// Now: value="alice", stamp=1
+
+// ABA attack prevented:
+// null(stamp=0) → "bob"(stamp=1) → null(stamp=2)
+// compareAndSet with stamp=0 fails (stamp is now 2)
+```
+
+---
+
+### **RETRY LOOP MECHANICS**
+
+```java
+public boolean bookSeat(String userId) {
+    int retries = 0;
+    int maxRetries = 100;
+    
+    while (retries < maxRetries) {
+        Seat current = seat.get();
+        
+        if (current.bookedBy != null) {
+            return false;  // Already booked
+        }
+        
+        Seat newSeat = new Seat(userId, LocalDateTime.now());
+        
+        // Try to book atomically
+        if (seat.compareAndSet(current, newSeat)) {
+            return true;  // SUCCESS
+        }
+        
+        // CAS failed (collision), retry
+        retries++;
+        System.out.println("Retry #" + retries);
+        // Loop continues without any wait/sleep (busy-wait)
+    }
+    
+    return false;  // Failed after max retries
+}
+
+// Under LOW contention:
+// Retry 0: CAS succeeds immediately
+// Total: 1 attempt, SUCCESS
+
+// Under HIGH contention (many threads booking same seat):
+// Retry 0: CAS fails (someone else booked)
+// Retry 1: CAS fails again
+// Retry 2: CAS fails again
+// ... lots of retries ...
+// Eventually: Someone succeeds, others get false
+// Side effect: CPU spins doing wasted work (busy-waiting)
+```
+
+---
+
+### **PERFORMANCE CHARACTERISTICS**
+
+| Metric | Value | Explanation |
+|--------|-------|-------------|
+| **Throughput (low contention)** | 500,000+/sec | No locks, all threads proceed |
+| **Throughput (high contention)** | 10,000-50,000/sec | Many CAS failures, retry loops |
+| **Lock acquisition** | 0ns | No lock! Just CPU instruction |
+| **Context switches** | 0 | No thread blocking |
+| **Memory overhead** | Very low | Just atomic variable |
+| **Latency (p99)** | <1μs | CPU instruction speed |
+
+---
+
+### **SIMPLE vs. COMPLEX STATE**
+
+**Simple State (Good for CAS):**
+```java
+// Just an integer counter
+AtomicInteger seatsAvailable = new AtomicInteger(1000);
+
+public void bookSeat() {
+    seatsAvailable.decrementAndGet();  // Atomic operation, fast
+}
+// ✓ Fast (no retry loops expected)
+// ✓ No complex logic
+```
+
+**Complex State (Difficult for CAS):**
+```java
+// Need to update multiple fields
+public class Seat {
+    String bookedBy;
+    LocalDateTime bookedAt;
+    String paymentId;
+}
+
+public boolean bookSeat(String userId, String paymentId) {
+    while (true) {
+        Seat current = seat.get();
+        
+        if (current.bookedBy != null) return false;
+        
+        // Creating new object for every retry (expensive!)
+        Seat newSeat = new Seat(userId, LocalDateTime.now(), paymentId);
+        
+        if (seat.compareAndSet(current, newSeat)) {
+            return true;
+        }
+        // Retry... object created but discarded
+        // Under high contention, many discarded objects → GC pressure
+    }
+}
+// ✗ Expensive (retry loops creating objects)
+// ✗ Complex logic harder to get right
+```
+
+---
+
+### **Pros and Cons Revisited**
 
 **Pros:**
-- ✓ NO locks (non-blocking, no thread waits)
-- ✓ Extremely high throughput (10x better)
-- ✓ No deadlock risk
-- ✓ Low latency (no context switching)
+- ✓ NO locks (no thread waits)
+- ✓ Extremely high throughput (500K+/sec with low contention)
+- ✓ No deadlock possible (no locks!)
+- ✓ Low latency (CPU instruction speed, no context switches)
 - ✓ Scales to 10,000+ threads
 
 **Cons:**
 - ✗ Only works for simple state (integers, references)
-- ✗ CAS loops (retry on collision, wasted CPU cycles)
-- ✗ ABA problem (value A → B → A, CAS thinks no change occurred)
-- ✗ Complex state transitions need careful coding
-- ✗ Busy-waiting if contention is high
+- ✗ CAS loops under high contention (retry wasted CPU cycles)
+- ✗ ABA problem (value changes but returns to original)
+- ✗ Busy-waiting (thread spins, doesn't sleep)
+- ✗ No fairness (last writer wins, may starve some threads)
 
-**When to Use:**
-✓ Simple state (counters, flags, references)
-✓ Very high concurrency needed
-✓ Low contention expected
+---
 
-**When NOT to Use:**
-✗ Complex multi-step transactions (payment processing)
-✗ High contention (CAS loops waste CPU)
-✗ Need guarantees across multiple variables
+### **When to Use CAS**
 
-**Real Scenario - Booking System:**
+✓ **Counter/flag updates** (like seatAvailable counter)
+✓ **Very high concurrency** (1000+ threads competing)
+✓ **Low contention expected** (<10% CAS failure rate)
+✓ **Real-time systems** (need microsecond latency)
+✓ **Lock-free data structures** (stacks, queues)
+
+### **When NOT to Use CAS**
+
+✗ **Complex multi-field transactions** (payment: deduct balance + record transaction)
+✗ **High contention** (many threads updating same variable = retry loops)
+✗ **Need fairness** (FIFO ordering for waiting threads)
+✗ **Cross-variable consistency** (need to update multiple variables atomically)
+
+---
+
+### **Real-World Booking Example**
+
+```java
+public class CinemaBooking {
+    // Simple counter: total available seats
+    private final AtomicInteger availableSeats = new AtomicInteger(500);
+    
+    // Complex state: individual seat tracking
+    private final ConcurrentHashMap<Integer, String> seatBookings = 
+        new ConcurrentHashMap<>();
+    
+    public boolean bookSeat(int seatId, String userId) {
+        // Step 1: Decrement available seats (atomic)
+        if (availableSeats.decrementAndGet() < 0) {
+            availableSeats.incrementAndGet();  // Rollback
+            return false;
+        }
+        
+        // Step 2: Track who booked (separate, non-atomic)
+        seatBookings.put(seatId, userId);
+        return true;
+    }
+}
+
+// Why this works:
+// - availableSeats: Simple counter, CAS fast (no retries)
+// - seatBookings: Complex state in ConcurrentHashMap (handles complexity)
+// Result: Fast + simple for counters, flexible for complex state
 ```
-Using AtomicInteger for simple "available" counter:
-100 concurrent users competing for 10,000 seats
-- Traditional synchronized: 20,000 bookings/sec (contention)
-- AtomicInteger: 500,000+ bookings/sec (no waits!)
-Trade-off: Can't track who booked what (too complex for atomic)
+
+---
+
+### **PERFORMANCE COMPARISON AT SCALE**
+
+```
+Scenario: 10,000 concurrent threads booking seats
+
+1. Synchronized (locks):
+   ├─ Thread 1 acquires lock → books → releases
+   ├─ Threads 2-10,000 wait for lock (9,999 blocked)
+   ├─ Thread 2 wakes up → acquires lock → books → releases
+   ├─ Context switches: ~10,000 (expensive!)
+   └─ Throughput: 1,000-5,000 bookings/sec
+
+2. CAS (lock-free):
+   ├─ Thread 1: CAS succeeds → books → done
+   ├─ Thread 2: CAS fails (collision) → retry immediately
+   ├─ Thread 3: CAS succeeds → books → done
+   ├─ Threads 4-10,000: Some succeed, some retry
+   ├─ Context switches: ~0 (all threads busy on CPU)
+   └─ Throughput: 500,000+ bookings/sec
+
+CAS is 50-100x faster!
 ```
 
 ---
