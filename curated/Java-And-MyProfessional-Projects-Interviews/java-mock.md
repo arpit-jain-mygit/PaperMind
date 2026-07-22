@@ -4047,7 +4047,190 @@ FAIR (fair=true):
 
 ---
 
-## **TECHNIQUE 7: STAMPED LOCK (Optimistic Read Lock)**
+## **TECHNIQUE 7: VOLATILE KEYWORD (Memory Visibility Only)**
+
+**No Atomicity, Only Visibility:**
+```java
+public class SeatBooking {
+    private volatile boolean[] seatBooked = new boolean[10000];
+    
+    public boolean bookSeat(int seatId, String userId) {
+        // WRONG: volatile doesn't provide atomicity!
+        if (!seatBooked[seatId]) {
+            seatBooked[seatId] = true;
+            return true;
+        }
+        return false;  // Race condition: two threads read false simultaneously
+    }
+    
+    // Correct usage: single write to volatile variable
+    private volatile boolean systemShutdown = false;
+    
+    public void shutdown() {
+        systemShutdown = true;  // ✓ Correct: all threads see this immediately
+    }
+    
+    public void processBookings() {
+        while (!systemShutdown) {  // ✓ Correct: sees latest value
+            // Process booking
+        }
+    }
+}
+```
+
+**Performance Characteristics:**
+| Metric | Value |
+|--------|-------|
+| Throughput | N/A (not for mutual exclusion) |
+| Lock overhead | Zero (no lock!) |
+| Memory barrier | One read/write barrier |
+| Atomicity | None |
+
+**Pros:**
+- ✓ Zero lock overhead
+- ✓ Ensures memory visibility
+
+**Cons:**
+- ✗ Does NOT prevent race conditions
+- ✗ Only guarantees visibility, not atomicity
+- ✗ Common misconception: many think it's like synchronized
+
+**When to Use:**
+✓ Boolean flags (shutdown, enabled)
+✓ When one thread writes, many threads read
+✓ Simple state signaling
+
+**When NOT to Use:**
+✗ Booking systems (need atomicity)
+✗ Counters (read-modify-write pattern)
+
+**Real Misconception - Why This FAILS:**
+```java
+// WRONG: two threads both see available=true
+Thread 1: if (!seatBooked[5])        // reads false
+Thread 2: if (!seatBooked[5])        // reads false (before Thread 1 writes)
+Thread 1:     seatBooked[5] = true;  // Books seat
+Thread 2:     seatBooked[5] = true;  // Books same seat! Double-booking!
+
+// volatile keyword doesn't help here because the problem is the
+// check-then-act (read-modify-write) isn't atomic
+```
+
+---
+
+## **TECHNIQUE 8: OPTIMISTIC LOCKING (Version-Based) ← LEARN THIS FIRST**
+
+**Understanding Optimistic Pattern (Foundation for StampedLock)**
+
+The optimistic pattern is used in multiple places. Learn it here first, then apply to StampedLock.
+
+**No Locks, Just Retries:**
+```java
+@Entity
+public class Seat {
+    @Id
+    private String id;
+    private boolean booked;
+    
+    @Version  // Tracks changes
+    private Long version;
+}
+
+@Repository
+public interface SeatRepository extends JpaRepository<Seat, String> {}
+
+public class SeatBooking {
+    public boolean bookSeat(String seatId, String userId) {
+        try {
+            Seat seat = seatRepository.findById(seatId).orElseThrow();
+            
+            if (seat.isBooked()) {
+                return false;
+            }
+            
+            seat.setBooked(true);
+            seatRepository.save(seat);  // If version changed, throws exception
+            return true;
+            
+        } catch (OptimisticLockingFailureException e) {
+            // Someone else booked it, retry
+            return bookSeat(seatId, userId);  // Retry
+        }
+    }
+}
+```
+
+**SQL Behind Scenes:**
+```sql
+-- Save (booking)
+UPDATE seat SET booked=true, version=version+1 
+WHERE id='seat-5' AND version=5;
+
+-- If version was changed by another thread, 0 rows updated
+-- If update affected 0 rows, throw OptimisticLockingFailureException
+```
+
+**The Optimistic Pattern (Try Fast, Retry Slow):**
+```
+Step 1: Read data with version (try fast, no lock)
+Step 2: Modify data locally
+Step 3: Try to save (check if version changed)
+Step 4: If version mismatch → Retry (try again)
+Step 5: If version matches → Success!
+
+This same pattern is used in:
+- TECHNIQUE 3: AtomicInteger.compareAndSet() (try CAS, retry if fails)
+- TECHNIQUE 8: Database Optimistic (try save, retry if version changed)
+- TECHNIQUE 9: StampedLock (try optimistic read, retry with lock if stamp invalid)
+```
+
+**Performance Characteristics:**
+| Metric | Low Contention | High Contention |
+|--------|---|---|
+| Throughput | 50,000 bookings/sec | 1,000 bookings/sec |
+| Network latency | 1 round trip | Multiple retries |
+| Consistency | Eventual (with retries) | Eventually consistent |
+
+**Pros:**
+- ✓ No locks (no blocking)
+- ✓ Good throughput under low contention
+- ✓ Works across distributed systems
+- ✓ Simple versioning mechanism
+
+**Cons:**
+- ✗ Retries under high contention (wasted work)
+- ✗ Requires retry logic
+- ✗ CAS-like collision detection (version conflicts)
+- ✗ No fairness (last writer wins)
+
+**When to Use:**
+✓ Distributed systems
+✓ Expected low contention (<1% collision rate)
+✓ Write-heavy (locking would block many readers)
+
+**When NOT to Use:**
+✗ High contention (retries become expensive)
+✗ Real-time (<10ms latency requirement)
+
+**Real Scenario:**
+```
+100 users, 10,000 seats
+- Low contention: Seat 1 booked by Thread A, Thread B books Seat 2
+  Version mismatch only if SAME seat booked twice
+  
+- High contention: Everyone booking Seat 1 (premium)
+  Thread A books Seat 1 → version 5→6
+  Thread B reads version 5, tries to book, sees version 6
+  Thread B retries → Thread C also retrying → cascade of retries
+```
+
+---
+
+## **TECHNIQUE 9: STAMPED LOCK (Optimistic Read Lock) ← AFTER UNDERSTANDING TECHNIQUE 8**
+
+**Applies Optimistic Pattern to Reads**
+
+Now that you understand the optimistic pattern, see how StampedLock applies it to reads.
 
 **Simple Idea: Try Reading Without A Lock First**
 
@@ -4063,7 +4246,7 @@ StampedLock does this:
 
 ---
 
-### **Three-Step Process**
+### **Three-Step Process (Same as Database Optimistic)**
 
 ```
 STEP 1: Optimistic read (try without lock)
@@ -4080,6 +4263,8 @@ STEP 3: Retry with real read lock (if needed)
 └─ Read again (guaranteed consistent)
 └─ Release lock
 ```
+
+**Notice:** This is the SAME pattern as TECHNIQUE 8 (Database Optimistic)!
 
 ---
 
@@ -4157,103 +4342,6 @@ Result: 1000+ readers executed with NO lock conflicts!
 
 ---
 
-### **When Optimistic Read FAILS (Rare)**
-
-```
-Optimistic read fails when:
-├─ Writer updates data WHILE reader is reading
-└─ Reader's stamp becomes invalid
-
-Timeline (collision):
-
-Reader A:
-├─ Optimistic read, stamp = 100
-├─ Reading price...
-│
-│ (MEANWHILE, Writer updates!)
-│
-├─ Writer acquires write lock
-├─ Writer updates price (now stamp = 101)
-├─ Writer releases lock
-│
-├─ Validate: "Is my stamp (100) still valid?"
-├─ NO! Stamp is now 101 ✗
-├─ Retry with real read lock (slower)
-├─ Read again with lock: price = $1299
-└─ Return $1299 (correct, but slower)
-```
-
----
-
-### **Comparison: ReadWriteLock vs. StampedLock**
-
-```
-READWRITELOCK (normal read-write lock):
-└─ Reader: "I need to read"
-   → Acquire read lock (overhead)
-   → Read data
-   → Release read lock
-   Time: 1000 nanoseconds per read
-
-STAMPEDLOCK (optimistic):
-└─ Reader: "Let me peek without lock"
-   → Optimistic read (NO lock)
-   → Validate (NO lock)
-   → Return (success!)
-   Time: 10 nanoseconds per read (100x faster!)
-   
-When write happens (rare):
-└─ Reader: "Oops, data changed"
-   → Acquire read lock (fallback)
-   → Read again
-   → Return (correct, but slower)
-```
-
----
-
-### **Real-World Example: Stock Price**
-
-```java
-StampedLock lock = new StampedLock();
-Map<String, Double> stockPrices = new HashMap<>();
-
-// Millions of users checking stock price
-public Double getStockPrice(String ticker) {
-    // Try optimistic (99% of time succeeds)
-    long stamp = lock.tryOptimisticRead();
-    Double price = stockPrices.get(ticker);
-    
-    if (!lock.validate(stamp)) {
-        // Stock price updated (rare), retry with lock
-        stamp = lock.readLock();
-        try {
-            price = stockPrices.get(ticker);
-        } finally {
-            lock.unlockRead(stamp);
-        }
-    }
-    return price;
-}
-
-// Nasdaq updates stock price
-public void updateStockPrice(String ticker, Double newPrice) {
-    long stamp = lock.writeLock();
-    try {
-        stockPrices.put(ticker, newPrice);
-    } finally {
-        lock.unlockWrite(stamp);
-    }
-}
-
-// Performance:
-// 1 million users checking prices per second
-// ReadWriteLock: 1 million lock acquisitions = slow
-// StampedLock: 1 million optimistic reads (no locks!) = fast
-// Result: 100x more users handled!
-```
-
----
-
 ### **Performance Characteristics**
 
 | Metric | Value |
@@ -4303,78 +4391,7 @@ public void updateStockPrice(String ticker, Double newPrice) {
 
 ---
 
-## **TECHNIQUE 8: VOLATILE KEYWORD (Memory Visibility Only)**
-
-**No Atomicity, Only Visibility:**
-```java
-public class SeatBooking {
-    private volatile boolean[] seatBooked = new boolean[10000];
-    
-    public boolean bookSeat(int seatId, String userId) {
-        // WRONG: volatile doesn't provide atomicity!
-        if (!seatBooked[seatId]) {
-            seatBooked[seatId] = true;
-            return true;
-        }
-        return false;  // Race condition: two threads read false simultaneously
-    }
-    
-    // Correct usage: single write to volatile variable
-    private volatile boolean systemShutdown = false;
-    
-    public void shutdown() {
-        systemShutdown = true;  // ✓ Correct: all threads see this immediately
-    }
-    
-    public void processBookings() {
-        while (!systemShutdown) {  // ✓ Correct: sees latest value
-            // Process booking
-        }
-    }
-}
-```
-
-**Performance Characteristics:**
-| Metric | Value |
-|--------|-------|
-| Throughput | N/A (not for mutual exclusion) |
-| Lock overhead | Zero (no lock!) |
-| Memory barrier | One read/write barrier |
-| Atomicity | None |
-
-**Pros:**
-- ✓ Zero lock overhead
-- ✓ Ensures memory visibility
-
-**Cons:**
-- ✗ Does NOT prevent race conditions
-- ✗ Only guarantees visibility, not atomicity
-- ✗ Common misconception: many think it's like synchronized
-
-**When to Use:**
-✓ Boolean flags (shutdown, enabled)
-✓ When one thread writes, many threads read
-✓ Simple state signaling
-
-**When NOT to Use:**
-✗ Booking systems (need atomicity)
-✗ Counters (read-modify-write pattern)
-
-**Real Misconception - Why This FAILS:**
-```java
-// WRONG: two threads both see available=true
-Thread 1: if (!seatBooked[5])        // reads false
-Thread 2: if (!seatBooked[5])        // reads false (before Thread 1 writes)
-Thread 1:     seatBooked[5] = true;  // Books seat
-Thread 2:     seatBooked[5] = true;  // Books same seat! Double-booking!
-
-// volatile keyword doesn't help here because the problem is the
-// check-then-act (read-modify-write) isn't atomic
-```
-
----
-
-## **TECHNIQUE 9: DATABASE-LEVEL PESSIMISTIC LOCKING**
+## **TECHNIQUE 10: DATABASE-LEVEL PESSIMISTIC LOCKING**
 
 **Lock in Database:**
 ```java
@@ -4442,96 +4459,6 @@ With DB pessimistic lock: Database ensures only one succeeds
 
 Cost: Each booking takes 20ms (network latency)
 Benefit: Guaranteed consistency across servers
-```
-
----
-
-## **TECHNIQUE 10: OPTIMISTIC LOCKING (Version-Based)**
-
-**No Locks, Just Retries:**
-```java
-@Entity
-public class Seat {
-    @Id
-    private String id;
-    private boolean booked;
-    
-    @Version  // Tracks changes
-    private Long version;
-}
-
-@Repository
-public interface SeatRepository extends JpaRepository<Seat, String> {}
-
-public class SeatBooking {
-    public boolean bookSeat(String seatId, String userId) {
-        try {
-            Seat seat = seatRepository.findById(seatId).orElseThrow();
-            
-            if (seat.isBooked()) {
-                return false;
-            }
-            
-            seat.setBooked(true);
-            seatRepository.save(seat);  // If version changed, throws exception
-            return true;
-            
-        } catch (OptimisticLockingFailureException e) {
-            // Someone else booked it, retry
-            return bookSeat(seatId, userId);  // Retry
-        }
-    }
-}
-```
-
-**SQL Behind Scenes:**
-```sql
--- Save (booking)
-UPDATE seat SET booked=true, version=version+1 
-WHERE id='seat-5' AND version=5;
-
--- If version was changed by another thread, 0 rows updated
--- If update affected 0 rows, throw OptimisticLockingFailureException
-```
-
-**Performance Characteristics:**
-| Metric | Low Contention | High Contention |
-|--------|---|---|
-| Throughput | 50,000 bookings/sec | 1,000 bookings/sec |
-| Network latency | 1 round trip | Multiple retries |
-| Consistency | Eventual (with retries) | Eventually consistent |
-
-**Pros:**
-- ✓ No locks (no blocking)
-- ✓ Good throughput under low contention
-- ✓ Works across distributed systems
-- ✓ Simple versioning mechanism
-
-**Cons:**
-- ✗ Retries under high contention (wasted work)
-- ✗ Requires retry logic
-- ✗ CAS-like collision detection (version conflicts)
-- ✗ No fairness (last writer wins)
-
-**When to Use:**
-✓ Distributed systems
-✓ Expected low contention (<1% collision rate)
-✓ Write-heavy (locking would block many readers)
-
-**When NOT to Use:**
-✗ High contention (retries become expensive)
-✗ Real-time (<10ms latency requirement)
-
-**Real Scenario:**
-```
-100 users, 10,000 seats
-- Low contention: Seat 1 booked by Thread A, Thread B books Seat 2
-  Version mismatch only if SAME seat booked twice
-  
-- High contention: Everyone booking Seat 1 (premium)
-  Thread A books Seat 1 → version 5→6
-  Thread B reads version 5, tries to book, sees version 6
-  Thread B retries → Thread C also retrying → cascade of retries
 ```
 
 ---
