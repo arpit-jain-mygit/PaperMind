@@ -382,6 +382,402 @@ final = result.collect()                       # Driver brings results back
 
 ---
 
+## DAG, Stage, Task, Shuffle: The Building Blocks
+
+### First: Let's Understand the Hierarchy
+
+Think of building a house:
+
+```
+┌──────────────────────────────────────┐
+│ BLUEPRINT (DAG)                      │  ← Overall plan
+│ "Read wall → Build frame → Paint"    │
+├──────────────────────────────────────┤
+│ STAGE 1: Build Frame                 │
+│ ├─ Task 1: Build wall 1              │  ← Can happen in parallel
+│ ├─ Task 2: Build wall 2              │
+│ └─ Task 3: Build wall 3              │
+├──────────────────────────────────────┤
+│ [WAIT for all walls done]            │  ← Synchronization point
+├──────────────────────────────────────┤
+│ STAGE 2: Paint Walls                 │
+│ ├─ Task 1: Paint wall 1              │  ← Can happen in parallel
+│ ├─ Task 2: Paint wall 2              │
+│ └─ Task 3: Paint wall 3              │
+└──────────────────────────────────────┘
+```
+
+Same with Spark!
+
+---
+
+### 1. DAG (Directed Acyclic Graph)
+
+**What it is:** The complete plan of your entire query.
+
+**Why "Directed Acyclic"?**
+- **Directed:** Flow has direction (A → B → C, not circular)
+- **Acyclic:** No loops (can't go backwards)
+
+**Simple example:**
+
+Your code:
+```python
+df = spark.read.parquet("sales.parquet")
+df = df.filter(df.amount > 1000)
+df = df.groupBy("department").sum()
+result = df.collect()
+```
+
+**The DAG:**
+```
+Read → Filter → GroupBy → Collect
+```
+
+**Why it exists:**
+
+Spark looks at your entire DAG and asks: "Can I optimize this plan before executing?"
+
+Example optimization Spark does:
+```
+Original plan: Read all columns → Filter by amount → GroupBy
+Optimized plan: Read only needed columns → Filter by amount → GroupBy
+(Skips unnecessary columns = faster)
+```
+
+**Without a DAG:** Spark would execute line-by-line without seeing the full picture. Much slower.
+
+---
+
+### 2. Stage
+
+**What it is:** A group of tasks that CAN RUN IN PARALLEL.
+
+Stages are separated by **shuffle boundaries** (places where data must be reorganized).
+
+**Why stages exist:**
+
+You have 4 executors (4 workers). 
+
+Option 1: Serial execution (1 at a time)
+```
+Task 1 → Task 2 → Task 3 → Task 4 → Total: 4 hours
+```
+
+Option 2: Parallel execution (stages)
+```
+Stage 1: Task 1, 2, 3, 4 run together → 1 hour
+[WAIT for shuffle]
+Stage 2: Task 1, 2, 3, 4 run together → 1 hour
+Total: 2 hours (2x faster!)
+```
+
+**Real example:**
+
+Your data is split into 4 partitions:
+```
+Partition 1 (rows 1-250k)
+Partition 2 (rows 250k-500k)
+Partition 3 (rows 500k-750k)
+Partition 4 (rows 750k-1M)
+```
+
+When you filter:
+```python
+df.filter(df.amount > 1000)
+```
+
+Spark creates 4 tasks (one per partition):
+```
+Task 1: Filter partition 1 → 200k rows (parallel)
+Task 2: Filter partition 2 → 190k rows (parallel)
+Task 3: Filter partition 3 → 210k rows (parallel)
+Task 4: Filter partition 4 → 200k rows (parallel)
+```
+
+All 4 tasks are in the same **Stage** and run at the same time.
+
+---
+
+### 3. Task
+
+**What it is:** The smallest unit of work. One task = processing one partition.
+
+**Formula:**
+```
+Number of Tasks = Number of Partitions
+```
+
+**Real example:**
+
+File: `sales.parquet` (1 GB, split into 4 partitions = 250 MB each)
+
+Query:
+```python
+df = spark.read.parquet("sales.parquet")  # 4 tasks (one per partition)
+df = df.filter(df.amount > 1000)           # Still 4 tasks
+result = df.groupBy("dept").sum()          # Shuffle → different task count
+```
+
+**Execution:**
+```
+Stage 1 (Filter):
+  Executor 1 processes Partition 1 (Task 1)
+  Executor 2 processes Partition 2 (Task 2)
+  Executor 3 processes Partition 3 (Task 3)
+  Executor 4 processes Partition 4 (Task 4)
+  
+  Time to complete: ~5 seconds (parallel)
+  vs. serial (20 seconds) = 4x faster!
+```
+
+**Why tasks matter:**
+- More tasks = more parallelism = faster
+- Too many tasks = overhead (each task has cost)
+- Sweet spot: 128 MB per task
+
+---
+
+### 4. Shuffle
+
+**What it is:** When data must move across the network to reorganize.
+
+**Why shuffle happens:**
+
+Some operations require data to be reorganized:
+
+```python
+df.groupBy("department").sum()
+```
+
+Before shuffle:
+```
+Executor 1: [Eng, Sales, Eng, Mktg, Sales]
+Executor 2: [Eng, Sales, Eng, Mktg, Sales]
+Executor 3: [Eng, Sales, Eng, Mktg, Sales]
+Executor 4: [Eng, Sales, Eng, Mktg, Sales]
+
+(All departments scattered everywhere)
+```
+
+After shuffle:
+```
+Executor 1: [Eng, Eng, Eng, Eng, ...]
+Executor 2: [Sales, Sales, Sales, Sales, ...]
+Executor 3: [Mktg, Mktg, Mktg, Mktg, ...]
+Executor 4: [HR, HR, HR, HR, ...]
+
+(Each department in one place = can sum them)
+```
+
+**Cost:** Network transfer = slow. ~70% of Spark job time.
+
+---
+
+## How DAG, Stage, Task, Shuffle Connect
+
+### Visual: The Relationship
+
+```
+┌─────────────────────────────────────────────────┐
+│ DAG: YOUR ENTIRE QUERY PLAN                     │
+│                                                 │
+│  Read → Filter → GroupBy → Collect              │
+│                                                 │
+├─────────────────────────────────────────────────┤
+│ STAGE 0: Read + Filter (no shuffle needed)      │
+│ (all tasks run in parallel)                     │
+│                                                 │
+│ ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ ┌─────────────┐
+│ │   Task 1    │  │   Task 2    │  │   Task 3    │ │   Task 4    │
+│ │ (Exec 1)    │  │ (Exec 2)    │  │ (Exec 3)    │ │ (Exec 4)    │
+│ │ Partition 1 │  │ Partition 2 │  │ Partition 3 │ │ Partition 4 │
+│ └─────────────┘  └─────────────┘  └─────────────┘ └─────────────┘
+├─────────────────────────────────────────────────┤
+│ ↓ SHUFFLE (data moves across network)           │
+├─────────────────────────────────────────────────┤
+│ STAGE 1: GroupBy (after shuffle)                │
+│ (tasks run in parallel on reorganized data)     │
+│                                                 │
+│ ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ ┌─────────────┐
+│ │   Task 1    │  │   Task 2    │  │   Task 3    │ │   Task 4    │
+│ │ (Exec 1)    │  │ (Exec 2)    │  │ (Exec 3)    │ │ (Exec 4)    │
+│ │ All "Eng"   │  │ All "Sales" │  │ All "Mktg"  │ │ All "HR"    │
+│ │ sum amounts │  │ sum amounts │  │ sum amounts │ │ sum amounts │
+│ └─────────────┘  └─────────────┘  └─────────────┘ └─────────────┘
+├─────────────────────────────────────────────────┤
+│ Collect: Bring results back to driver           │
+└─────────────────────────────────────────────────┘
+```
+
+**Key insight:** 
+- DAG = big picture (what to do)
+- Stages = groups of parallel work (separated by shuffles)
+- Tasks = individual work units (one per partition)
+- Shuffle = the boundary between stages
+
+---
+
+## Why DAG Is Required
+
+### Problem Without DAG
+
+Without a DAG, Spark would just execute your code line by line:
+
+```python
+df = spark.read.parquet("sales.parquet")  # Read entire file
+df = df.filter(df.amount > 1000)          # Filter entire result
+df = df.select("id", "amount")            # Select columns
+result = df.groupBy("dept").sum()         # GroupBy
+```
+
+**Execution (bad):**
+```
+1. Read all columns from file (SLOW - read unnecessary columns)
+2. Filter (SLOW - work on full data)
+3. Select (SLOW - already selected earlier, too late)
+4. GroupBy (SLOW - shuffle all columns)
+```
+
+**Result:** Read 100 GB when you only needed 10 GB. 10x slower!
+
+---
+
+### Solution: DAG Optimization
+
+**With DAG, Spark sees the full picture:**
+
+```python
+df = spark.read.parquet("sales.parquet")
+df = df.filter(df.amount > 1000)
+df = df.select("id", "amount")
+result = df.groupBy("dept").sum()
+```
+
+**DAG Analysis:**
+```
+1. GroupBy needs "dept" and "amount"
+2. Select only wants "id" and "amount"
+3. Filter needs "amount"
+4. Read can skip all other columns!
+
+Optimized plan:
+  Read (only "dept", "amount") → Filter → GroupBy
+  Skip the Select (Spark realizes it's not needed)
+```
+
+**Result:** Read only 10 GB needed. Same result, 10x faster!
+
+---
+
+### Real-World Analogy
+
+**Without DAG (Restaurant without recipe):**
+```
+Chef: "Make me a burger"
+Cook 1: "I'll chop all vegetables"
+Chef: "Now add to burger"
+Cook 2: "I'll grill all 100 buns"
+Chef: "Only need 1"
+Cook 3: "I'll make 100 sauces"
+Chef: "Only need 1"
+
+Result: Waste of time and ingredients
+```
+
+**With DAG (Restaurant with recipe):**
+```
+Recipe: "Burger = 1 bun, 1 patty, 1 lettuce, 1 tomato, 1 sauce"
+
+Chef reads full recipe first:
+Cook 1: "Prepare 1 lettuce slice"
+Cook 2: "Grill 1 bun"
+Cook 3: "Make 1 sauce"
+
+Result: Efficient, fast, waste-free
+```
+
+---
+
+### Concrete Example: Query Optimization
+
+**Your query:**
+```python
+df = spark.read.parquet("1TB_sales_data.parquet")
+df = df.filter(df.timestamp > "2024-01-01")
+df = df.select("id", "amount")
+df = df.groupBy("id").sum()
+result = df.collect()
+```
+
+**Without DAG (Naive Execution):**
+```
+1. Read entire 1TB file
+2. Filter in memory (still ~900GB after filter)
+3. Select columns
+4. GroupBy 900GB of data
+5. Shuffle 900GB across network
+
+Total time: ~30 minutes
+```
+
+**With DAG (Spark Optimization):**
+```
+DAG sees:
+  - Needed columns: "id", "amount", "timestamp"
+  - Not needed: 50 other columns
+
+Optimized execution:
+1. Read only 3 columns (~50GB instead of 1TB)
+2. Filter (50GB → 45GB)
+3. GroupBy 45GB
+4. Shuffle 45GB
+
+Total time: ~3 minutes (10x faster!)
+```
+
+---
+
+## The Flow: From Code to Execution
+
+```
+Your Python Code
+    ↓
+[Spark builds DAG]
+    ↓
+[Catalyst Optimizer analyzes DAG]
+    ↓
+[Optimized DAG]
+    ↓
+[Divide into Stages]
+    ↓
+[Each Stage creates Tasks (one per partition)]
+    ↓
+[Send Tasks to Executors]
+    ↓
+[Executors process Tasks in parallel]
+    ↓ [SHUFFLE at stage boundary]
+[Next Stage's Tasks run on reorganized data]
+    ↓
+[Results combine]
+    ↓
+[Return to Driver]
+```
+
+---
+
+## Interview Answer
+
+**Q: Explain DAG, Stage, Task, and Shuffle.**
+
+"DAG is your query's complete execution plan. Spark builds it by analyzing your code, then optimizes it (e.g., pushing filters early). The DAG is divided into Stages - groups of tasks that can run in parallel. Each Stage contains Tasks, and each Task processes one partition of data. Stages are separated by Shuffles, which are expensive network operations that reorganize data. For example, a groupBy creates a shuffle because data with the same key must go to the same executor. Without a DAG, Spark would execute line-by-line and miss optimizations, making queries 10x slower."
+
+**Q: Why is DAG required?**
+
+"Without a DAG, Spark can't optimize your query. For example, if you read a 1TB file but only need 3 columns, Spark should only read those 3 columns. But without seeing the full query (the DAG), Spark would read all 1TB. A DAG lets Spark see the complete picture and optimize: push filters early, skip unnecessary columns, reorder operations. This can make queries 10x faster."
+
+---
+
 ## Visual DAGs: How Queries Execute
 
 DAG = Directed Acyclic Graph. Shows how data flows through your query.
