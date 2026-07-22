@@ -2438,10 +2438,136 @@ public class SeatBooking {
 
 **Real Scenario - Booking System with SLA:**
 ```
-Requirement: Booking must respond within 2 seconds
-With synchronized: User waits behind slow thread (could be >10 seconds)
-With ReentrantLock: User tries for 2 seconds, then fails gracefully
-Result: Better UX (fast response, no infinite waits)
+Requirement: Each user's booking request must respond within 2 seconds (no waiting forever)
+
+Timeline:
+├─ Thread A: Calls lock.acquire() → acquires lock successfully
+├─ Thread B: Calls lock.acquire() → WAITS (lock held by A)
+│  │
+│  └─ After 1 second: A completes booking and calls unlock()
+│     └─ Thread B: NOW acquires lock, proceeds to book
+│
+BUT if A is slow:
+├─ Thread A: Holds lock for 3 seconds (slow booking operation)
+├─ Thread B: Waiting for lock... 1 sec... 2 secs... TIMEOUT!
+│  └─ lock.tryLock(2 seconds) returns FALSE
+│  └─ Thread B: Fails gracefully (returns false to user)
+│  └─ User sees: "All seats selling fast, try again" (not "stuck waiting")
+└─ Thread A: Still holding lock, completes booking normally
+
+Key: THREAD B (waiting for lock) gives up after timeout, not Thread A (already acquired)
+
+With synchronized:
+├─ Thread A: Holds lock for 3 seconds
+├─ Thread B: Waits indefinitely (no timeout option)
+├─ User B: Sees spinner for 5+ seconds (bad UX, may close browser)
+└─ Result: Lost customer!
+
+With ReentrantLock + timeout:
+├─ Thread A: Holds lock for 3 seconds (still succeeds)
+├─ Thread B: Waits 2 seconds, then gets false response
+├─ User B: Gets immediate response "Try again" (good UX, may retry)
+└─ Result: Customer can retry, keeps trying!
+```
+
+---
+
+**DETAILED CLARIFICATION: Which Thread Fails Gracefully?**
+
+```java
+private final Lock lock = new ReentrantLock();
+
+public boolean bookSeat(String seatId, String userId, long timeoutSeconds) {
+    try {
+        // tryLock() returns TRUE/FALSE within timeout period
+        if (lock.tryLock(timeoutSeconds, TimeUnit.SECONDS)) {
+            // ✓ THIS THREAD ACQUIRED THE LOCK
+            System.out.println(Thread.currentThread().getName() + " ACQUIRED lock");
+            
+            try {
+                // NOW inside critical section doing actual booking
+                if (seats[seatId].isAvailable()) {
+                    Thread.sleep(3000);  // Simulate 3-second booking operation
+                    seats[seatId].book(userId);
+                    System.out.println(Thread.currentThread().getName() + " BOOKED");
+                    return true;  // ✓ SUCCESS
+                }
+            } finally {
+                lock.unlock();  // Release lock for other threads
+            }
+        } else {
+            // ✗ THIS THREAD COULD NOT ACQUIRE LOCK WITHIN TIMEOUT
+            // (still WAITING for lock, never got it)
+            System.out.println(Thread.currentThread().getName() + 
+                " FAILED - couldn't acquire lock in " + timeoutSeconds + "s");
+            return false;  // FAIL GRACEFULLY
+        }
+    } catch (InterruptedException e) {
+        return false;
+    }
+    return false;
+}
+
+// === EXECUTION TIMELINE (2-second timeout) ===
+
+Time    Thread A                          Thread B
+─────────────────────────────────────────────────────
+ 0ms    | calls tryLock(2s)               | calls tryLock(2s)
+        | ↓ ACQUIRES lock                 | ↓ WAITS (A has lock)
+        |                                 |
+
+100ms   | Inside critical section          | Still WAITING for lock
+        | (booking seat)                   | (1.9 secs remaining)
+        |                                 |
+
+1000ms  | Still inside, booking...         | Still WAITING for lock
+        | (2 more secs to finish)          | (1.0 sec remaining)
+        |                                 |
+
+2000ms  | Still booking (3-sec operation)  | TIMEOUT EXPIRED!
+        | (1 more sec to finish)           | lock.tryLock() returns FALSE
+        |                                 | ✗ THREAD B: Fails gracefully
+        |                                 |    (never acquired lock)
+        |                                 |    (returns false to user)
+
+3000ms  | Completes booking                | (already gave up 1 sec ago)
+        | ↓ RELEASES lock                  |
+        | ✓ THREAD A: Returns TRUE         |
+
+RESULT:
+├─ Thread A: SUCCESS (acquired lock, completed booking)
+├─ Thread B: FAILED GRACEFULLY (couldn't get lock in time, not stuck waiting)
+└─ Both threads got response within 3 seconds (A at 3s, B at 2s)
+```
+
+**Key Insight - Which Thread Fails:**
+```
+✗ Thread B (WAITING FOR LOCK): Fails gracefully after timeout
+  - Never acquired the lock
+  - Never entered critical section
+  - Never started booking
+  - Returns FALSE after 2 seconds
+
+✓ Thread A (ALREADY ACQUIRED LOCK): NOT AFFECTED by timeout
+  - Already inside critical section
+  - Timeout does NOT interrupt ongoing work
+  - Completes booking normally (takes 3 seconds)
+  - Returns TRUE after 3 seconds
+```
+
+**Why This is Better:**
+```
+Without timeout (synchronized):
+├─ Thread A: Acquires, books (3 secs) → SUCCESS
+├─ Thread B: Waits for lock → waits 2 secs → still waiting...
+│            → waits 3 secs total → finally succeeds (bad for SLA!)
+└─ User B: Sees loading spinner for 3 seconds (frustrating)
+
+With timeout (tryLock):
+├─ Thread A: Acquires, books (3 secs) → SUCCESS
+├─ Thread B: Waits for lock → waits 1 sec → waits 2 secs → TIMEOUT
+│            → gives up, returns false (good for SLA!)
+└─ User B: Gets "Sold out, try again" in 2 seconds (retry quickly)
 ```
 
 ---
