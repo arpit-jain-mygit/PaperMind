@@ -978,29 +978,276 @@ public class ServiceConfig {
 
 ---
 
-### Common Mistake
+### Why @Bean is Useful (Even Though You Create the Object)
+
+**Question:** "If I'm creating and configuring the object myself, why not just create it wherever I need it?"
+
+**Answer:** @Bean creates ONE SHARED INSTANCE for the entire application.
+
+---
+
+### Example: Problem Without @Bean
 
 ```java
-// ❌ WRONG - Can't use @Bean on external class
-// (You don't own the ObjectMapper code)
-@Bean
-public class ObjectMapper {  // Not your code! Can't add @Bean
-    // ...
+// ❌ WITHOUT @Bean - Creating new instances everywhere
+
+public class Service1 {
+    public void doSomething() {
+        ObjectMapper mapper = new ObjectMapper();  // New instance 1
+        mapper.registerModule(new JavaTimeModule());
+        mapper.setSerializationInclusion(Include.NON_NULL);
+        // Use mapper...
+    }
 }
 
-// ✅ RIGHT - Use @Bean in @Configuration class
+public class Service2 {
+    public void doSomething() {
+        ObjectMapper mapper = new ObjectMapper();  // New instance 2
+        mapper.registerModule(new JavaTimeModule());
+        mapper.setSerializationInclusion(Include.NON_NULL);
+        // Use mapper...
+    }
+}
+
+public class Service3 {
+    public void doSomething() {
+        ObjectMapper mapper = new ObjectMapper();  // New instance 3
+        mapper.registerModule(new JavaTimeModule());
+        mapper.setSerializationInclusion(Include.NON_NULL);
+        // Use mapper...
+    }
+}
+```
+
+**Problems:**
+- ❌ Creating 3 separate ObjectMapper instances (waste of memory)
+- ❌ Same configuration repeated in 3 places (code duplication)
+- ❌ If you need to change config, must update in 3 places
+- ❌ Inconsistent behavior (each instance might be configured differently)
+
+---
+
+### Solution: Using @Bean
+
+```java
 @Configuration
 public class Config {
     @Bean
     public ObjectMapper objectMapper() {
-        return new ObjectMapper();
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
+        mapper.setSerializationInclusion(Include.NON_NULL);
+        return mapper;
     }
 }
 
-// ✅ RIGHT - Use @Component for your own class
-@Component
-public class UserService {  // You own this code
-    // ...
+// Now use it everywhere:
+
+@Service
+public class Service1 {
+    @Autowired
+    private ObjectMapper mapper;  // Gets the SAME shared instance
+    
+    public void doSomething() {
+        // Use mapper...
+    }
+}
+
+@Service
+public class Service2 {
+    @Autowired
+    private ObjectMapper mapper;  // Gets the SAME shared instance
+    
+    public void doSomething() {
+        // Use mapper...
+    }
+}
+
+@Service
+public class Service3 {
+    @Autowired
+    private ObjectMapper mapper;  // Gets the SAME shared instance
+    
+    public void doSomething() {
+        // Use mapper...
+    }
+}
+```
+
+**Benefits:**
+- ✅ ONE ObjectMapper instance shared across all services
+- ✅ Configuration in ONE place (easy to update)
+- ✅ No code duplication
+- ✅ Consistent behavior everywhere
+- ✅ Less memory usage
+
+---
+
+### Real-World Analogy
+
+Think of it like a printer in an office:
+
+**Without @Bean (Creating new instances):**
+```
+Employee 1 buys their own printer, configures it
+Employee 2 buys their own printer, configures it (same way)
+Employee 3 buys their own printer, configures it (same way)
+
+Problem: Wasting money, duplicating effort, 3 printers to maintain
+```
+
+**With @Bean (Shared bean):**
+```
+Company configures ONE shared printer with all settings
+Employee 1 uses it
+Employee 2 uses it
+Employee 3 uses it
+
+Benefit: One printer to maintain, cheaper, consistent
+```
+
+---
+
+### Key Benefits of @Bean
+
+| Benefit | Without @Bean | With @Bean |
+|---------|--------------|-----------|
+| **Instances** | Multiple (one per use) | Single instance (reused) |
+| **Configuration** | Scattered everywhere | Centralized in one place |
+| **Memory** | Wasteful | Efficient |
+| **Updates** | Change in multiple places | Change in one place |
+| **Dependency** | Can't inject into other beans | Can inject anywhere |
+| **Consistency** | May vary | Always the same |
+
+---
+
+### Example: Dependency Between Beans
+
+This is where @Bean really shines - beans can depend on each other:
+
+```java
+@Configuration
+public class Config {
+    
+    @Bean
+    public DataSource dataSource() {
+        DataSourceBuilder builder = DataSourceBuilder.create();
+        builder.url("jdbc:mysql://localhost:3306/mydb");
+        return builder.build();
+    }
+    
+    // JdbcTemplate depends on DataSource
+    @Bean
+    public JdbcTemplate jdbcTemplate(DataSource dataSource) {
+        return new JdbcTemplate(dataSource);  // Injects the @Bean above
+    }
+    
+    // UserRepository depends on JdbcTemplate
+    @Bean
+    public UserRepository userRepository(JdbcTemplate jdbcTemplate) {
+        return new UserRepository(jdbcTemplate);  // Injects the @Bean above
+    }
+}
+
+// Now you can inject UserRepository anywhere
+@Service
+public class UserService {
+    @Autowired
+    private UserRepository repo;  // Gets fully configured instance
+}
+```
+
+**Chain of creation:**
+```
+DataSource created → JdbcTemplate created (gets DataSource) → 
+UserRepository created (gets JdbcTemplate) → 
+UserService gets UserRepository (gets everything it needs)
+```
+
+---
+
+### Testability Benefit
+
+With @Bean, you can easily swap implementations for testing:
+
+```java
+@Configuration
+public class TestConfig {
+    @Bean
+    public ObjectMapper objectMapper() {
+        // Use mock/test version
+        return Mockito.mock(ObjectMapper.class);
+    }
+}
+
+@RunWith(SpringRunner.class)
+@ContextConfiguration(classes = TestConfig.class)
+public class MyTest {
+    @Autowired
+    private ObjectMapper mapper;  // Gets mock version
+    
+    @Test
+    public void testSomething() {
+        Mockito.when(mapper.writeValueAsString(any()))
+            .thenReturn("test");
+    }
+}
+```
+
+---
+
+### Summary: Why @Bean Matters
+
+**Without @Bean:** Every place that needs ObjectMapper creates it
+```
+Service1: new ObjectMapper() → configure → use
+Service2: new ObjectMapper() → configure → use
+Service3: new ObjectMapper() → configure → use
+```
+
+**With @Bean:** One place creates it, everyone shares it
+```
+Config: new ObjectMapper() → configure once
+Service1: @Autowired mapper → use
+Service2: @Autowired mapper → use  (SAME instance)
+Service3: @Autowired mapper → use  (SAME instance)
+```
+
+**Result:** Less code, better maintainability, better testability!
+
+---
+
+### Common Mistake
+
+```java
+// ❌ WRONG - Creating new instances everywhere
+public class Service {
+    public void doSomething() {
+        ObjectMapper mapper = new ObjectMapper();  // ← Wrong!
+        mapper.registerModule(new JavaTimeModule());
+        // ...
+    }
+}
+
+// ✅ RIGHT - Use @Bean and inject
+@Configuration
+public class Config {
+    @Bean
+    public ObjectMapper objectMapper() {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
+        return mapper;
+    }
+}
+
+@Service
+public class Service {
+    @Autowired
+    private ObjectMapper mapper;  // ← Right!
+    
+    public void doSomething() {
+        // Use mapper...
+    }
 }
 ```
 
