@@ -3845,11 +3845,199 @@ READWRITELOCK (separate read/write locks):
 
 ---
 
+### **Critical Issue: Writer Starvation (When Writers Timeout)**
+
+**Problem: Readers Keep Coming, Writer Never Gets Turn**
+
+```
+Scenario: 90% readers, 10% writers
+With continuous reader arrivals...
+
+Reader 1: Acquires read lock
+Reader 2: Acquires read lock (parallel)
+
+Writer 1: Tries to acquire write lock
+          → BLOCKED! (must wait for all readers)
+
+Reader 1 releases: (lock count: 1)
+Reader 3 arrives: "I need to read"
+                  Acquires read lock (lock count: 2)
+                  → Writer STILL waiting!
+
+Reader 2 releases: (lock count: 1)
+Reader 4 arrives: "I need to read"
+                  Acquires read lock (lock count: 2)
+                  → Writer STILL waiting!
+
+...pattern repeats...
+RESULT: New readers keep coming!
+        Writer never gets chance!
+        Writer waits 5 seconds → TIMEOUT!
+        Update fails! ❌
+```
+
+**Real Impact: E-Commerce Price Update**
+
+```
+Scenario: 1000 readers checking iPhone price, 1 writer updating price
+
+Timeline:
+0 sec:   Writer: "I need to update price $999 → $1299"
+         But 1000 readers checking price simultaneously
+         Writer: BLOCKED
+
+5 sec:   Still 1000+ new readers coming
+         Writer: TIMEOUT after 5 seconds!
+         Exception thrown: "Couldn't acquire write lock"
+         
+Result:  Price NEVER updated!
+         Customers still see old price $999
+         Company loses: $300/sale × 1000 customers = $300,000 loss! ❌
+```
+
+---
+
+### **Solution: Fair ReadWriteLock (Prevent Writer Starvation)**
+
+Use `fair=true` to guarantee writers get turns:
+
+```java
+// WITHOUT FAIRNESS (default - writers can starve):
+ReadWriteLock lock = new ReentrantReadWriteLock();
+// Problem: Writers might wait forever
+
+// WITH FAIRNESS (solution - FIFO queue):
+ReadWriteLock lock = new ReentrantReadWriteLock(true);
+// 2nd parameter: true = Fair mode (round-robin)
+```
+
+**How Fair Mode Works:**
+
+```
+NON-FAIR MODE (default):
+├─ Reader 1 acquires
+├─ Reader 2 acquires (parallel)
+├─ Writer waits
+├─ Reader 3 arrives, acquires (jumps ahead of waiting writer!)
+├─ Writer STILL waiting
+├─ Reader 4 arrives, acquires (again jumps ahead!)
+└─ Result: Writer starves! ❌
+
+FAIR MODE (true):
+├─ Reader 1 acquires
+├─ Reader 2 acquires (parallel)
+├─ Writer arrives, added to FAIR QUEUE
+├─ Reader 3 arrives, MUST wait behind writer in queue
+├─ Reader 1,2 release
+├─ Writer: "It's my turn!" Acquires lock
+├─ Writer updates data
+├─ Reader 3: "Now it's my turn" Acquires lock
+└─ Result: Writers get guaranteed turns! ✓
+```
+
+**Timeline Comparison:**
+
+```
+NON-FAIR (Writer Waits Too Long):
+Reader 1:  ████ Release
+Reader 2:         ████ Release
+Writer:    ✗✗✗✗ BLOCKED (waiting)
+Reader 3:             ████ (jumps ahead!)
+Reader 4:                  ████ (jumps ahead!)
+Writer:    ✗✗✗✗✗✗✗ (still waiting, getting starved)
+Time: Writer waits 10+ seconds
+
+FAIR (Writer Gets Turn Guaranteed):
+Reader 1:  ████ Release
+Reader 2:         ████ Release
+Writer:    ✗ (added to queue)
+Reader 3:  [waits behind writer]
+Reader 4:  [waits behind reader 3]
+Writer:          ████ (now it's my turn!)
+Reader 3:             ████
+Reader 4:                  ████
+Time: Writer waits ~2 seconds (guaranteed turn)
+```
+
+**Code Example: Fair vs. Non-Fair**
+
+```java
+public class ProductCache {
+    // Option 1: Non-Fair (default)
+    private final ReadWriteLock nonFair = 
+        new ReentrantReadWriteLock();  // Readers favored, writers starve
+    
+    // Option 2: Fair (recommended)
+    private final ReadWriteLock fair = 
+        new ReentrantReadWriteLock(true);  // Everyone gets turns
+    
+    private Map<String, Product> cache = new HashMap<>();
+    
+    // With fair=true, guaranteed progress:
+    public void updateProductPrice(String id, double newPrice) 
+            throws InterruptedException {
+        if (fair.writeLock().tryLock(5, TimeUnit.SECONDS)) {
+            try {
+                cache.put(id, new Product(id, newPrice));
+                System.out.println("Price updated successfully");
+            } finally {
+                fair.writeLock().unlock();
+            }
+        } else {
+            // With fair=true, this is RARE (timeout unlikely)
+            // Without fair=true, this happens often!
+            throw new TimeoutException("Writer starved for 5 seconds");
+        }
+    }
+}
+```
+
+---
+
+### **Performance Trade-off: Fair vs. Speed**
+
+```
+NON-FAIR (fair=false, default):
+├─ Readers: Very fast (don't wait for writers)
+├─ Writers: Can starve (might wait forever or timeout)
+├─ Use: Read-only or reads far outnumber writes
+├─ Risk: Occasional writes might fail
+
+FAIR (fair=true):
+├─ Readers: Slightly slower (wait for writers' turn)
+├─ Writers: Guaranteed progress (no starvation)
+├─ Use: Both reads and writes are important
+├─ Benefit: All operations guaranteed to succeed
+```
+
+---
+
+### **When Writer Starvation Becomes Critical**
+
+```
+✓ ACCEPTABLE Writer Starvation (use non-fair):
+├─ Analytics dashboard: 99% reads, 1% writes
+├─ Logs/audit trail: Read-only after write
+├─ Configuration cache: Rarely updated
+└─ Okay if write takes 10+ seconds occasionally
+
+❌ CRITICAL (use fair=true):
+├─ Price updates: Must reflect within seconds
+├─ Inventory: Must update when stock changes
+├─ Security flags: Must update immediately
+├─ Financial data: Cannot delay updates
+├─ Real-time dashboards: Must show current data
+└─ Cannot afford writer starvation!
+```
+
+---
+
 ### **When to Use ReadWriteLock**
 
 ✓ **90% reads, 10% writes** (cache, config, settings)  
 ✓ **Read-heavy workload** (availability checks, lookups)  
-✓ **Many concurrent readers** (1000+ threads reading)
+✓ **Many concurrent readers** (1000+ threads reading)  
+✓ **Use fair=true** (prevent writer starvation)
 
 ### **When NOT to Use**
 
