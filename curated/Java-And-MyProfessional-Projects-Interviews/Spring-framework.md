@@ -755,29 +755,252 @@ public class UserService {
 
 ## 6. What is the difference between @Bean and @Component?
 
+**Quick Answer:**
+- `@Component` = Mark a CLASS as a bean (automatic detection)
+- `@Bean` = Mark a METHOD as creating a bean (manual creation)
+
+---
+
+### Understanding "Method-level" vs "Class-level"
+
+**Class-level means:** The annotation is on the class itself
+```java
+@Component  // ← On the CLASS
+public class UserService {
+    // This whole class becomes a bean
+}
+```
+
+**Method-level means:** The annotation is on a method inside a @Configuration class
+```java
+@Configuration
+public class Config {
+    @Bean  // ← On the METHOD
+    public UserService userService() {
+        return new UserService();  // Method creates and returns the bean
+    }
+}
+```
+
+---
+
+### Detailed Comparison
+
 | Feature | @Bean | @Component |
 |---------|-------|-----------|
-| **Declaration** | Method-level | Class-level |
-| **Where** | @Configuration classes | Regular classes |
-| **Control** | Manual (you write logic) | Automatic (classpath scanning) |
-| **Third-party** | Can create beans from external classes | Cannot (need access to source) |
-| **Example** | Creating beans from external libraries | Your own classes |
+| **Declaration** | On a METHOD | On a CLASS |
+| **Location** | Inside @Configuration class | On your own class |
+| **Discovery** | Manual - you create it | Automatic - Spring finds it |
+| **Control** | You have full control over creation logic | No control - Spring creates instance |
+| **Dependency Injection** | You pass dependencies as method parameters | Spring injects via @Autowired |
+| **Third-party libs** | ✅ Can use for external libraries | ❌ Can't (no source code access) |
+| **Your code** | Can use but usually @Component is easier | ✅ Better for your own classes |
 
-**Example:**
+---
+
+### When to Use @Component
+
+Use `@Component` for your own classes:
+
 ```java
-// @Component - Auto-detected
+// Your own UserService class
 @Component
-public class MyService { }
+public class UserService {
+    
+    @Autowired
+    private UserRepository repo;  // Spring injects this
+    
+    public User findUser(Long id) {
+        return repo.findById(id).orElse(null);
+    }
+}
 
-// @Bean - Manual creation (e.g., configuring external library)
+// Spring automatically:
+// 1. Finds this class during classpath scan
+// 2. Creates one instance
+// 3. Injects UserRepository
+// 4. Stores in container
+```
+
+**Why use @Component:**
+- Simplest way to mark your own classes as beans
+- Spring auto-detects it
+- Less code to write
+- No configuration needed
+
+---
+
+### When to Use @Bean
+
+Use `@Bean` for external libraries (can't modify their source code):
+
+```java
+// Problem: Jackson's ObjectMapper is from external library
+// We can't add @Component to it (not our code)
+
+@Configuration
+public class Config {
+    
+    @Bean
+    public ObjectMapper objectMapper() {
+        // We create and configure the bean
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
+        mapper.setSerializationInclusion(Include.NON_NULL);
+        return mapper;  // Return the bean
+    }
+}
+```
+
+**Why use @Bean:**
+- External libraries - can't modify their source code
+- Complex configuration - need custom logic
+- Conditional beans - create bean based on conditions
+- Multiple instances of same class
+
+---
+
+### Real-World Example: Database Configuration
+
+**Using @Bean (External library - can't use @Component):**
+```java
+@Configuration
+public class DatabaseConfig {
+    
+    @Bean
+    public DataSource dataSource() {
+        DataSourceBuilder builder = DataSourceBuilder.create();
+        builder.driverClassName("com.mysql.cj.jdbc.Driver");
+        builder.url("jdbc:mysql://localhost:3306/mydb");
+        builder.username("root");
+        builder.password("password");
+        return builder.build();
+    }
+    
+    @Bean
+    public JdbcTemplate jdbcTemplate(DataSource dataSource) {
+        return new JdbcTemplate(dataSource);
+    }
+}
+```
+
+**Using @Component (Your own code):**
+```java
+@Service  // @Service is a @Component
+public class UserService {
+    
+    @Autowired
+    private UserRepository repo;
+    
+    public User findUser(Long id) {
+        return repo.findById(id).orElse(null);
+    }
+}
+```
+
+---
+
+### How Spring Discovers Each
+
+**@Component Discovery:**
+```
+Spring starts → Scans classpath for @Component → 
+Finds UserService → Creates instance → 
+Stores in container → Ready to use
+```
+
+**@Bean Creation:**
+```
+Spring starts → Finds @Configuration class → 
+Finds @Bean methods → Calls each method → 
+Returns bean → Stores in container → Ready to use
+```
+
+---
+
+### Example: Side-by-side Comparison
+
+**Same bean, two different approaches:**
+
+```java
+// Approach 1: @Component (For your own classes)
+@Component
+public class EmailService {
+    public void sendEmail(String to, String message) {
+        System.out.println("Sending to: " + to);
+    }
+}
+
+// Usage:
+@Service
+public class UserService {
+    @Autowired
+    private EmailService emailService;  // Spring injects
+    
+    public void registerUser(User user) {
+        emailService.sendEmail(user.getEmail(), "Welcome!");
+    }
+}
+```
+
+```java
+// Approach 2: @Bean (For external libraries or complex config)
+@Configuration
+public class ServiceConfig {
+    
+    @Bean
+    public EmailService emailService() {
+        EmailService service = new EmailService();
+        service.setRetries(3);
+        service.setTimeout(5000);
+        return service;
+    }
+}
+
+// Usage: Same as above - no difference in how you inject
+```
+
+---
+
+### Quick Checklist
+
+**Use @Component if:**
+- ✅ It's your own class
+- ✅ You want automatic detection
+- ✅ No special configuration needed
+- ✅ You have access to the source code
+
+**Use @Bean if:**
+- ✅ It's from an external library (Jackson, Apache Commons, etc.)
+- ✅ You need custom configuration logic
+- ✅ You want to create it conditionally
+- ✅ You don't have access to the source code
+
+---
+
+### Common Mistake
+
+```java
+// ❌ WRONG - Can't use @Bean on external class
+// (You don't own the ObjectMapper code)
+@Bean
+public class ObjectMapper {  // Not your code! Can't add @Bean
+    // ...
+}
+
+// ✅ RIGHT - Use @Bean in @Configuration class
 @Configuration
 public class Config {
     @Bean
     public ObjectMapper objectMapper() {
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.registerModule(new JavaTimeModule());
-        return mapper;
+        return new ObjectMapper();
     }
+}
+
+// ✅ RIGHT - Use @Component for your own class
+@Component
+public class UserService {  // You own this code
+    // ...
 }
 ```
 
