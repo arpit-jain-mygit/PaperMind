@@ -4047,74 +4047,259 @@ FAIR (fair=true):
 
 ---
 
-## **TECHNIQUE 7: STAMPED LOCK (Ultra-High Concurrency)**
+## **TECHNIQUE 7: STAMPED LOCK (Optimistic Read Lock)**
 
-**Advanced Read-Write Lock:**
+**Simple Idea: Try Reading Without A Lock First**
+
+Imagine checking if a door is locked:
+- **Normal way**: Acquire lock, check if locked, release lock
+- **Optimistic way**: Just peek to see if locked (no lock needed), if locked came unstable, then acquire lock properly
+
+StampedLock does this:
+1. **Optimistic Read**: Read WITHOUT acquiring lock (super fast!)
+2. **Validate**: Check if data changed while reading
+3. **If changed**: Retry with real read lock (slow, but rare)
+4. **If unchanged**: Done! (usually succeeds)
+
+---
+
+### **Three-Step Process**
+
+```
+STEP 1: Optimistic read (try without lock)
+└─ Read the data (no lock acquisition)
+└─ Get a "stamp" (timestamp/version number)
+
+STEP 2: Validate the stamp
+└─ Check: "Did data change while I was reading?"
+└─ If YES → Data changed, go to Step 3
+└─ If NO → Data unchanged, SUCCESS!
+
+STEP 3: Retry with real read lock (if needed)
+└─ Acquire read lock (slow but safe)
+└─ Read again (guaranteed consistent)
+└─ Release lock
+```
+
+---
+
+### **Simple Code Example**
+
 ```java
-public class SeatBooking {
-    private final StampedLock lock = new StampedLock();
-    private Map<String, Boolean> seatStatus = new HashMap<>();
+StampedLock lock = new StampedLock();
+Map<String, Integer> prices = new HashMap<>();
+
+public Integer getPrice(String product) {
+    // STEP 1: Optimistic read (no lock, very fast)
+    long stamp = lock.tryOptimisticRead();  // Get timestamp
+    Integer price = prices.get(product);     // Read price
     
-    // Optimistic read (no lock initially)
-    public boolean isSeatAvailable(String seatId) {
-        long stamp = lock.tryOptimisticRead();  // No actual lock
-        boolean available = seatStatus.get(seatId) == null;
-        
-        if (!lock.validate(stamp)) {
-            // Data changed during read, retry with read lock
-            stamp = lock.readLock();
-            try {
-                available = seatStatus.get(seatId) == null;
-            } finally {
-                lock.unlockRead(stamp);
-            }
+    // STEP 2: Validate (did data change?)
+    if (!lock.validate(stamp)) {
+        // Data changed! Retry properly with lock
+        stamp = lock.readLock();  // Acquire real read lock
+        try {
+            price = prices.get(product);  // Read again (safe now)
+        } finally {
+            lock.unlockRead(stamp);
         }
-        return available;
     }
     
-    // Exclusive write
-    public boolean bookSeat(String seatId, String userId) {
-        long stamp = lock.writeLock();
-        try {
-            if (seatStatus.get(seatId) == null) {
-                seatStatus.put(seatId, true);
-                return true;
-            }
-        } finally {
-            lock.unlockWrite(stamp);
-        }
-        return false;
+    return price;
+}
+
+public void updatePrice(String product, Integer newPrice) {
+    long stamp = lock.writeLock();  // Exclusive write lock
+    try {
+        prices.put(product, newPrice);
+    } finally {
+        lock.unlockWrite(stamp);
     }
 }
 ```
 
-**Performance Characteristics:**
+---
+
+### **Step-by-Step Timeline**
+
+```
+Scenario: 1000 readers checking price, 1 writer updating price
+
+Reader 1:
+├─ Optimistic read (no lock): stamp = 100, price = $999
+├─ Validate: "Did data change?" NO! ✓
+├─ Return $999 (SUCCESS without lock!)
+└─ Time: 1 microsecond
+
+Reader 2:
+├─ Optimistic read (no lock): stamp = 100, price = $999
+├─ Validate: NO change ✓
+├─ Return $999
+└─ Time: 1 microsecond
+
+...1000 readers read optimistically...
+
+Writer:
+├─ Acquire write lock
+├─ Update price: $999 → $1299
+├─ Release write lock
+└─ All future reads will see new price
+
+Reader 1001:
+├─ Optimistic read (no lock): stamp = 101, price = $1299 (new!)
+├─ Validate: NO change ✓
+├─ Return $1299
+└─ Time: 1 microsecond
+
+Result: 1000+ readers executed with NO lock conflicts!
+        Most readers didn't even need to acquire a lock!
+```
+
+---
+
+### **When Optimistic Read FAILS (Rare)**
+
+```
+Optimistic read fails when:
+├─ Writer updates data WHILE reader is reading
+└─ Reader's stamp becomes invalid
+
+Timeline (collision):
+
+Reader A:
+├─ Optimistic read, stamp = 100
+├─ Reading price...
+│
+│ (MEANWHILE, Writer updates!)
+│
+├─ Writer acquires write lock
+├─ Writer updates price (now stamp = 101)
+├─ Writer releases lock
+│
+├─ Validate: "Is my stamp (100) still valid?"
+├─ NO! Stamp is now 101 ✗
+├─ Retry with real read lock (slower)
+├─ Read again with lock: price = $1299
+└─ Return $1299 (correct, but slower)
+```
+
+---
+
+### **Comparison: ReadWriteLock vs. StampedLock**
+
+```
+READWRITELOCK (normal read-write lock):
+└─ Reader: "I need to read"
+   → Acquire read lock (overhead)
+   → Read data
+   → Release read lock
+   Time: 1000 nanoseconds per read
+
+STAMPEDLOCK (optimistic):
+└─ Reader: "Let me peek without lock"
+   → Optimistic read (NO lock)
+   → Validate (NO lock)
+   → Return (success!)
+   Time: 10 nanoseconds per read (100x faster!)
+   
+When write happens (rare):
+└─ Reader: "Oops, data changed"
+   → Acquire read lock (fallback)
+   → Read again
+   → Return (correct, but slower)
+```
+
+---
+
+### **Real-World Example: Stock Price**
+
+```java
+StampedLock lock = new StampedLock();
+Map<String, Double> stockPrices = new HashMap<>();
+
+// Millions of users checking stock price
+public Double getStockPrice(String ticker) {
+    // Try optimistic (99% of time succeeds)
+    long stamp = lock.tryOptimisticRead();
+    Double price = stockPrices.get(ticker);
+    
+    if (!lock.validate(stamp)) {
+        // Stock price updated (rare), retry with lock
+        stamp = lock.readLock();
+        try {
+            price = stockPrices.get(ticker);
+        } finally {
+            lock.unlockRead(stamp);
+        }
+    }
+    return price;
+}
+
+// Nasdaq updates stock price
+public void updateStockPrice(String ticker, Double newPrice) {
+    long stamp = lock.writeLock();
+    try {
+        stockPrices.put(ticker, newPrice);
+    } finally {
+        lock.unlockWrite(stamp);
+    }
+}
+
+// Performance:
+// 1 million users checking prices per second
+// ReadWriteLock: 1 million lock acquisitions = slow
+// StampedLock: 1 million optimistic reads (no locks!) = fast
+// Result: 100x more users handled!
+```
+
+---
+
+### **Performance Characteristics**
+
 | Metric | Value |
 |--------|-------|
-| Throughput (read-heavy) | 5,000,000+ req/sec |
-| Throughput (write-heavy) | 100,000 bookings/sec |
-| Lock contention | Very low |
-| Complexity | High |
+| **Optimistic read throughput** | 5,000,000+ ops/sec |
+| **Normal read throughput** | 1,000,000 ops/sec |
+| **Write throughput** | 100,000 ops/sec |
+| **Optimistic read time** | 10 nanoseconds (no lock) |
+| **Read lock time** | 100 nanoseconds (with lock) |
+| **Speedup over ReadWriteLock** | 10x for reads |
+
+---
+
+### **Pros and Cons**
 
 **Pros:**
-- ✓ Extreme throughput (10x better than ReadWriteLock)
-- ✓ Optimistic reads (no actual lock, retries if collision)
-- ✓ Great for read-heavy with occasional writes
+- ✓ **10x faster** for reads (optimistic, no lock)
+- ✓ Works great for 99%+ read workloads
+- ✓ Retries are rare (only when writer updates)
 
 **Cons:**
-- ✗ Complex to use correctly
-- ✗ Optimistic reads can fail (retry overhead)
-- ✗ Can't upgrade read lock to write lock
-- ✗ Not reentrant
+- ✗ More complex (need to validate)
+- ✗ Retries waste CPU if writers are frequent
+- ✗ Not reentrant (can't call recursively)
+- ✗ Not for beginners
 
-**When to Use:**
-✓ Extreme read-heavy workloads (99%+ reads)
-✓ Performance critical (milliseconds matter)
-✓ Senior team comfortable with complexity
+---
 
-**When NOT to Use:**
-✗ Balanced workloads (overhead exceeds benefit)
-✗ High write contention (optimistic retries waste CPU)
+### **When to Use StampedLock**
+
+✓ **Extreme read-heavy** (99%+ reads, 1% writes)  
+✓ **Performance critical** (need microsecond speed)  
+✓ **High volume** (millions of reads per second)  
+✓ **Senior team** (complex, easy to get wrong)
+
+**Examples:**
+- Stock price feed: millions checking prices/sec
+- Cache lookups: frequent reads, rare updates
+- Configuration: read on every request, update rarely
+
+### **When NOT to Use**
+
+✗ **Balanced workloads** (50/50 read-write)  
+✗ **Frequent writes** (validations fail often)  
+✗ **Simple application** (unnecessary complexity)  
+✗ **Not critical** (ReadWriteLock good enough)
 
 ---
 
