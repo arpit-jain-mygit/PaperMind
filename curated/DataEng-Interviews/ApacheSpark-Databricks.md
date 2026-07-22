@@ -128,6 +128,37 @@ df.groupBy("department").sum()  # Data must move → SHUFFLE
 
 **Interview insight:** "Always reduce shuffles. Filter before grouping."
 
+### 6. Do We Write Driver & Executor Code?
+
+**NO. You write ONE piece of code. Spark splits it automatically.**
+
+Example:
+```python
+# You write this (one file)
+df = spark.read.parquet("file.parquet")        # Driver decides what to read
+df = df.filter(df.salary > 5000)               # Executor filters data
+result = df.groupBy("dept").sum()              # Executor groups data
+final = result.collect()                       # Driver brings results back
+```
+
+**What actually happens:**
+- Read → Driver (planning)
+- Filter → Executor (processing)
+- GroupBy → Executor (processing)
+- Collect → Driver (get results)
+
+**You never write code like:**
+```python
+# DON'T write separate files for driver vs executor
+# driver_code.py
+# executor_code.py
+# This is not how Spark works!
+```
+
+**The rule:** Transformations = executor, Actions = driver. Spark figures it out.
+
+**Interview answer:** "Spark users write one script. Spark automatically sends transformation code to executors and brings action results back to the driver. We don't write separate driver/executor code."
+
 ---
 
 ## What is Databricks?
