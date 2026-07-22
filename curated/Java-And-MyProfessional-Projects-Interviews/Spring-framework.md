@@ -1255,42 +1255,503 @@ public class Service {
 
 ## 7. What is the difference between Singleton and Prototype scope?
 
-**Singleton (Default):**
-- Only ONE instance for entire application
-- Shared across all requests
-- Thread-safe (should be stateless)
+**Quick Answer:**
+- **Singleton:** ONE instance for entire application (shared by everyone)
+- **Prototype:** NEW instance every time you request it (each gets their own)
 
-```java
-@Component
-@Scope("singleton")  // Default
-public class UserService {
-    // Only ONE instance exists
-}
+---
+
+### Singleton Scope (Default)
+
+**What happens:**
+```
+App starts → Spring creates ONE UserService instance → 
+Everyone uses that SAME instance → App stops
 ```
 
-**Prototype:**
-- NEW instance created every time bean is injected
-- Not shared
-- Use for stateful objects
+**Code:**
+```java
+@Component
+@Scope("singleton")  // Default - don't need to write this
+public class UserService {
+    // Only ONE instance exists for entire application
+}
 
+// Inject in multiple places:
+@Service
+public class OrderService {
+    @Autowired
+    private UserService userService;  // Gets the SAME instance
+}
+
+@Service
+public class PaymentService {
+    @Autowired
+    private UserService userService;  // Gets the SAME instance
+}
+
+// Both OrderService and PaymentService share the SAME UserService instance
+```
+
+**Characteristics:**
+- ✅ Memory efficient (one instance)
+- ✅ Fast (instance already created)
+- ❌ Must be thread-safe
+- ❌ No instance-specific data
+
+---
+
+### Prototype Scope
+
+**What happens:**
+```
+App runs → UserService requested → Spring creates NEW instance → 
+Later UserService requested → Spring creates ANOTHER NEW instance
+```
+
+**Code:**
 ```java
 @Component
 @Scope("prototype")
 public class Request {
     private String data;  // Instance-specific data
 }
+
+// Each request gets its own instance:
+@Service
+public class OrderService {
+    @Autowired
+    private Request request;  // Gets instance #1
+}
+
+@Service
+public class PaymentService {
+    @Autowired
+    private Request request;  // Gets instance #2 (different from #1!)
+}
 ```
 
-**Request & Session scopes (Web only):**
+**Characteristics:**
+- ❌ Memory wasteful (many instances)
+- ❌ Slower (creating new instances)
+- ✅ No thread safety issues
+- ✅ Can have instance-specific data
+
+---
+
+### Business Scenarios: When to Use Each
+
+---
+
+## SINGLETON SCENARIOS (Use Most of the Time)
+
+### Scenario 1: Database Connection (Real-world Banking App)
+
+**Problem:** Creating new database connection every time = very expensive
+
 ```java
+// ✅ SINGLETON - Correct approach
 @Component
-@Scope("request")  // New instance per HTTP request
-public class RequestContext { }
+public class UserRepository {
+    @Autowired
+    private DataSource dataSource;  // ONE connection pool shared
+    
+    public User findById(Long id) {
+        // Use the same database connection pool
+        return query("SELECT * FROM users WHERE id = ?", id);
+    }
+}
 
-@Component
-@Scope("session")  // New instance per user session
-public class UserSession { }
+// Multiple services use the same repository and connection pool
+@Service
+public class AccountService {
+    @Autowired
+    private UserRepository repo;  // Same instance
+}
+
+@Service
+public class TransferService {
+    @Autowired
+    private UserRepository repo;  // Same instance
+}
 ```
+
+**Why Singleton:**
+- Opening database connection is expensive
+- Sharing one connection pool saves resources
+- Multiple services can use same database connection
+
+---
+
+### Scenario 2: Email Service (Newsletter Company)
+
+**Problem:** Email configuration should be same everywhere
+
+```java
+// ✅ SINGLETON - Correct approach
+@Service
+public class EmailService {
+    private final String smtpServer = "mail.company.com";
+    private final int smtpPort = 587;
+    
+    public void sendEmail(String to, String subject, String body) {
+        // Use same SMTP configuration
+        sendViaSmtp(smtpServer, smtpPort, to, subject, body);
+    }
+}
+
+// Different parts of app send emails with same configuration
+@Service
+public class UserService {
+    @Autowired
+    private EmailService emailService;  // Same instance
+    
+    public void registerUser(User user) {
+        emailService.sendEmail(user.getEmail(), "Welcome!", "...");
+    }
+}
+
+@Service
+public class OrderService {
+    @Autowired
+    private EmailService emailService;  // Same instance
+    
+    public void processOrder(Order order) {
+        emailService.sendEmail(order.getCustomerEmail(), "Order Confirmed", "...");
+    }
+}
+```
+
+**Why Singleton:**
+- SMTP configuration should be consistent everywhere
+- Connection pooling to email server
+- Each service should send emails the same way
+
+---
+
+### Scenario 3: Logging Service (Any Web App)
+
+```java
+// ✅ SINGLETON - Correct approach
+@Component
+public class LoggerService {
+    private static final Logger logger = LoggerFactory.getLogger(LoggerService.class);
+    
+    public void log(String message) {
+        logger.info(message);
+    }
+}
+
+// Everyone logs to the same logger
+@Service
+public class UserService {
+    @Autowired
+    private LoggerService logger;  // Same instance
+}
+
+@Service
+public class OrderService {
+    @Autowired
+    private LoggerService logger;  // Same instance
+}
+```
+
+**Why Singleton:**
+- All logs should go to same log file
+- Logger configuration same everywhere
+- Avoid opening multiple log files
+
+---
+
+### Scenario 4: Configuration Service (E-commerce App)
+
+```java
+// ✅ SINGLETON - Correct approach
+@Component
+public class ConfigService {
+    @Value("${app.version}")
+    private String version;
+    
+    @Value("${app.timezone}")
+    private String timezone;
+    
+    public String getVersion() {
+        return version;
+    }
+}
+
+// All services use same configuration
+@Service
+public class ProductService {
+    @Autowired
+    private ConfigService config;  // Same instance
+}
+
+@Service
+public class UserService {
+    @Autowired
+    private ConfigService config;  // Same instance
+}
+```
+
+**Why Singleton:**
+- App configuration should be same everywhere
+- Version and timezone should be consistent
+- No point creating multiple config instances
+
+---
+
+## PROTOTYPE SCENARIOS (Use Rarely)
+
+### Scenario 1: User Request Context (Web App)
+
+**Problem:** Each HTTP request needs its own context data
+
+```java
+// ✅ PROTOTYPE - Correct approach
+@Component
+@Scope("prototype")
+public class RequestContext {
+    private String requestId;        // Different for each request
+    private LocalDateTime timestamp; // Different for each request
+    private String userId;           // Different for each request
+    
+    public RequestContext() {
+        this.requestId = UUID.randomUUID().toString();
+        this.timestamp = LocalDateTime.now();
+    }
+}
+
+// Each controller gets different instance:
+@RestController
+public class UserController {
+    @Autowired
+    private RequestContext context;  // Instance #1
+    
+    @GetMapping("/users/{id}")
+    public User getUser(@PathVariable Long id) {
+        System.out.println("Request ID: " + context.getRequestId());
+        // Request #1 has requestId = "abc-123"
+    }
+}
+
+// Different request:
+@RestController
+public class OrderController {
+    @Autowired
+    private RequestContext context;  // Instance #2
+    
+    @GetMapping("/orders/{id}")
+    public Order getOrder(@PathVariable Long id) {
+        System.out.println("Request ID: " + context.getRequestId());
+        // Request #2 has requestId = "xyz-789" (different!)
+    }
+}
+```
+
+**Why Prototype:**
+- Each request needs unique requestId
+- Each request has different timestamp
+- Cannot share context between requests (thread safety issues)
+
+---
+
+### Scenario 2: Shopping Cart (E-commerce App)
+
+**Problem:** Each customer needs their own separate shopping cart
+
+```java
+// ✅ PROTOTYPE - Correct approach
+@Component
+@Scope("prototype")
+public class ShoppingCart {
+    private List<Product> items = new ArrayList<>();
+    private LocalDateTime createdAt;
+    
+    public ShoppingCart() {
+        this.createdAt = LocalDateTime.now();
+    }
+    
+    public void addProduct(Product product) {
+        items.add(product);
+    }
+    
+    public List<Product> getItems() {
+        return items;
+    }
+}
+
+// Each customer gets their own cart:
+@RestController
+public class CartController {
+    @Autowired
+    private ShoppingCart cart;  // Cart instance #1 (Customer A)
+    
+    @PostMapping("/cart/add")
+    public void addToCart(@RequestBody Product product) {
+        cart.addProduct(product);  // Adds to Customer A's cart
+    }
+}
+
+// If Customer B makes request:
+// @Autowired private ShoppingCart cart;  // Cart instance #2 (Customer B)
+// Each customer has separate cart items!
+```
+
+**Why Prototype:**
+- Each customer needs their own cart
+- Customer A's items shouldn't appear in Customer B's cart
+- Sharing one cart between customers = bug!
+
+---
+
+### Scenario 3: Report Generator (Analytics App)
+
+**Problem:** Each report should be independent/isolated
+
+```java
+// ✅ PROTOTYPE - Correct approach
+@Component
+@Scope("prototype")
+public class ReportGenerator {
+    private List<ReportRow> data = new ArrayList<>();
+    private String title;
+    private LocalDateTime generatedAt;
+    
+    public void addData(ReportRow row) {
+        data.add(row);
+    }
+    
+    public byte[] generatePDF() {
+        // Generate PDF from this report's data
+        return createPdf(title, data);
+    }
+}
+
+// Each report request gets its own generator:
+@Service
+public class ReportService {
+    @Autowired
+    private ReportGenerator generator1;  // Instance #1
+    
+    public byte[] generateSalesReport() {
+        generator1.addData(new ReportRow("Product A", 100));
+        generator1.addData(new ReportRow("Product B", 200));
+        return generator1.generatePDF();  // PDF with A & B
+    }
+    
+    @Autowired
+    private ReportGenerator generator2;  // Instance #2
+    
+    public byte[] generateUserReport() {
+        generator2.addData(new ReportRow("User 1", 50));
+        generator2.addData(new ReportRow("User 2", 75));
+        return generator2.generatePDF();  // PDF with users (NOT products)
+    }
+}
+```
+
+**Why Prototype:**
+- Each report needs separate data
+- Sales report data shouldn't mix with user report data
+- Sharing one generator = data corruption!
+
+---
+
+## Quick Decision Table
+
+| Need | Scope | Example | Reason |
+|------|-------|---------|--------|
+| Shared resource | **Singleton** | Database, Email, Logger | Expensive to create multiple |
+| Instance-specific data | **Prototype** | Request context, Shopping cart | Each needs their own data |
+| Stateless utility | **Singleton** | UserService, OrderService | No state to share |
+| Stateful data | **Prototype** | Cart, Request, Report | State is instance-specific |
+
+---
+
+## Memory Comparison
+
+**Singleton (100 users accessing app):**
+```
+Memory: 1 UserService instance (shared by all 100 users)
+```
+
+**Prototype (100 users, 50 requests from each):**
+```
+Memory: 5000 RequestContext instances (50 × 100 users)
+```
+
+Singleton saves HUGE amount of memory!
+
+---
+
+## Common Mistakes
+
+```java
+// ❌ WRONG - Cart as Singleton
+@Component
+@Scope("singleton")
+public class ShoppingCart {
+    private List<Product> items = new ArrayList<>();
+}
+// All customers share same cart! Customer B sees Customer A's items!
+
+// ✅ RIGHT - Cart as Prototype
+@Component
+@Scope("prototype")
+public class ShoppingCart {
+    private List<Product> items = new ArrayList<>();
+}
+// Each customer gets their own cart
+```
+
+```java
+// ❌ WRONG - UserService as Prototype
+@Component
+@Scope("prototype")
+public class UserService {
+    public User findById(Long id) {
+        // Query database
+    }
+}
+// Creating 1000 instances = 1000 database connections = resource waste!
+
+// ✅ RIGHT - UserService as Singleton
+@Component
+public class UserService {
+    public User findById(Long id) {
+        // Query database using shared connection pool
+    }
+}
+// One instance = shared connection pool = efficient
+```
+
+---
+
+## Request & Session Scopes (Web only)
+
+These are specific to web applications:
+
+```java
+// @Scope("request") - New instance per HTTP request
+@Component
+@Scope("request")
+public class RequestData {
+    private String userId;  // Different per request
+}
+
+// @Scope("session") - New instance per user session
+@Component
+@Scope("session")
+public class UserSession {
+    private String userName;     // Different per user session
+    private LocalDateTime loginTime;
+}
+```
+
+**When to use:**
+- **Request:** Data specific to current HTTP request
+- **Session:** Data specific to current user's session
 
 ---
 
