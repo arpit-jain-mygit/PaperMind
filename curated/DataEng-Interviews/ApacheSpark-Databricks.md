@@ -382,6 +382,240 @@ final = result.collect()                       # Driver brings results back
 
 ---
 
+## Visual DAGs: How Queries Execute
+
+DAG = Directed Acyclic Graph. Shows how data flows through your query.
+
+### Example 1: Simple Filter + Count
+
+**Your code:**
+```python
+df = spark.read.parquet("sales.parquet")  # 1 million rows
+df = df.filter(df.amount > 1000)          # 800k rows remain
+result = df.count()
+```
+
+**DAG (Visual):**
+```
+┌──────────────────────────┐
+│ Read "sales.parquet"     │
+│ (1 million rows)         │
+└────────────┬─────────────┘
+             │
+             ↓
+    ┌────────────────┐
+    │  Filter        │
+    │ (amount > 1000)│
+    │ (800k rows)    │
+    └────────┬───────┘
+             │
+             ↓
+  ┌─────────────────────┐
+  │ Count Action        │
+  │ (returns: 800000)   │
+  └─────────────────────┘
+```
+
+---
+
+### Example 2: Filter + GroupBy + Sum (SHUFFLE!)
+
+**Your code:**
+```python
+df = spark.read.parquet("sales.parquet")
+df = df.filter(df.amount > 1000)
+result = df.groupBy("department").sum("amount")
+```
+
+**DAG (Visual - Notice the SHUFFLE BOUNDARY):**
+```
+Stage 0:
+┌──────────────────────────┐
+│ Read & Filter            │
+│ "sales.parquet"          │
+│ (1M → 800k rows)         │
+└────────────┬─────────────┘
+             │
+             ↓ SHUFFLE BOUNDARY (expensive!)
+Stage 1:
+    ┌────────────────────────────┐
+    │ GroupBy "department"       │
+    │ (data reorganizes)         │
+    └───────────┬────────────────┘
+                │
+     ┌──────────┼──────────┐
+     ↓          ↓          ↓
+  [Eng]     [Sales]    [Mktg]
+  Sum $     Sum $      Sum $
+     │          │          │
+     └──────────┼──────────┘
+                ↓
+        ┌────────────────────┐
+        │ Final Results      │
+        └────────────────────┘
+```
+
+**Key:** The SHUFFLE (data moving across network) happens between Stage 0 and Stage 1. This is the bottleneck.
+
+---
+
+### Example 3: Optimized - Filter BEFORE GroupBy
+
+**Your code:**
+```python
+df = spark.read.parquet("sales.parquet")  # 1M rows
+df = df.filter(df.amount > 1000)          # 800k (filter early!)
+result = df.groupBy("department").sum("amount")
+```
+
+**DAG (Optimized - Less data shuffled):**
+```
+Stage 0:
+┌──────────────────────────┐
+│ Read & Filter            │
+│ (1M → 800k rows)         │ ← Reduced!
+└────────────┬─────────────┘
+             │
+             ↓ SHUFFLE BOUNDARY (less data!)
+Stage 1:
+    ┌────────────────────────────┐
+    │ GroupBy "department"       │
+    │ (shuffle only 800k)        │ ← 20% faster
+    └───────────┬────────────────┘
+                │
+     ┌──────────┼──────────┐
+     ↓          ↓          ↓
+  [Eng]     [Sales]    [Mktg]
+  Sum $     Sum $      Sum $
+```
+
+**Benefit:** Shuffle only 800k rows instead of 1M = Faster execution!
+
+---
+
+### Example 4: Broadcast Join (No Shuffle!)
+
+**Your code:**
+```python
+big_table = spark.read.parquet("orders.parquet")      # 1 billion rows
+small_table = spark.read.parquet("regions.parquet")   # 50 rows
+result = big_table.join(broadcast(small_table), "region")
+```
+
+**DAG (Broadcast - No Shuffle):**
+```
+Read Stage 0:              Read Stage 1:
+┌─────────────────────┐    ┌──────────────┐
+│ Read orders (1B)    │    │ Read regions │
+│ (split in 4 parts)  │    │ (50 rows)    │
+└────────────┬────────┘    └────────┬─────┘
+             │                      │
+             │                  (copy to all)
+             │                      │
+        ┌────▼──────────────────────▼──┐
+        │ Join Stage 1                  │
+        │ (NO SHUFFLE needed!)          │
+        │ Exec1: 250M+50 → 250M results │
+        │ Exec2: 250M+50 → 250M results │
+        │ Exec3: 250M+50 → 250M results │
+        │ Exec4: 250M+50 → 250M results │
+        └────────────┬──────────────────┘
+                     │
+             ┌───────▼────────┐
+             │ Final Results  │
+             └────────────────┘
+```
+
+**Why so fast:** Small table just copied to each executor (no network shuffle). Big table stays put.
+
+---
+
+### Example 5: Regular Join (WITH Shuffle - Slow!)
+
+**Your code (WITHOUT broadcast):**
+```python
+big_table.join(small_table, "region")  # Forgot broadcast!
+```
+
+**DAG (Regular Join - Shuffles both!):**
+```
+Read Stage:
+┌─────────────────────┐    ┌──────────────┐
+│ Read orders (1B)    │    │ Read regions │
+└────────────┬────────┘    │ (50 rows)    │
+             │             └────────┬─────┘
+             │                      │
+             └──────────┬───────────┘
+                        │
+                ↓ SHUFFLE BOTH (Stage 1)
+        ┌─────────────────────────┐
+        │ Exchange (data moves!)  │
+        │ • 1B rows shuffled      │
+        │ • 50 rows shuffled      │
+        │ (unnecessary overhead!) │
+        └────────────┬────────────┘
+                     │
+             ┌───────▼────────┐
+             │ Join Results   │
+             └────────────────┘
+```
+
+**Problem:** Both tables shuffled across network. WAY slower than broadcast. ~1000x slower for big join!
+
+---
+
+### Example 6: Window Function (Minimal Shuffle)
+
+**Your code:**
+```python
+df = spark.read.parquet("employees.parquet")
+df = df.withColumn("rank", rank().over(
+    Window.partitionBy("department").orderBy(col("salary").desc())
+))
+```
+
+**DAG (Window - Limited Shuffle):**
+```
+Stage 0:
+┌──────────────────────────┐
+│ Read employees.parquet   │
+└────────────┬─────────────┘
+             │
+             ↓ Minimal Shuffle (only within departments)
+Stage 1:
+    ┌────────────────────────────┐
+    │ Window Partition           │
+    │ (only same dept together)  │
+    └───────────┬────────────────┘
+                │
+     ┌──────────┼──────────┐
+     ↓          ↓          ↓
+   [Eng]    [Sales]    [Mktg]
+   Rank1    Rank1      Rank1
+   Rank2    Rank2      Rank2
+   Rank3    Rank3      Rank3
+```
+
+**Why efficient:** Only rows from same department shuffle together. Much less data movement than global operations.
+
+---
+
+### DAG Summary Table
+
+| Operation | Stages | Shuffle | Speed | Best For |
+|-----------|--------|---------|-------|----------|
+| Filter only | 1 | None | ✅✅ Fast | Reducing data |
+| Filter + Select | 1 | None | ✅✅ Fast | Column selection |
+| Filter + GroupBy | 2 | Yes | 📊 Medium | Aggregation |
+| Broadcast Join | 2 | No | ✅✅ Fast | Big + small join |
+| Regular Join | 2 | Yes | ❌❌ Slow | Avoid if possible |
+| Window (partitioned) | 2 | Minimal | ✅ Fast | Ranking, running totals |
+| Window (global) | 2 | Yes | ❌ Slow | Avoid if partitionable |
+
+**Interview insight:** "Each stage separated by a shuffle is a performance boundary. Minimize stages and shuffles to make queries fast."
+
+---
+
 ## What is Databricks?
 
 **Databricks = Spark made easy to use**
