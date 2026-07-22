@@ -413,3 +413,191 @@ Results:
 6. **Time your answers**: 3-5 minutes per behavioral answer. Not "I'll take 30 seconds" (too surface) and not "10-minute story" (loses interviewer).
 
 7. **End with reflection**: "What I learned from that experience..." shows growth mindset.
+
+---
+
+### Q3: Tell me about a time you had to deliver results with significantly constrained resources (budget cuts, hiring freeze). How did you prioritize and maintain team performance?
+
+**STAR Structure:**
+
+**Situation:**
+"At [Company], I was director of the backend platform team (20 engineers). Company-wide, finance mandated 30% cost reduction (hiring freeze, vendor cuts). My team faced:
+- Hiring freeze: 4 open reqs frozen (we needed 6 people due to attrition)
+- Two senior engineers resigned (burnout from high load + no backfill prospects)
+- Remaining team: 14 engineers, expected to maintain 99.99% uptime + deliver 30% more features
+- Pressure from product: 'We need API v3 migration by Q3' (4-month runway)
+- Pressure from leadership: 'Do more with less'
+- Real risk: remaining team would burn out → more attrition (death spiral)
+
+My role: convince finance that some investment was necessary, or reallocate existing resources."
+
+**Task:**
+"(1) Protect team health (prevent burnout/attrition spiral), (2) Deliver mission-critical work (uptime + API v3), (3) Make data-driven case for selective investment, (4) Optimize what we have (process efficiency)."
+
+**Action:**
+
+"Week 1-2: Assess reality (not hope)
+- Did skill inventory: 14 engineers → 8 seniors (architecture, on-call expertise), 6 juniors (learning, need mentorship).
+- Analyzed workload: uptime responsibilities required 3 engineers min (on-call rotation). API v3 = 8 engineers (12 months of work). Gap: 4 engineers short.
+- Retention risk assessment: surveyed team 1-on-1 ('Are you thinking about leaving?'). 3 of 8 seniors said yes (reason: overworked, no growth, hiring freeze signals stalling career).
+- Attrition cost calculation: Replace senior engineer = 6-month ramp-up + $200K salary + recruiting. Cost to lose 1 senior = $400K (6-month productivity loss) + $150K recruiting = $550K.
+
+Week 2-3: Make business case to finance
+- Presented data: 'We have 14 engineers. To prevent meltdown, we need 2 backfills ($180K/year salaries + 3-month ramp = $270K 1-time cost). If we hire 0, we lose 2-3 more seniors (risk: $1.6M). Investment of $270K saves $1.6M risk.'
+- Finance initially: 'No budget.' I showed them: attrition cost model (actual historical data: last 2 resignations cost company $1M each in lost productivity). Finance agreed: hire 2 backfills, but cap at that.
+
+Week 3-4: Ruthlessly prioritize
+- Killed or deferred non-essential work:
+  - Logging infrastructure overhaul: deferred 6 months (we use ELK, works fine for now)
+  - Internal API dashboard improvements: built by 1 junior in 2-week spike (vs. 6 weeks planned)
+  - Database optimization for low-traffic legacy endpoints: deferred (not ROI justified)
+  - Tech debt sprint (every other sprint): paused for 2 quarters (we had 2-3 critical tech debt items, deferred rest)
+  
+- Triaged API v3 migration: 12-month project → 4-month MVP (ship for 60% of endpoints, defer last 40% to Q4).
+  - Identified quick wins: 30% of endpoints were trivial migrations (1-2 days each). Assigned to juniors (learning opportunity).
+  - Bottleneck: complex stateful services (payment, inventory). Kept 2 seniors focused here (parallelized with juniors on easy stuff).
+
+Month 1: Optimize process (squeeze efficiency)
+- Code review bottleneck: seniors spent 20 hours/week on code reviews. Implemented 'junior review first' process (juniors review junior PRs, flag risky changes for seniors). Cut senior review time 30% (6 hours/week saved per senior).
+- On-call rotations: was 1-week on, 2-week off (needed constant senior brain). Moved to structured on-call: tier-1 (junior + senior pair, junior handles alerts, senior escalates), tier-2 (senior only). Freed up 1 senior from on-call burn.
+- Weekly planning: introduced ruthless time-boxing. Standup was 30min → 10min (clear priorities, blocked on critical stuff only). Saved 2.5 hours/week per person.
+
+Month 2-3: Cross-training + retention
+- Paired junior engineers with seniors on API v3 migration (structured mentorship). Juniors grew fast (API design, system thinking). Seniors saw juniors leveling up (purpose beyond firefighting).
+- 1-on-1 discussions with 3 seniors considering leaving:
+  - Engineer A: 'I'm burned out, no growth.' Offered: lead API v3 architecture (high visibility, CEO interaction). Engineer stayed.
+  - Engineer B: 'Hiring freeze signals company is stalling.' Offered: cross-functional project (work with mobile team on API design). Exposed them to different problems. Engineer stayed.
+  - Engineer C: 'I want to manage people eventually.' Offered: technical mentor role (formal responsibility, $5K bonus for mentoring junior eng). Engineer stayed.
+- Celebrated publicly: shipped first 20% of API v3 in Month 2 (half projected timeline). CEO thanked team by name. Morale boost (team felt valued despite constraints).
+
+Month 4: Adjust & sustain
+- 2 backfills hired, onboarded. Immediately absorbed low-priority work (junior API migrations, tech debt cleanup). Freed up seniors for architecture/strategy.
+- Retrospective: reviewed what we deferred (logging infrastructure, DB optimization). Ranked by impact: some could be picked up by new engineers in month 6 (right time to re-engage).
+- Sustainability: implemented 'no more than 20% unplanned work' rule. Protected predictability. Team could breathe.
+
+Result:
+- Delivered API v3 MVP by Month 4 (within timeline, despite -6 engineers). Customer adoption: 40% of clients on v3 in first month (smooth transition).
+- Retention: all 3 at-risk seniors stayed. No additional attrition. Team morale survey: 'confidence in leadership' increased from 4/10 to 7/10.
+- Financial: cost reduction achieved (no hiring 4 people = $300K saved). Avoided $1.6M attrition cost by strategically hiring 2 ($270K + salaries). Net savings: $1M.
+- Scalability: once 2 backfills ramped up, team was positioned to deliver 25% more features in Q4 (new capacity from better process + mentoring).
+- Learning: juniors leveled up (3 juniors promoted to mid-level). 1 junior even led API v3 endpoint migration independently by month 4."
+
+**Real Behavior Demonstrated:**
+- **Data-driven decision making**: quantified attrition cost vs. hiring investment (made emotional decision rational)
+- **Ruthless prioritization**: killed 5 projects to focus on 2 critical ones (easy to say, hard to execute)
+- **Process optimization**: cut review time, on-call burn, meeting overhead (free up capacity without hiring)
+- **Retention strategy**: understood why people leave (growth, visibility, purpose), addressed root causes
+- **Strategic communication**: made business case to finance (spoke their language: ROI, risk)
+- **Long-term thinking**: deferred work strategically (not randomly), created ramp plan for new hires
+
+---
+
+### Q4: Describe a situation where you had to balance maintaining legacy systems with investing in modern technology. How did you decide what to invest in?
+
+**STAR Structure:**
+
+**Situation:**
+"At [Company], our platform ran:
+
+Legacy stack:
+- 15-year-old monolithic Java application (OrderProcessor) for order fulfillment
+- Oracle database, hand-written SQL, complex stored procedures
+- 200+ engineers depend on it (accounting, fulfillment, reporting)
+- Revenue dependency: $500M/year goes through this system
+
+Modern stack:
+- 3-year-old microservices (video analytics, ML pipeline)
+- Newer tech (Python, Kubernetes, TensorFlow)
+- High-growth, future revenue (AI recommendations engine)
+
+Business reality:
+- Legacy system: solid, stable, but tech debt mounting (hard to hire Java devs, 6-month feature delivery, security vulnerabilities)
+- Modern stack: fast growth (AI revenue growing 40%/year), but immature (frequent outages, small team)
+
+My challenge: Product leadership wanted 50% engineering headcount on modern stack (AI is future). Finance wanted to minimize spend. Legacy team was demoralized ('Why invest in dinosaur?'), but legacy system had 30x the revenue impact.
+
+My role: director overseeing both stacks (60 engineers total: 40 legacy, 20 modern). Had to decide investment strategy."
+
+**Task:**
+"(1) Honestly assess both systems' strategic value, (2) Define what 'maintaining' legacy means (stability vs. features), (3) Decide investment split, (4) Create path forward for both stacks."
+
+**Action:**
+
+"Week 1-2: Quantify impact & runway
+- Legacy analysis:
+  - Revenue: $500M/year (100% of profitable revenue today)
+  - Defect rate: 3 production incidents/month (P1 severity once per quarter)
+  - Tech debt: security assessment flagged 7 critical vulnerabilities (compliances risk)
+  - Hiring: last 6 months, hired 1 Java senior (market is contracting for Java devs)
+  - Runway risk: if we lose 2-3 senior engineers (legacy tribal knowledge), system degradation likely (6-month recovery)
+  
+- Modern analysis:
+  - Revenue: $50M/year (10% of total, but fastest growing)
+  - Growth rate: 40%/year (if sustained, becomes $500M in 5 years)
+  - Stability: 6 production incidents/month (2x defect rate of legacy, but smaller customer base)
+  - Hiring: easier (ML engineers in demand, we're winning talent)
+  - Runway risk: if we stop investing, growth stalls (competitors are investing aggressively)
+
+- Leadership expectation: 'Legacy is dying, invest everything in modern.'
+- Reality: legacy revenue bankrolls modern investments. Kill legacy = $500M risk, modern can't sustain (yet).
+
+Week 2-3: Reframe conversation with leadership
+- Presented to C-suite: 'We can't choose legacy vs. modern. We must do both. Here's why:
+  - Year 1-2: legacy is cash cow ($500M). Modern is investment (needs runway to profitability). If legacy fails, we have no cash to invest in modern.
+  - Year 3-5: if modern scales (AI revenue → $200M+), we can gradually reduce legacy investment.
+  - Strategy: legacy moves to 'cash preservation' mode (stability, not features). Modern goes to 'growth' mode (features, investment).'
+- Proposed investment split: 35 legacy engineers (cash preservation) + 25 modern engineers (growth).
+
+Week 3-4: Define 'cash preservation' for legacy
+- Legacy team (40 engineers) was asked to maintain existing 15-year-old system with no new features. Demoralizing ('we're not innovating').
+- Reframed: 'Cash preservation' means:
+  - No new product features (save 2,000 engineering hours/year)
+  - DO: eliminate critical tech debt (security vulnerabilities, library upgrades, refactoring to reduce maintenance cost)
+  - DO: improve operations (automate deployments, reduce on-call burden, documentation)
+  - Result: same revenue, 30% less maintenance cost over 3 years
+  
+- Pitched to legacy team: 'We're going to make this system easier to maintain, safer to operate, and better for your career.' Assigned best engineers to:
+  - Security: fix 7 critical vulnerabilities (high-impact, resume-worthy)
+  - DevOps: build deployment automation (reduce manual toil)
+  - Code refactoring: break monolith into logical modules (reduce cognitive load for juniors)
+
+Month 1-3: Execute preservation
+- Security work: 3 engineers, 12 weeks. Result: 7 vulns fixed. Compliance audit passed (no findings). Public recognition from CISO (visibility).
+- DevOps work: 2 engineers. Built CI/CD pipeline (was 8 manual steps → 1 button deploy). Deployment time 2 hours → 30 min. Reduced deployment incidents 80%.
+- Refactoring: 5 engineers, ongoing. Broke OrderProcessor monolith into 3 logical modules (Order, Fulfillment, Reporting). Easier for juniors to learn. Reduced time-to-productivity from 6 months → 3 months.
+
+Month 4-12: Modern investment
+- Modern team (20 engineers) focused on: ML feature velocity (2x delivery pace), infrastructure investment (Kubernetes optimization), data quality (AI model accuracy).
+- Kept pace with competitor growth. AI revenue grew to $75M (30% YoY).
+- Hired 8 ML engineers (market was favorable). Team tripled capability by year-end.
+
+Year 2: Reassess & iterate
+- Legacy revenue: stable at $500M (no new features, but 0 security incidents, 50% reduction in production outages).
+- Legacy maintenance cost: reduced 25% (DevOps automation + better code structure).
+- Modern revenue: $110M (45% growth).
+- Team sentiment:
+  - Legacy team: morale recovered. Appreciated that we invested in their workflow (DevOps, refactoring). 0 attrition that year (vs. typical 15%).
+  - Modern team: fast-paced, growth culture. 1 person left for startup (expected in high-growth), but hired 2 replacements.
+
+Year 3: Plan transition
+- By year 3, AI revenue projected to be $200M. Revisited investment split:
+  - Legacy: 25 engineers (further reduction, maintain + slow feature work)
+  - Modern: 35 engineers (accelerate growth to $500M target by year 5)
+- Created path for legacy engineers to transition to modern (if interested). 6 legacy engineers moved to modern team (brought operational rigor, mentored on reliability).
+
+Result:
+- Delivered $500M legacy revenue safely (0 security incidents, stable). Maintenance cost down 25%.
+- Grew modern revenue from $50M → $200M in 3 years (40% CAGR maintained).
+- Retention: legacy team fully engaged (saw value in 'cash preservation'). Modern team growing fast (hired 20+ engineers).
+- Business impact: positioned company for future (legacy is stable, modern is dominant growth engine). By year 4, modern revenue > legacy revenue (transition complete).
+- Strategic credibility: leadership trusted me to make 'boring' decisions (legacy is boring, but critical). Gave me autonomy on modern investment."
+
+**Real Behavior Demonstrated:**
+- **Financial acumen**: quantified revenue, growth, runway risk (spoke finance's language)
+- **Nuanced strategy**: rejected 'all-in on modern' bias (recognized legacy's strategic value)
+- **Psychological insight**: reframed legacy as 'cash preservation' (gave team purpose, not 'maintenance duty')
+- **Risk management**: identified tech debt, security risks (proactive, not reactive)
+- **Long-term vision**: 3-5 year roadmap (legacy → modern transition), not quarter-to-quarter
+- **Team empowerment**: gave legacy team high-impact work (security, DevOps), not busywork
+- **Measured progress**: tracked revenue, attrition, incident rates (data-driven adjustments)
+
