@@ -11,7 +11,8 @@
    - 1.7 [Spring Test](#7-spring-test)
 2. [SpringBoot in the Ecosystem](#springboot-in-the-ecosystem)
 3. [SpringBatch Overview](#springbatch-overview)
-4. [Top 30 Spring & SpringBoot FAQs](#top-30-spring--springboot-faqs)
+4. [Types of Applications Built with SpringBoot](#types-of-applications-built-with-springboot)
+5. [Top 30 Spring & SpringBoot FAQs](#top-30-spring--springboot-faqs)
    - 4.1 [What is Dependency Injection (DI)?](#1-what-is-dependency-injection-di)
    - 4.2 [What is IoC (Inversion of Control)?](#2-what-is-ioc-inversion-of-control)
    - 4.3 [What is a Bean in Spring?](#3-what-is-a-bean-in-spring)
@@ -279,6 +280,300 @@ public class BatchConfig {
 - Scheduled reports generation
 - ETL (Extract, Transform, Load) processes
 - NOT for real-time processing
+
+---
+
+# Types of Applications Built with SpringBoot
+
+SpringBoot can build many different types of applications:
+
+## 1. REST APIs (Most Common)
+
+**What:** Send and receive JSON data over HTTP
+
+**Dependencies:**
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-web</artifactId>
+</dependency>
+```
+
+**Example:**
+```java
+@RestController
+@RequestMapping("/api/users")
+public class UserController {
+    @GetMapping("/{id}")
+    public User getUser(@PathVariable Long id) {
+        return userService.findById(id);
+    }
+}
+```
+
+**Use case:** Mobile apps, frontend apps talk to backend via REST APIs
+
+---
+
+## 2. Microservices
+
+**What:** Small independent services that communicate with each other
+
+**Key features:**
+- Separate database per service
+- Independent deployment
+- Communication via REST/gRPC/Kafka
+- Each service is a separate SpringBoot application
+
+**Example architecture:**
+```
+User Service → Order Service → Inventory Service
+     ↓              ↓                  ↓
+  MySQL        PostgreSQL          MongoDB
+```
+
+**Use case:** Large systems broken into small services (Netflix, Amazon)
+
+---
+
+## 3. Traditional Web Applications (MVC)
+
+**What:** Server renders HTML pages (old-style web apps)
+
+**Dependencies:**
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-web</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-thymeleaf</artifactId>  <!-- HTML template -->
+</dependency>
+```
+
+**Example:**
+```java
+@Controller
+public class UserController {
+    @GetMapping("/users")
+    public String listUsers(Model model) {
+        model.addAttribute("users", userService.getAll());
+        return "users";  // Returns users.html file
+    }
+}
+```
+
+**Use case:** Old admin portals, server-rendered pages
+
+---
+
+## 4. Batch Processing Applications
+
+**What:** Process large data files offline (not real-time)
+
+**Dependencies:**
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-batch</artifactId>
+</dependency>
+```
+
+**Example:** Import 1 million users from CSV file
+
+**Use case:** Data imports, ETL, scheduled reports, data migrations
+
+---
+
+## 5. Scheduled Jobs / Cron Jobs
+
+**What:** Run tasks automatically at specific times
+
+**Example:**
+```java
+@SpringBootApplication
+@EnableScheduling
+public class Application {
+    public static void main(String[] args) {
+        SpringApplication.run(Application.class, args);
+    }
+}
+
+@Service
+public class ReportService {
+    @Scheduled(cron = "0 0 2 * * *")  // Run daily at 2 AM
+    public void generateDailyReport() {
+        // Generate report
+    }
+    
+    @Scheduled(fixedDelay = 5000)  // Run every 5 seconds
+    public void checkHealth() {
+        // Health check
+    }
+}
+```
+
+**Use case:** Email reminders, cleanup tasks, data synchronization
+
+---
+
+## 6. Real-time Applications (WebFlux)
+
+**What:** Handle thousands of concurrent users with few threads (non-blocking)
+
+**Dependencies:**
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-webflux</artifactId>
+</dependency>
+```
+
+**Example:**
+```java
+@RestController
+public class RealtimeController {
+    @GetMapping("/stream")
+    public Flux<String> streamData() {
+        return Flux.interval(Duration.ofSeconds(1))
+            .map(i -> "Data: " + i);
+    }
+}
+```
+
+**Use case:** Live chat, real-time notifications, high-traffic APIs
+
+---
+
+## 7. Message Queue / Event-Driven Apps
+
+**What:** Process messages from Kafka, RabbitMQ, etc.
+
+**Example with Kafka:**
+```java
+@SpringBootApplication
+public class Application {
+    public static void main(String[] args) {
+        SpringApplication.run(Application.class, args);
+    }
+}
+
+@Service
+public class OrderListener {
+    @KafkaListener(topics = "orders")
+    public void listenOrders(String order) {
+        // Process order message
+        System.out.println("Order received: " + order);
+    }
+}
+```
+
+**Use case:** Order processing systems, notification systems
+
+---
+
+## 8. GraphQL APIs
+
+**What:** Alternative to REST - clients request exactly what data they need
+
+**Dependencies:**
+```xml
+<dependency>
+    <groupId>com.graphql-java-kickstart</groupId>
+    <artifactId>graphql-spring-boot-starter</artifactId>
+</dependency>
+```
+
+**Example:**
+```java
+@Component
+public class Query {
+    public User getUser(Long id) {
+        return userService.findById(id);
+    }
+}
+```
+
+**Use case:** Complex data fetching, reducing over-fetching
+
+---
+
+## 9. gRPC Services
+
+**What:** High-performance RPC framework (alternative to REST)
+
+**Use case:** Microservices communication, high-performance needs
+
+---
+
+## 10. CLI (Command-Line) Applications
+
+**What:** Command-line tools with Spring features
+
+**Example:**
+```java
+@SpringBootApplication
+public class CLIApp implements CommandLineRunner {
+    
+    @Autowired
+    private UserService userService;
+    
+    @Override
+    public void run(String... args) throws Exception {
+        System.out.println("Total users: " + userService.count());
+    }
+}
+```
+
+**Use case:** Database migration tools, admin utilities
+
+---
+
+## 11. WebSocket Applications
+
+**What:** Real-time two-way communication between client and server
+
+**Example:**
+```java
+@Configuration
+@EnableWebSocketMessageBroker
+public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
+    @Override
+    public void configureMessageBroker(MessageBrokerRegistry config) {
+        config.enableSimpleBroker("/topic");
+    }
+}
+
+@Controller
+public class ChatController {
+    @MessageMapping("/chat")
+    @SendTo("/topic/messages")
+    public Message sendMessage(Message msg) {
+        return msg;
+    }
+}
+```
+
+**Use case:** Live chat, live notifications, collaborative apps
+
+---
+
+## Quick Comparison Table
+
+| Type | Use Case | Key Dependency |
+|------|----------|-----------------|
+| REST API | Mobile/web backends | spring-boot-starter-web |
+| Microservices | Large systems | Multiple SpringBoot apps |
+| Web MVC | Server-rendered HTML | spring-boot-starter-web + thymeleaf |
+| Batch | File imports, ETL | spring-boot-starter-batch |
+| Scheduler | Cron jobs | @EnableScheduling |
+| WebFlux | High concurrency | spring-boot-starter-webflux |
+| Message Queue | Event processing | spring-kafka or spring-rabbit |
+| GraphQL | Flexible queries | graphql-spring-boot-starter |
+| gRPC | High performance | grpc-spring-boot-starter |
+| CLI | Command-line tools | spring-boot-starter |
+| WebSocket | Real-time chat | spring-boot-starter-websocket |
 
 ---
 
