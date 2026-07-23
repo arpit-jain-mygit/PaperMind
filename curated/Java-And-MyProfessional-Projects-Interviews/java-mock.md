@@ -2364,154 +2364,139 @@ Problem: Lock contention kills throughput
 
 ## **TECHNIQUE 2: REENTRANT LOCK (Explicit Lock)**
 
-**More Control than Synchronized:**
-```java
-public class SeatBooking {
-    private final Lock lock = new ReentrantLock();
-    private final Seat[] seats = new Seat[10000];
-    
-    public boolean bookSeat(String seatId, String userId) {
-        lock.lock();
-        try {
-            if (seats[seatId].isAvailable()) {
-                seats[seatId].book(userId);
-                return true;
-            }
-        } finally {
-            lock.unlock();
-        }
-        return false;
-    }
-    
-    // With timeout
-    public boolean bookSeatWithTimeout(String seatId, String userId) {
-        try {
-            if (lock.tryLock(5, TimeUnit.SECONDS)) {
-                try {
-                    if (seats[seatId].isAvailable()) {
-                        seats[seatId].book(userId);
-                        return true;
-                    }
-                } finally {
-                    lock.unlock();
-                }
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-        return false;
-    }
-}
+**Simple Idea: A lock that you can control (timeout, interrupt, etc.)**
+
+Think of it like a door lock you control with a remote, vs. synchronized (just a regular lock).
+
+---
+
+### **Synchronized vs. ReentrantLock**
+
 ```
+SYNCHRONIZED (regular lock):
+├─ Lock the door
+├─ Do stuff
+├─ Unlock door
+└─ Problem: If lock takes 10 seconds, you wait 10 seconds (no choice!)
 
-**Performance Characteristics:**
-| Metric | Value |
-|--------|-------|
-| Throughput (100 threads) | 60,000 bookings/sec |
-| Lock acquisition time | ~200ns (slightly slower) |
-| Memory overhead | Higher (lock object) |
-| Fairness | Optional (fair: true) |
-| Reentrancy | Supported |
-
-**Pros:**
-- ✓ Timeout support (tryLock with duration)
-- ✓ Interruptibility (lockInterruptibly())
-- ✓ Fairness option (FIFO thread ordering)
-- ✓ Better diagnostics (can inspect waiting threads)
-- ✓ Reentrant
-
-**Cons:**
-- ✗ More verbose (requires try-finally)
-- ✗ Slightly slower than synchronized (JVM optimizations less mature)
-- ✗ Must remember unlock in finally block
-- ✗ Can deadlock if developers forget unlock
-
-**When to Use:**
-✓ Need timeout behavior
-✓ Need thread interruptibility
-✓ Need fairness guarantee
-✓ Complex locking patterns
-
-**When NOT to Use:**
-✗ Simple scenarios (synchronized is simpler)
-✗ Performance critical with JVM optimizations (synchronized may be faster)
-
-**Real Scenario - Booking System with SLA:**
-```
-Requirement: Each user's booking request must respond within 2 seconds (no waiting forever)
-
-Timeline:
-├─ Thread A: Calls lock.acquire() → acquires lock successfully
-├─ Thread B: Calls lock.acquire() → WAITS (lock held by A)
-│  │
-│  └─ After 1 second: A completes booking and calls unlock()
-│     └─ Thread B: NOW acquires lock, proceeds to book
-│
-BUT if A is slow:
-├─ Thread A: Holds lock for 3 seconds (slow booking operation)
-├─ Thread B: Waiting for lock... 1 sec... 2 secs... TIMEOUT!
-│  └─ lock.tryLock(2 seconds) returns FALSE
-│  └─ Thread B: Fails gracefully (returns false to user)
-│  └─ User sees: "All seats selling fast, try again" (not "stuck waiting")
-└─ Thread A: Still holding lock, completes booking normally
-
-Key: THREAD B (waiting for lock) gives up after timeout, not Thread A (already acquired)
-
-With synchronized:
-├─ Thread A: Holds lock for 3 seconds
-├─ Thread B: Waits indefinitely (no timeout option)
-├─ User B: Sees spinner for 5+ seconds (bad UX, may close browser)
-└─ Result: Lost customer!
-
-With ReentrantLock + timeout:
-├─ Thread A: Holds lock for 3 seconds (still succeeds)
-├─ Thread B: Waits 2 seconds, then gets false response
-├─ User B: Gets immediate response "Try again" (good UX, may retry)
-└─ Result: Customer can retry, keeps trying!
+REENTRANTLOCK (smart lock with remote):
+├─ Try to lock with 2-second timeout
+├─ If locked in 2 sec: Do stuff, unlock
+├─ If can't lock in 2 sec: Give up, try again later
+└─ Benefit: Don't wait forever!
 ```
 
 ---
 
-**DETAILED CLARIFICATION: Which Thread Fails Gracefully?**
+### **The ONE Key Advantage: TIMEOUT**
 
 ```java
-private final Lock lock = new ReentrantLock();
-
-public boolean bookSeat(String seatId, String userId, long timeoutSeconds) {
-    try {
-        // tryLock() returns TRUE/FALSE within timeout period
-        if (lock.tryLock(timeoutSeconds, TimeUnit.SECONDS)) {
-            // ✓ THIS THREAD ACQUIRED THE LOCK
-            System.out.println(Thread.currentThread().getName() + " ACQUIRED lock");
-            
-            try {
-                // NOW inside critical section doing actual booking
-                if (seats[seatId].isAvailable()) {
-                    Thread.sleep(3000);  // Simulate 3-second booking operation
-                    seats[seatId].book(userId);
-                    System.out.println(Thread.currentThread().getName() + " BOOKED");
-                    return true;  // ✓ SUCCESS
-                }
-            } finally {
-                lock.unlock();  // Release lock for other threads
-            }
-        } else {
-            // ✗ THIS THREAD COULD NOT ACQUIRE LOCK WITHIN TIMEOUT
-            // (still WAITING for lock, never got it)
-            System.out.println(Thread.currentThread().getName() + 
-                " FAILED - couldn't acquire lock in " + timeoutSeconds + "s");
-            return false;  // FAIL GRACEFULLY
-        }
-    } catch (InterruptedException e) {
-        return false;
-    }
-    return false;
+// SYNCHRONIZED (wait forever)
+synchronized void bookSeat() {
+    // If locked, thread BLOCKS indefinitely
+    // User sees spinning wheel forever
 }
 
-// === EXECUTION TIMELINE (2-second timeout) ===
+// REENTRANTLOCK (wait max 2 seconds)
+Lock lock = new ReentrantLock();
 
-Time    Thread A                          Thread B
-─────────────────────────────────────────────────────
+public boolean bookSeat() {
+    if (lock.tryLock(2, TimeUnit.SECONDS)) {
+        // ✓ Got lock within 2 seconds, book it
+        try {
+            doBooking();
+            return true;
+        } finally {
+            lock.unlock();
+        }
+    } else {
+        // ✗ Couldn't get lock after 2 seconds
+        // Tell user: "Server busy, try again" (fast response!)
+        return false;
+    }
+}
+```
+
+---
+
+### **Real Scenario: Website Booking**
+
+```
+synchronized:
+├─ User 1 tries to book
+├─ Lock acquired, booking takes 5 seconds
+├─ User 2 arrives: WAITS (no timeout)
+├─ User 3 arrives: WAITS (no timeout)
+├─ After 10 seconds (user 1 + 2's locks), User 3 finally tries
+├─ User 3 frustrated: "Website is dead!" (closes browser)
+└─ Lost sale!
+
+ReentrantLock with 2-second timeout:
+├─ User 1 tries to book: booking takes 5 seconds
+├─ User 2 arrives: waits 2 seconds → times out → "Try again" (quick response!)
+├─ User 3 arrives: waits 2 seconds → times out → "Try again" (quick response!)
+├─ Users 2 and 3 retry: Get different slots, book successfully
+└─ Everyone happy! All sales captured!
+```
+
+---
+
+### **Why ReentrantLock Is Better**
+
+```
+1. TIMEOUT (don't wait forever)
+   ✓ User gets quick response
+   ✓ Can retry instead of waiting
+
+2. FAIRNESS (optional)
+   ✓ Threads get locks in order (FIFO)
+   ✓ No thread starves
+
+3. INTERRUPTION (can stop waiting)
+   ✓ User closes app → thread stops waiting
+   ✓ vs. synchronized: thread waits forever!
+
+4. More CONTROL
+   ✓ You decide timeout duration
+   ✓ You decide what to do if timeout
+```
+
+---
+
+### **When to Use ReentrantLock**
+
+✓ **Need timeout** (don't wait forever)  
+✓ **Need quick response** (SLA requirement)  
+✓ **Need fairness** (FIFO ordering)  
+✓ **Complex locking** (multiple locks)
+
+### **When to Use Synchronized (simpler)**
+
+✓ **Simple scenarios** (just lock and unlock)  
+✓ **Don't need timeout** (OK to wait)  
+✓ **Performance critical** (synchronized is slightly faster)
+
+---
+
+### **Simple Comparison Table**
+
+| Feature | Synchronized | ReentrantLock |
+|---------|---|---|
+| **Timeout** | ✗ No | ✓ Yes |
+| **Quick response** | ✗ Blocks forever | ✓ Returns in 2 sec |
+| **Simplicity** | ✓ Simple | ✗ Verbose |
+| **Speed** | ✓ Slightly faster | ✗ Slightly slower |
+
+---
+
+### **Bottom Line**
+
+**ReentrantLock is better ONLY if you need timeout.**
+
+Without timeout? Use synchronized (simpler).
+Need timeout? Use ReentrantLock (worth the extra code).
+
+---
  0ms    | calls tryLock(2s)               | calls tryLock(2s)
         | ↓ ACQUIRES lock                 | ↓ WAITS (A has lock)
         |                                 |
