@@ -4881,6 +4881,427 @@ Benefit: Guaranteed consistency across servers
 
 ---
 
+## **ADVANCED INTERVIEW QUESTIONS**
+
+### **Q1: Distributed Seat Booking - Can We Allow Overbooking Then Cancel Later?**
+
+**Scenario:** 1000 users clicking "Book" simultaneously for 1 seat. Instead of blocking 999, can we:
+1. Accept ALL 1000 bookings immediately (super fast)
+2. Later cancel 999 (eventual consistency)
+
+**Short Answer:**
+```
+Technically: YES, possible
+Practically: NO, don't do this (almost ever)
+```
+
+**Detailed Explanation:**
+
+**Approach: "Accept First, Cancel Later"**
+```
+0ms:   1000 users click
+       Database: INSERT 1000 booking records (no locking)
+       Response: "✅ Booking confirmed!"
+
+100ms: All 1000 see "Your booking is confirmed"
+       All 1000 receive confirmation email
+
+5 sec: Background job runs:
+       ├─ Query: SELECT * FROM bookings WHERE seat_id=5
+       ├─ Result: 1000 rows (1 seat, 1000 people!)
+       ├─ Keep row 1 (earliest timestamp)
+       └─ Cancel rows 2-1000 (mark cancelled)
+
+10 sec: 999 users receive: "❌ Sorry, overbooking. Full refund issued."
+```
+
+**Why This Fails (MAJOR Problems):**
+
+```
+❌ Customer Trust
+├─ Customer sees: "Booking confirmed!"
+├─ Then receives: "Sorry, cancelled. Refund pending."
+└─ Result: Lost trust, negative reviews, support calls
+
+❌ Payment Processing Nightmare
+├─ User A charged $500 immediately
+├─ After 5 seconds: "Booking cancelled, refund initiated"
+├─ Refund takes 2-3 days to appear
+├─ User sees money debited then later credited
+├─ Customer thinks: "This is sketchy"
+
+❌ Legal Issues
+├─ "Accepted booking" = legally binding contract
+├─ Cancelling after = breach of contract
+├─ Consumer protection laws prohibit this in many countries
+├─ Liability exposure for company
+
+❌ Chargeback Risk
+├─ Customer sees charge, doesn't see refund immediately
+├─ Files chargeback dispute with credit card company
+├─ Chargeback fees: $15-$100 per transaction
+├─ 999 chargebacks = $15K-$100K in fees
+
+❌ Operational Burden
+├─ Process 999 cancellations
+├─ Handle failed refunds (payment processor issues)
+├─ Customer support for confused users
+├─ Manual intervention when automation fails
+```
+
+**When This Actually Works:**
+
+```
+✅ AIRLINE WAITLISTING
+   └─ Customer EXPLICITLY books on waitlist
+   └─ Cancellation is EXPECTED
+   └─ No immediate payment
+   └─ Legal: "Waitlist" status is clear
+
+✅ CONCERT PRE-SALES (Intentional Overbooking)
+   └─ Venue intentionally overbooks 5-10%
+   └─ Standard industry practice (disclosed)
+   └─ Cancellations handled with compensation
+
+❌ REGULAR SEAT BOOKING (BookMyShow, Flights)
+   └─ Customer expects: confirmed = guaranteed seat
+   └─ Overbooking + cancellation = breach of trust
+   └─ High-value transaction (can't afford errors)
+   └─ Legal exposure too high
+```
+
+**Best Practice: DON'T Overbooking**
+
+Instead, use distributed atomic booking (previous sections):
+```
+✅ Response time: <100ms (still fast!)
+✅ Customer: Gets guaranteed booking (happy)
+✅ Trust: Maintained (no cancellation surprises)
+✅ Legal: Protected (binding booking, no breach)
+✅ Payment: No refund complexity
+✅ Support: No overbooking complaints
+
+Architecture:
+├─ Layer 1: Semaphore rate limit
+├─ Layer 2: Local cache check
+├─ Layer 3: Database version tracking (distributed atomic)
+└─ Result: Fast, safe, legal, trustworthy
+```
+
+---
+
+### **Q2: Who Decides Atomic vs. Eventual Consistency? (And Which Database?)**
+
+**Key Insight:** This is a BUSINESS decision, not technical. And consistency choice is INDEPENDENT of database choice.
+
+---
+
+#### **Part 1: WHO DECIDES?**
+
+**Decision Hierarchy (in order of authority):**
+
+```
+┌─────────────────────────────────────────────────────┐
+│ 1. PRODUCT MANAGER (Decides customer experience)    │
+├─────────────────────────────────────────────────────┤
+│ Question: "Will customers accept temporary           │
+│ inconsistency?"                                      │
+│                                                      │
+│ Atomic decision: "Booking = instant confirmation"   │
+│ Eventual decision: "Booking accepted, confirm later"│
+└─────────────────────────────────────────────────────┘
+         ↓
+┌─────────────────────────────────────────────────────┐
+│ 2. FINANCE/BUSINESS (Evaluates cost)                │
+├─────────────────────────────────────────────────────┤
+│ Question: "What's the cost of inconsistency?"       │
+│                                                      │
+│ Atomic cost: "Infrastructure cost (locks, CPU)"    │
+│ Eventual cost: "Refunds, chargebacks, support"      │
+│                                                      │
+│ If eventual cost > atomic cost: Choose ATOMIC       │
+└─────────────────────────────────────────────────────┘
+         ↓
+┌─────────────────────────────────────────────────────┐
+│ 3. LEGAL/COMPLIANCE (Sets constraints)              │
+├─────────────────────────────────────────────────────┤
+│ Question: "Is this legally allowed?"                │
+│                                                      │
+│ Banking: "Must be atomic (regulations)"             │
+│ Booking: "Atomic preferred (consumer protection)"   │
+│ Social media: "Eventual OK (no legal requirement)"  │
+└─────────────────────────────────────────────────────┘
+         ↓
+┌─────────────────────────────────────────────────────┐
+│ 4. OPERATIONS (Validates feasibility)               │
+├─────────────────────────────────────────────────────┤
+│ Question: "Can we operationally manage this?"       │
+│                                                      │
+│ Atomic: "No overbookings to handle"                 │
+│ Eventual: "Must manage 1-5% overbookings daily"     │
+│          "Process 1000 cancellations/day"           │
+└─────────────────────────────────────────────────────┘
+         ↓
+┌─────────────────────────────────────────────────────┐
+│ 5. CTO/TECH LEAD (Plans implementation)             │
+├─────────────────────────────────────────────────────┤
+│ Question: "How do we build this?"                   │
+│                                                      │
+│ Atomic: "RDBMS + pessimistic locking"               │
+│ Eventual: "RDBMS/NoSQL + message queues"            │
+└─────────────────────────────────────────────────────┘
+```
+
+**Real Examples:**
+
+```
+BOOKING.COM (Chose EVENTUAL)
+├─ Product: "Show availability optimistically"
+├─ Finance: "Overbooking rate 5% acceptable"
+├─ Legal: "T&C allow 24h cancellation"
+├─ Ops: "Can manage 50K daily cancellations"
+├─ Tech: "PostgreSQL + Kafka + Elasticsearch"
+└─ Result: Fast response, handle eventual cancellations
+
+AIRLINES (Chose ATOMIC)
+├─ Product: "Confirmed booking = guaranteed seat"
+├─ Finance: "Can't risk overbooking (penalties)"
+├─ Legal: "Overbooking violates passenger rights"
+├─ Ops: "Can't operationally manage overbooking"
+├─ Tech: "Oracle + Pessimistic locking + 20ms latency"
+└─ Result: Slow booking, but guaranteed consistency
+
+AMAZON (Chose HYBRID)
+├─ Product: "Checkout atomic, inventory eventual"
+├─ Finance: "Payment atomic, restock eventual"
+├─ Legal: "Order confirmation binding, inventory sync separate"
+├─ Ops: "Handle out-of-stock cancellations"
+├─ Tech: "RDBMS (orders) + NoSQL (inventory) + SQS (events)"
+└─ Result: Fast checkout, eventual inventory sync
+```
+
+---
+
+#### **Part 2: RDBMS vs. NoSQL - Independence**
+
+**MAJOR Misconception:**
+> "Eventual consistency = must use NoSQL"
+
+**Reality:**
+> Consistency model (atomic/eventual) and database choice are **INDEPENDENT**
+
+**What ACTUALLY determines database choice:**
+
+```
+NOT: Consistency model
+BUT: These factors:
+├─ Throughput requirements (QPS)
+├─ Scalability needs (horizontal/vertical)
+├─ Data structure (structured/unstructured)
+├─ Query patterns (simple CRUD vs complex joins)
+├─ Operational complexity (backup, recovery)
+├─ Team expertise (SQL vs NoSQL)
+├─ Latency requirements (ms vs seconds)
+└─ Consistency cost (trade-off decision)
+```
+
+---
+
+#### **You CAN Use RDBMS with Eventual Consistency:**
+
+```java
+// PostgreSQL + Kafka = Atomic + Eventual Hybrid
+
+@Service
+public class BookingService {
+    @Autowired private BookingRepository bookingRepo;
+    @Autowired private KafkaTemplate kafka;
+    
+    // ATOMIC: Booking (in transaction)
+    @Transactional
+    public BookingResult bookSeat(int seatId, String userId) {
+        // STEP 1: ACID transaction (serialized writes)
+        Optional<Seat> seat = seatRepo.findByIdForUpdate(seatId);
+        
+        if (seat.isPresent() && !seat.get().isBooked()) {
+            seat.get().book(userId);
+            seatRepo.save(seat.get());  // Atomic
+            
+            Booking booking = new Booking(seatId, userId);
+            bookingRepo.save(booking);  // Atomic
+            
+            // Transaction committed here
+            
+            // STEP 2: EVENTUAL (async event)
+            BookingEvent event = new BookingEvent(booking);
+            kafka.send("booking-confirmed", event);
+            // Event sent, but NOT guaranteed to be processed yet
+            
+            return BookingResult.SUCCESS;
+        }
+        return BookingResult.ALREADY_BOOKED;
+    }
+}
+
+// Async consumer (runs eventually, seconds later)
+@Service
+public class BookingEventHandler {
+    @KafkaListener(topics = "booking-confirmed")
+    public void handleBookingConfirmed(BookingEvent event) {
+        // This runs EVENTUALLY (not blocking booking)
+        try {
+            emailService.sendConfirmation(event.getUserId());
+            analyticsService.recordBooking(event);
+            partnerAPI.syncBooking(event);
+        } catch (Exception e) {
+            // Kafka retries, or manual intervention
+        }
+    }
+}
+```
+
+**Result:**
+```
+✅ Booking: Atomic (PostgreSQL, row-level locks)
+✅ Email: Eventual (Kafka, async processing)
+✅ Database: RDBMS (PostgreSQL)
+✅ Speed: <100ms (no email latency blocking)
+✅ Consistency: Atomic where needed, eventual elsewhere
+✅ Reliability: ACID guarantees + message queue retries
+```
+
+---
+
+#### **You CAN Use NoSQL with Atomic Consistency:**
+
+```
+MongoDB 4.0+:
+├─ Multi-document ACID transactions
+├─ Single shard: cheap
+├─ Multiple shards: expensive & slow
+└─ Use case: Single-document operations or non-distributed
+
+DynamoDB:
+├─ Consistent reads option (strong consistency)
+├─ But: 2x cost vs. eventual
+├─ And: 50-100ms latency (much slower)
+└─ Use case: Critical operations only
+```
+
+---
+
+#### **Comparison Matrix:**
+
+```
+┌─────────────────┬────────────────────┬──────────────────┐
+│ Database        │ Atomic             │ Eventual         │
+├─────────────────┼────────────────────┼──────────────────┤
+│ PostgreSQL/     │ ✅ Native ACID     │ ✅ RDBMS + Kafka │
+│ MySQL           │ (pessimistic lock) │ (events async)   │
+│                 │ Cost: Medium       │ Cost: Low        │
+├─────────────────┼────────────────────┼──────────────────┤
+│ MongoDB         │ ⚠️ ACID Trans.     │ ✅ Native        │
+│                 │ (slow, expensive)  │ (replication)    │
+│                 │ Cost: High         │ Cost: Low        │
+├─────────────────┼────────────────────┼──────────────────┤
+│ DynamoDB        │ ❌ Consistent read │ ✅ Native        │
+│                 │ (2x cost, slow)    │ (cheap)          │
+│                 │ Cost: High         │ Cost: Low        │
+├─────────────────┼────────────────────┼──────────────────┤
+│ Cassandra       │ ❌ Not native      │ ✅ Native        │
+│                 │ (tunable, slow)    │ (distributed)    │
+│                 │ Cost: Very High    │ Cost: Low        │
+└─────────────────┴────────────────────┴──────────────────┘
+```
+
+---
+
+#### **Best Practice: Hybrid Approach**
+
+```
+BOOKING SYSTEM ARCHITECTURE:
+
+Layer 1: ATOMIC (PostgreSQL)
+├─ Booking records
+├─ Row-level pessimistic locks
+├─ ACID guaranteed
+└─ Use case: "Booking = confirmed"
+
+Layer 2: EVENTUAL (Kafka + Consumers)
+├─ Confirmation emails
+├─ Analytics logging
+├─ Payment settlement
+├─ Partner API sync
+└─ Use case: "Email sent eventually (OK if delay)"
+
+Layer 3: CACHE (Redis)
+├─ Seat availability cache
+├─ TTL: 5 minutes
+├─ Invalidation: on booking
+└─ Use case: "Fast reads, eventual updates OK"
+
+Result:
+✅ Booking: Atomic (no double-booking)
+✅ Email: Eventual (doesn't block booking)
+✅ Cache: Optimized (fast, acceptable staleness)
+✅ Database: PostgreSQL (RDBMS, atomic when needed)
+✅ Speed: <100ms booking response
+✅ Scalability: High (events process async)
+```
+
+---
+
+#### **Decision Framework: When to Choose What?**
+
+```
+Q1: Will business tolerate temporary inconsistency?
+    NO → Choose ATOMIC
+    YES → Continue
+
+Q2: What's cost of being wrong?
+    High ($$$ revenue loss) → Choose ATOMIC
+    Low → Continue
+
+Q3: Do customers directly see the inconsistency?
+    YES (they see temp error) → Choose ATOMIC
+    NO (backoffice only) → Continue
+
+Q4: Is there legal/regulatory requirement?
+    YES (banking, healthcare) → Choose ATOMIC
+    NO → Continue
+
+Q5: Is throughput CRITICAL (>10K/sec)?
+    YES → Choose EVENTUAL + CACHE (atomic becomes bottleneck)
+    NO → Choose ATOMIC (simpler, safer)
+
+Applied to Seat Booking:
+Q1: Tolerate inconsistency? NO (double-booking unacceptable)
+Q2: Cost? Very HIGH (trust, refunds, legal)
+Q3: Customers see it? YES (overbooking email)
+Q4: Legal? YES (contract law)
+Result: ATOMIC (no negotiation)
+```
+
+---
+
+### **Summary: Both Questions**
+
+```
+Q1: Overbooking + Cancel Later?
+└─ Technical: Possible
+└─ Business: Risky (trust, legal, refunds)
+└─ Recommendation: Don't do this (use distributed atomic)
+
+Q2: Who Decides & Which DB?
+├─ Who: Product (1st), Finance (2nd), Legal (3rd), Ops (4th), Tech (5th)
+├─ Independence: Consistency ≠ Database choice
+├─ RDBMS + Kafka = Atomic + Eventual hybrid
+├─ NoSQL only needed if: Extreme scale or unstructured data
+└─ Best practice: Hybrid (atomic core, eventual periphery)
+```
+
+---
+
 ## **CINEMA BOOKING SYSTEM - COMPLETE EXAMPLE**
 
 **Best Practice Implementation:**
@@ -4936,11 +5357,95 @@ public class CinemaBookingSystem {
 }
 ```
 
-**Why This Design?**
-- ✓ ConcurrentHashMap: Multiple threads booking different seats proceed in parallel
-- ✓ Semaphore: Limits concurrent requests (prevents thread explosion, controls CPU)
-- ✓ volatile boolean: Readers (availability check) see latest state without locks
+**Why This Design? (CRITICAL: Understanding Segment-Based Locking)**
+
+```
+ConcurrentHashMap Key Design:
+├─ Problem: Regular HashMap needs global lock (slow!)
+├─ Solution: ConcurrentHashMap uses SEGMENT LOCKING
+│           (each bucket/segment has its own lock)
+│
+├─ Benefit: Different users booking DIFFERENT SEATS
+│          can proceed in PARALLEL (not blocked)
+│
+├─ Example:
+│  ├─ User A books seat 5 (locks segment for seat 5)
+│  ├─ User B books seat 6 (locks segment for seat 6)
+│  ├─ Both SIMULTANEOUSLY (different locks, no conflict)
+│  └─ Result: 2 bookings at same time! 🟢
+│
+└─ NOT for same-seat booking:
+   ├─ Users A & B both booking SEAT 5
+   ├─ Only one segment lock exists (for seat 5)
+   ├─ Second user waits for first to complete
+   ├─ Result: Serial access (same as synchronized)
+   └─ For distributed same-seat: Use DATABASE VERSION TRACKING
+
+Why use ConcurrentHashMap for cinema (not database)?
+├─ Cinema = single-server, 1 application instance
+├─ ConcurrentHashMap = in-memory, ultra-fast
+├─ For distributed (multiple servers): Add database with version tracking
+```
+
+**Layer-by-Layer Explanation:**
+
+```
+1. SEMAPHORE (Rate limiting - Application level)
+   └─ Purpose: Prevent server overload
+   └─ Type: Global limit (all users compete for 100 slots)
+   └─ Benefit: Only 100 concurrent booking operations
+   └─ Drawback: All users wait in single queue
+
+2. CONCURRENT HASHMAP (Segment locking - Application level)
+   └─ Purpose: Allow parallel access to DIFFERENT seats
+   └─ Type: Per-segment locks (different seats = different locks)
+   └─ Benefit: User A booking seat 5 + User B booking seat 6 = parallel
+   └─ Drawback: Same seat = sequential (only one at a time)
+
+3. VOLATILE BOOLEAN (Memory visibility - Application level)
+   └─ Purpose: Readers see latest booked status
+   └─ Type: Per-variable memory visibility
+   └─ Benefit: Availability checks see up-to-date value
+   └─ Drawback: Not atomic with modification
+
+4. DATABASE (Distributed coordination - DB level)
+   └─ Purpose: Distributed atomic operations across servers
+   └─ Type: Row-level locks + version numbers
+   └─ Benefit: All 50 servers serialize updates on same row
+   └─ Drawback: Network latency (20ms vs 1μs)
+```
+
+**Performance Analysis:**
+
+```
+Scenario: 10,000 concurrent users trying to book from 1,000 seats
+
+Architecture Choice 1: Only ConcurrentHashMap (single server)
+├─ Seats 1-1000: Each has independent lock (good!)
+├─ User A booking seat 5: Locks segment 5
+├─ User B booking seat 6: Locks segment 6 (parallel! ✓)
+├─ User C booking seat 5: Waits for A to finish (serial)
+├─ Throughput: 1,000 seats × parallel bookings = HIGH
+├─ Limitation: Only works on SINGLE server
+└─ Real scenario: 10 servers = 10 copies = overbooking!
+
+Architecture Choice 2: ConcurrentHashMap + Database (multi-server)
+├─ Layer 1: ConcurrentHashMap (fast cache, per-server)
+├─ Layer 2: Database + Version tracking (distributed truth)
+├─ User A (Server 1) books seat 5: ConcurrentHashMap + DB ✓
+├─ User B (Server 2) books seat 5: ConcurrentHashMap + DB ✓
+├─ Both reach DB simultaneously
+├─ Database serializes: Version check prevents double-booking
+├─ Throughput: 100K+ bookings/sec (parallel different seats)
+├─ Consistency: Atomic distributed (version prevents error)
+└─ Real scenario: 10 servers = no overbooking ✓
+```
+
+**- ✓ ConcurrentHashMap: Segment-locked, enables parallel access for DIFFERENT seats (not same seat)**
+- ✓ Semaphore: Rate limiting, prevents server overload
+- ✓ volatile boolean: Memory visibility, readers see latest state
 - ✓ computeIfAbsent: Atomic initialization of seats on first booking
+- ✓ (For multi-server) Add Database: Version tracking for distributed atomic consistency
 
 **Performance Under Load:**
 ```
