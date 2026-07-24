@@ -171,135 +171,462 @@ Hash Map • Doubly Linked List • LRU/LFU Eviction • TTL • Memory Manageme
 
 ---
 
-### HLD Coverage for Cache
+## HLD Checklist for In-Memory Cache (Complete)
 
-**Requirements Clarification:**
-- Max capacity (number of entries or memory size in MB)
-- Expected throughput (operations per second)
-- Eviction policy preference (LRU, LFU, FIFO, TTL)
-- Thread concurrency level (single/multi-threaded)
-- Performance targets (hit rate %, latency SLA)
-
-**Capacity Estimation:**
-- Memory budget per entry (key + value + metadata overhead)
-- Expected cache hit rate targets
+### 1. Requirements Clarification ✓ CRITICAL
+- Max capacity (number of entries OR memory size in MB)
+- Expected throughput (operations/sec): gets, puts, deletes
 - Read/write ratio
-- Throughput expectations (get/put/delete ops/sec)
+- Eviction policy preference (LRU, LFU, FIFO, Hybrid, TTL)
+- Thread concurrency level (single vs multi-threaded)
+- Performance targets:
+  - Hit rate % expectations
+  - Latency SLA for get/put operations (ms)
+  - Acceptable lock contention levels
 
-**Cache-Specific HLD Requirements:**
-- **Eviction Policies:** LRU (least recently used) vs LFU (least frequently used) vs FIFO vs TTL-based
-  - LRU: Simple, effective for temporal locality
-  - LFU: Better for frequency-based access patterns
-  - Hybrid: Combine multiple strategies
-- **Thread Safety Model:** 
-  - Coarse-grained locking (single ReentrantLock for entire cache)
-  - Fine-grained locking (segment-based locks like ConcurrentHashMap)
-  - Lock-free algorithms (minimal contention)
-- **Memory Management:**
-  - Max capacity enforcement strategy
-  - Segmentation for better cache locality
-  - GC considerations for evicted entries
-  - Memory overhead per entry (metadata, pointers)
-- **Monitoring & Statistics:**
-  - Cache hit/miss rates
-  - Eviction frequency
-  - Average lookup time
-  - Cache utilization percentage
+### 2. Capacity Estimation ✓ CRITICAL
+- Memory budget per entry: key size + value size + metadata overhead (2-3 pointers for LRU, frequency counter for LFU)
+- Expected cache hit rate targets (e.g., 80%+)
+- Read/write ratio impact on memory allocation
+- Throughput expectations: e.g., 100K ops/sec
+- Storage calculation: capacity × avg_entry_size = total memory
 
-**NOT APPLICABLE (Skip these generic HLD items):**
-- ✗ Consistent Hashing (single-process, not distributed)
-- ✗ Database choice & sharding (in-memory only, no persistence)
-- ✗ Replication & failover (cache is ephemeral, no durability)
-- ✗ Load balancing (single node)
-- ✗ Message queues (no async processing needed)
-- ✗ CDN / Global distribution (single-machine)
+### 3. Architecture Components ✗ NOT APPLICABLE
+- ~~Client layer~~ — Single-process cache, no distributed components
+- ~~API Gateway~~ — In-memory, no network layer
+- ~~Load Balancer~~ — Single node
+- ~~Database layer~~ — In-memory only, no persistence
+- ~~Cache layer~~ — This IS the cache
+- ~~CDN~~ — Single machine
+
+### 4. Data Layer ✗ NOT APPLICABLE
+- ~~Database choice (SQL vs NoSQL)~~ — In-memory store only
+- ~~Sharding strategy~~ — Single-node cache (segment-based locking is different)
+- ~~Replication & failover~~ — Cache is ephemeral, no durability required
+- ~~Schema design~~ — Data structure-based, not relational
+
+### 5. Scalability & Performance ⚠️ PARTIAL (Single-Node Focus)
+- **Horizontal Scaling:** NOT APPLICABLE (single-process)
+- **Vertical Scaling (within one process):**
+  - Max entries the system can hold
+  - Memory limits and GC behavior
+  - Concurrent thread limits
+- **Caching Strategy:** THIS IS the cache, not a layer in a larger system
+- **Rate Limiting / Throttling:** Not applicable (no external requests)
+- **Monitoring & Alerting:** ⚠️ CRITICAL
+  - Hit/miss ratio tracking
+  - Eviction frequency and rate
+  - Average lookup time (latency)
+  - Lock contention metrics (lock wait time)
+  - Memory usage and utilization %
+  - GC pause time impact
+
+### 6. Tradeoffs ✓ CRITICAL (Explain all decisions)
+- **LRU vs LFU:**
+  - LRU: Simple, O(1) with LinkedList, good for temporal locality
+  - LFU: Better for frequency patterns, but O(log N) with heap or O(1) with complex bucket structure
+  - Tradeoff: Simplicity vs accuracy
+- **Coarse vs Fine-Grained Locking:**
+  - Single ReentrantLock: Simple, strong consistency, higher contention
+  - Segment-based locks: Better throughput, more complex, potential consistency issues
+  - Tradeoff: Simplicity vs performance under concurrency
+- **Eager vs Lazy Eviction:**
+  - Eager: Evict immediately when full, clear TTL entries in background thread
+  - Lazy: Check on access, evict on demand
+  - Tradeoff: Memory efficiency vs latency (lazy adds latency to cache hit)
+- **Memory vs Hit-Rate:**
+  - Larger capacity = higher hit rate but more memory
+  - Smaller capacity = lower memory, more evictions
+- **Lock Contention vs Correctness:**
+  - Longer critical section = safer but blocks longer
+  - Minimal locking = faster but risk race conditions
+
+### 7. ⚠️ CRITICAL: Cache-Specific HLD Requirements
+
+#### a) **Eviction Policy Selection**
+- **LRU (Least Recently Used):**
+  - Best for: Temporal locality (recent items more likely to be reused)
+  - Implementation: DoublyLinkedList for O(1) reordering
+  - Track: Last access timestamp
+- **LFU (Least Frequently Used):**
+  - Best for: Access pattern locality (frequent items stay)
+  - Implementation: Frequency counters + bucket lists
+  - Track: Frequency count per item
+- **FIFO (First In First Out):**
+  - Simplest, but poor performance
+- **TTL-Based:**
+  - Expiration time per entry
+  - Combine with LRU/LFU
+- **Hybrid:**
+  - LRU + TTL combined (most realistic)
+
+#### b) **Thread Safety Model** ⚠️ CRITICAL
+Choose one and explain tradeoffs:
+1. **Coarse-Grained Locking (Single ReentrantLock):**
+   - Entire cache behind one lock
+   - Pros: Simple, strong consistency guaranteed
+   - Cons: Lock contention bottleneck under high concurrency
+   - Best for: Low concurrency scenarios
+   
+2. **Fine-Grained Locking (Segment-Based):**
+   - Divide cache into N segments, each with own lock
+   - hash(key) % N determines segment
+   - Reduces lock contention
+   - Pros: Better throughput with concurrent threads
+   - Cons: More complex, potential deadlocks, segment-level eviction is harder
+   - Best for: High concurrency scenarios
+   
+3. **ReadWriteLock (Separated read/write paths):**
+   - Multiple readers, exclusive writer
+   - Pros: Optimizes read-heavy workloads
+   - Cons: Write operations still block all others
+   - Best for: Read-heavy caches (80%+ reads)
+   
+4. **Lock-Free (Atomic operations):**
+   - Use AtomicReference, CAS loops
+   - Pros: Minimal blocking
+   - Cons: Complex, difficult to implement LRU/LFU
+
+#### c) **Memory Management** ⚠️ CRITICAL
+- Max capacity constraint (hard limit)
+- Metadata per entry: 
+  - LRU: 2-3 pointers (prev, next) = 16-24 bytes
+  - LFU: frequency counter (8 bytes) + pointers
+- Eviction on capacity exceeded (no OOM)
+- GC impact: Minimize garbage collection pauses
+- Options:
+  - Proactive eviction: Clear oldest entries before full
+  - Reactive eviction: Only evict when needed
+- Segmentation strategy: group related entries for cache-line optimization
+
+#### d) **Monitoring & Statistics** ⚠️ CRITICAL
+Must track:
+- Cache hit count / hit ratio % (primary KPI)
+- Cache miss count
+- Eviction count per policy reason
+- Average lookup time (latency p50, p99)
+- Memory utilization (current/max)
+- Lock wait time (if using locks)
+- Current size of cache
+- TTL expiration rate (if applicable)
+
+### 8. NOT APPLICABLE: Generic HLD Items for Distributed Systems
+- ✗ Consistent Hashing (distributed cache only)
+- ✗ API Gateway / Routing (in-process only)
+- ✗ Message Queues (no async inter-process communication)
+- ✗ Replication/Failover (ephemeral data)
+- ✗ Multi-datacenter failover (single machine)
+- ✗ CDN (single machine)
 
 ---
 
-### LLD Coverage for Cache
+## LLD Checklist for In-Memory Cache (Complete)
 
-**Data Models / Entities:**
-- Cache entry structure: {key, value, frequency/timestamp, access_time}
-- Metadata tracking per entry
-- For LRU: doubly-linked list nodes with prev/next pointers
-- For LFU: frequency counters and frequency bucket lists
-
-**API Contracts:**
+### 1. Data Models / Entities ✓ CRITICAL
+Cache Entry Structure:
 ```
-get(K key) -> V value // returns null if not found
-put(K key, V value) -> void // evicts if cache full
-delete(K key) -> boolean // true if existed
-clear() -> void // removes all entries
-getStats() -> CacheStats // hit count, miss count, etc
+class Node<K, V> {
+    K key;
+    V value;
+    long lastAccessTime;        // for LRU
+    int frequency;              // for LFU
+    long expirationTime;        // for TTL
+    Node<K, V> prev, next;      // doubly-linked list pointers (LRU only)
+}
+```
+- For LRU: Track insertion order in doubly-linked list
+- For LFU: Track frequency count + linked list per frequency level
+- Metadata overhead must be accounted for in capacity
+
+### 2. API Contracts ✓ CRITICAL
+```java
+V get(K key);                              // Return value or null, move to recent (LRU)
+void put(K key, V value);                  // Insert/update, evict if full
+boolean remove(K key);                     // Remove specific entry
+void clear();                              // Clear all entries
+CacheStats getStats();                     // Hit/miss/eviction stats
+```
+Required error handling:
+- Null key: throw exception or allow? (clarify in requirements)
+- Null value: allowed or reserved for "not found"?
+- Concurrent modification during iteration: define behavior
+
+### 3. Database Schema ✗ NOT APPLICABLE
+- ~~Schema design~~ — In-memory data structure only
+- ~~Indexes~~ — HashMap IS the index
+- ~~Normalization~~ — No relational model
+
+### 4. Core Logic / Algorithms ⚠️ CRITICAL - Must be O(1)
+
+**LRU Implementation:**
+```
+HashMap<K, Node> + DoublyLinkedList
+
+get(key):
+  1. Look up in HashMap → O(1)
+  2. Move Node to tail (most recent) → O(1)
+  3. Return value
+
+put(key, value):
+  1. If exists: update value, move to tail → O(1)
+  2. If new: create node, add to tail → O(1)
+  3. If full: remove head (least recent) → O(1)
+  4. Add to HashMap → O(1)
+
+Total: O(1) for all operations
 ```
 
-**Core Logic / Algorithms (CRITICAL):**
-- **LRU Implementation:**
-  - HashMap for O(1) key lookup
-  - DoublyLinkedList for O(1) ordering by recency
-  - get(key): move node to tail (most recent)
-  - put(key, value): add to tail or update
-  - On full: remove head (least recent) with O(1)
-- **LFU Implementation:**
-  - HashMap for key lookup
-  - Frequency counter per entry
-  - MinHeap or frequency bucket for O(log N) eviction
-  - OR use LinkedHashMap with frequency tracking
-- **Time Complexity Requirements:**
-  - get: O(1)
-  - put: O(1)
-  - delete: O(1)
+**LFU Implementation (Option 1 - Frequency Buckets):**
+```
+HashMap<K, Node> + HashMap<int, LinkedList<Node>>
 
-**Concurrency & Consistency (CRITICAL):**
-- **Thread-Safe Access:**
-  - All cache operations atomic (get-and-update as single operation)
-  - No race conditions on eviction
-  - No duplicate evictions
-- **Lock Strategy Options:**
-  - **Approach 1:** ReentrantLock wrapping entire cache
-    - Pros: Simple, strong consistency
-    - Cons: Lock contention under high concurrency
-  - **Approach 2:** ConcurrentHashMap with segment locks
-    - Pros: Better concurrency
-    - Cons: More complex LRU/LFU tracking
-  - **Approach 3:** ReadWriteLock for separate read/write paths
-    - Pros: Multiple readers allowed
-    - Cons: Still blocking writes
-- Idempotency: Multiple concurrent deletes should be safe
-- Consistency: Cache size invariants must hold (never exceed max_capacity)
+get(key):
+  1. Look up in HashMap → O(1)
+  2. Increment frequency → O(1)
+  3. Move to next frequency bucket → O(1)
+  4. Return value
 
-**Error Handling:**
-- Graceful handling of OOM if max capacity exceeded
-- Handle null keys/values appropriately
-- TTL expiration: lazy deletion vs active background cleanup
-- Handle concurrent eviction race conditions
+put(key, value):
+  1. If exists: update, increment frequency → O(1)
+  2. If new: create with freq=1, add to bucket[1] → O(1)
+  3. If full: remove from minFreq bucket → O(1)
+  4. Add to HashMap → O(1)
 
-**Optimization (at code level):**
-- Minimize critical sections (lock time)
-- Efficient node removal from linked list
-- Cache-line alignment to reduce false sharing in multi-threaded scenario
-- Avoid boxing/unboxing with primitive types if possible
+Total: O(1) for all operations
+```
 
-**NOT APPLICABLE (Skip these generic LLD items):**
-- ✗ Database schema (no persistence layer)
-- ✗ Request/response transformation (no network, single-process)
-- ✗ Query optimization (no database)
+**LFU Implementation (Option 2 - MinHeap, simpler but slower):**
+```
+HashMap<K, Node> + MinHeap<Node by frequency>
 
-**Cache-Specific LLD Requirements:**
-- **Data Structure Choice:**
-  - LRU: `HashMap<K, Node> + DoublyLinkedList(Node)`
-    - Node = {key, value, prev, next}
-  - LFU: `HashMap<K, Node> + HashMap<int, LinkedList<Node>>` (frequency buckets)
-    - Or use HashMap + PriorityQueue
-- **TTL Implementation (if required):**
-  - Lazy deletion: check expiry time on get (simpler)
-  - Active cleanup: background thread periodically removes expired (more efficient)
-  - Timestamp per entry: created_at or last_accessed_at
-- **Segment-Based Optimization (for high concurrency):**
-  - Divide cache into N segments, each with own lock
-  - Reduces contention vs single lock
-  - hash(key) % N determines segment
-  - Trade-off: slightly more complex code
+get(key):
+  1. Look up in HashMap → O(1)
+  2. Update frequency in node → O(1)
+  Update heap → O(log N) ← SLOWER
+
+Total: O(log N) - acceptable if heap updates are rare
+```
+
+**Time Complexity Requirements (CRITICAL):**
+| Operation | Required | Typical Implementation |
+|-----------|----------|----------------------|
+| get(key) | O(1) | HashMap lookup + LinkedList move |
+| put(key, value) | O(1) | HashMap + LinkedList operations |
+| delete(key) | O(1) | HashMap remove + LinkedList unlink |
+| capacity check | O(1) | Simple counter |
+
+### 5. Concurrency & Consistency ⚠️ CRITICAL (Most important for interviews)
+
+**Thread-Safe Requirements:**
+- All operations must be atomic (no torn updates)
+- No race condition on eviction (don't double-evict)
+- No data corruption under concurrent access
+- Cache size invariant: size ≤ capacity always
+
+**Concurrency Strategy (Choose one):**
+
+**Strategy 1: Global ReentrantLock (Simple)**
+```java
+private ReentrantLock lock = new ReentrantLock();
+
+public V get(K key) {
+    lock.lock();
+    try {
+        // all get/put/delete operations inside
+    } finally {
+        lock.unlock();
+    }
+}
+```
+- Pros: Simple, no race conditions
+- Cons: High contention, bottleneck under concurrency
+- Lock wait time = major performance issue
+
+**Strategy 2: Segment-Based Locks (Complex but scalable)**
+```java
+private static final int SEGMENTS = 16;
+private ReentrantLock[] segmentLocks = new ReentrantLock[SEGMENTS];
+
+private int getSegment(K key) {
+    return Math.abs(key.hashCode() % SEGMENTS);
+}
+```
+- Pros: Reduces contention by 16x
+- Cons: More complex, segment-level eviction tricky
+- Eviction in one segment may need global size check
+
+**Strategy 3: ReadWriteLock (For read-heavy)**
+```java
+private ReadWriteLock lock = new ReentrantReadWriteLock();
+
+public V get(K key) {
+    lock.readLock().lock();  // Multiple readers
+    try {
+        // ...
+    } finally {
+        lock.readLock().unlock();
+    }
+}
+
+public void put(K key, V value) {
+    lock.writeLock().lock();  // Exclusive write
+    try {
+        // ...
+    } finally {
+        lock.writeLock().unlock();
+    }
+}
+```
+- Pros: Optimizes read-heavy scenarios (80%+ reads)
+- Cons: Write still blocks everything
+
+**Critical Consistency Issues to Avoid:**
+1. **Lost Update:** Thread A reads, Thread B updates, Thread A overwrites
+   - Fix: Atomic read-update-write (entire operation under lock)
+2. **Double Eviction:** Two threads evict same entry
+   - Fix: Eviction check under lock, no race on size decrement
+3. **Capacity Overflow:** Multiple puts bypass capacity check
+   - Fix: Capacity check atomic with insertion
+4. **Concurrent Modification:** Iterator while map changes
+   - Fix: Don't expose iterator, or use synchronized collections
+
+### 6. Error Handling ✓
+- **Null keys:** Decide - allow or throw NullPointerException?
+- **Null values:** Decide - null = "not found" or allowed value?
+- **OOM (OutOfMemoryError):** Cache full condition
+  - Solution: Evict entries before OOM, never throw OOM
+  - Alternative: Return null or throw custom exception
+- **Concurrent eviction race:** Handle gracefully
+- **TTL expiration:** Lazy delete on access vs background cleanup thread
+  - Lazy: Lower memory initially, higher latency on expired access
+  - Background: Immediate cleanup, adds complexity
+- **Corrupt state:** Lock ensures no corruption
+
+### 7. Optimization ⚠️ CRITICAL (Code-level performance)
+- **Minimize lock critical section:**
+  - Do calculations outside lock if possible
+  - Keep lock time < 1ms for high throughput
+- **Efficient LinkedList operations:**
+  - O(1) node removal requires direct reference
+  - No searching for node to remove
+- **Memory efficiency:**
+  - Minimize object overhead per entry
+  - Reuse nodes if possible
+  - Avoid boxing (Integer, Long) for primitives
+- **Cache-line optimization:**
+  - False sharing in segment locks (pad cache lines)
+  - Align frequently-accessed fields
+- **Avoid GC pressure:**
+  - Reuse node objects
+  - Minimize garbage generation
+- **Lock contention reduction:**
+  - Use fair=false for ReentrantLock (better throughput)
+  - Segment-based approach for concurrent scenarios
+
+### 8. NOT APPLICABLE: Generic LLD Items
+- ✗ ~~Database schema~~ — In-memory data structure
+- ✗ ~~Request/response transformation~~ — In-process, no serialization
+- ✗ ~~Query optimization~~ — No queries, just data structure traversal
+- ✗ ~~Distributed transaction handling~~ — Single-process
+- ✗ ~~Cross-service API calls~~ — Self-contained
+
+### 9. ⚠️ CRITICAL: Cache-Specific LLD Requirements
+
+**Data Structure Selection:**
+```
+LRU Implementation:
+  HashMap<K, Node>                  // O(1) key lookup
+  + DoublyLinkedList of Node        // O(1) ordering by recency
+  Complexity: get O(1), put O(1), delete O(1)
+
+LFU Implementation (Bucket-based):
+  HashMap<K, Node>                  // O(1) key lookup
+  + HashMap<int, LinkedList<Node>>  // Frequency buckets
+  Complexity: get O(1), put O(1), delete O(1)
+  
+LFU Implementation (Heap-based):
+  HashMap<K, Node>
+  + PriorityQueue<Node>             // Min-heap by frequency
+  Complexity: get O(log N), put O(log N) ← SLOWER
+```
+
+**TTL/Expiration Handling:**
+- Option 1: Lazy deletion (simpler)
+  - Check expirationTime on every get()
+  - Only delete when accessed
+  - Pros: Minimal overhead, no background thread
+  - Cons: Expired entries stay until accessed
+  
+- Option 2: Active cleanup (background thread)
+  - Periodic thread scans for expired entries
+  - Evicts immediately after expiration
+  - Pros: Memory is freed immediately
+  - Cons: Background thread overhead, synchronization needed
+  
+- Option 3: Hybrid
+  - Background cleanup every 10 sec + lazy delete on access
+  - Best balance
+
+**Thread-Safety at Method Level:**
+```java
+public V get(K key) {
+    lock.lock();
+    try {
+        Node node = map.get(key);
+        if (node == null) return null;
+        if (node.isExpired()) {  // Check TTL
+            map.remove(key);
+            list.remove(node);  // Unlink from LRU
+            return null;
+        }
+        moveToTail(node);  // Mark as recently used
+        return node.value;
+    } finally {
+        lock.unlock();
+    }
+}
+
+public void put(K key, V value) {
+    lock.lock();
+    try {
+        if (map.containsKey(key)) {
+            Node node = map.get(key);
+            node.value = value;
+            moveToTail(node);
+            return;
+        }
+        // New entry
+        if (map.size() >= capacity) {
+            Node lru = head.next;  // Least recently used
+            map.remove(lru.key);
+            list.remove(lru);  // O(1) because we have direct reference
+        }
+        Node newNode = new Node(key, value);
+        map.put(key, newNode);
+        addToTail(newNode);
+    } finally {
+        lock.unlock();
+    }
+}
+```
+
+**Segment-Based Locking (for high concurrency):**
+```java
+private int hashToSegment(K key) {
+    return Math.abs(key.hashCode()) % SEGMENTS;
+}
+
+public V get(K key) {
+    int segment = hashToSegment(key);
+    segmentLocks[segment].lock();
+    try {
+        // Operation on specific segment
+    } finally {
+        segmentLocks[segment].unlock();
+    }
+}
+// WARNING: Global size check still needs coordination
+```
 
 ---
 
