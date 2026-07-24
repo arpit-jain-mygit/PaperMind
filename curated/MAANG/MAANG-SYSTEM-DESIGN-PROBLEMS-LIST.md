@@ -171,6 +171,138 @@ Hash Map • Doubly Linked List • LRU/LFU Eviction • TTL • Memory Manageme
 
 ---
 
+### HLD Coverage for Cache
+
+**Requirements Clarification:**
+- Max capacity (number of entries or memory size in MB)
+- Expected throughput (operations per second)
+- Eviction policy preference (LRU, LFU, FIFO, TTL)
+- Thread concurrency level (single/multi-threaded)
+- Performance targets (hit rate %, latency SLA)
+
+**Capacity Estimation:**
+- Memory budget per entry (key + value + metadata overhead)
+- Expected cache hit rate targets
+- Read/write ratio
+- Throughput expectations (get/put/delete ops/sec)
+
+**Cache-Specific HLD Requirements:**
+- **Eviction Policies:** LRU (least recently used) vs LFU (least frequently used) vs FIFO vs TTL-based
+  - LRU: Simple, effective for temporal locality
+  - LFU: Better for frequency-based access patterns
+  - Hybrid: Combine multiple strategies
+- **Thread Safety Model:** 
+  - Coarse-grained locking (single ReentrantLock for entire cache)
+  - Fine-grained locking (segment-based locks like ConcurrentHashMap)
+  - Lock-free algorithms (minimal contention)
+- **Memory Management:**
+  - Max capacity enforcement strategy
+  - Segmentation for better cache locality
+  - GC considerations for evicted entries
+  - Memory overhead per entry (metadata, pointers)
+- **Monitoring & Statistics:**
+  - Cache hit/miss rates
+  - Eviction frequency
+  - Average lookup time
+  - Cache utilization percentage
+
+**NOT APPLICABLE (Skip these generic HLD items):**
+- ✗ Consistent Hashing (single-process, not distributed)
+- ✗ Database choice & sharding (in-memory only, no persistence)
+- ✗ Replication & failover (cache is ephemeral, no durability)
+- ✗ Load balancing (single node)
+- ✗ Message queues (no async processing needed)
+- ✗ CDN / Global distribution (single-machine)
+
+---
+
+### LLD Coverage for Cache
+
+**Data Models / Entities:**
+- Cache entry structure: {key, value, frequency/timestamp, access_time}
+- Metadata tracking per entry
+- For LRU: doubly-linked list nodes with prev/next pointers
+- For LFU: frequency counters and frequency bucket lists
+
+**API Contracts:**
+```
+get(K key) -> V value // returns null if not found
+put(K key, V value) -> void // evicts if cache full
+delete(K key) -> boolean // true if existed
+clear() -> void // removes all entries
+getStats() -> CacheStats // hit count, miss count, etc
+```
+
+**Core Logic / Algorithms (CRITICAL):**
+- **LRU Implementation:**
+  - HashMap for O(1) key lookup
+  - DoublyLinkedList for O(1) ordering by recency
+  - get(key): move node to tail (most recent)
+  - put(key, value): add to tail or update
+  - On full: remove head (least recent) with O(1)
+- **LFU Implementation:**
+  - HashMap for key lookup
+  - Frequency counter per entry
+  - MinHeap or frequency bucket for O(log N) eviction
+  - OR use LinkedHashMap with frequency tracking
+- **Time Complexity Requirements:**
+  - get: O(1)
+  - put: O(1)
+  - delete: O(1)
+
+**Concurrency & Consistency (CRITICAL):**
+- **Thread-Safe Access:**
+  - All cache operations atomic (get-and-update as single operation)
+  - No race conditions on eviction
+  - No duplicate evictions
+- **Lock Strategy Options:**
+  - **Approach 1:** ReentrantLock wrapping entire cache
+    - Pros: Simple, strong consistency
+    - Cons: Lock contention under high concurrency
+  - **Approach 2:** ConcurrentHashMap with segment locks
+    - Pros: Better concurrency
+    - Cons: More complex LRU/LFU tracking
+  - **Approach 3:** ReadWriteLock for separate read/write paths
+    - Pros: Multiple readers allowed
+    - Cons: Still blocking writes
+- Idempotency: Multiple concurrent deletes should be safe
+- Consistency: Cache size invariants must hold (never exceed max_capacity)
+
+**Error Handling:**
+- Graceful handling of OOM if max capacity exceeded
+- Handle null keys/values appropriately
+- TTL expiration: lazy deletion vs active background cleanup
+- Handle concurrent eviction race conditions
+
+**Optimization (at code level):**
+- Minimize critical sections (lock time)
+- Efficient node removal from linked list
+- Cache-line alignment to reduce false sharing in multi-threaded scenario
+- Avoid boxing/unboxing with primitive types if possible
+
+**NOT APPLICABLE (Skip these generic LLD items):**
+- ✗ Database schema (no persistence layer)
+- ✗ Request/response transformation (no network, single-process)
+- ✗ Query optimization (no database)
+
+**Cache-Specific LLD Requirements:**
+- **Data Structure Choice:**
+  - LRU: `HashMap<K, Node> + DoublyLinkedList(Node)`
+    - Node = {key, value, prev, next}
+  - LFU: `HashMap<K, Node> + HashMap<int, LinkedList<Node>>` (frequency buckets)
+    - Or use HashMap + PriorityQueue
+- **TTL Implementation (if required):**
+  - Lazy deletion: check expiry time on get (simpler)
+  - Active cleanup: background thread periodically removes expired (more efficient)
+  - Timestamp per entry: created_at or last_accessed_at
+- **Segment-Based Optimization (for high concurrency):**
+  - Divide cache into N segments, each with own lock
+  - Reduces contention vs single lock
+  - hash(key) % N determines segment
+  - Trade-off: slightly more complex code
+
+---
+
 ## 2. Design Recommendation System
 
 **Frequency:** 73% | **Asked by:** Netflix (95%) • Amazon (80%) • Google (65%) • Meta (55%) • Apple (45%)
