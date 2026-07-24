@@ -173,27 +173,157 @@ Hash Map • Doubly Linked List • LRU/LFU Eviction • TTL • Memory Manageme
 
 ## Problem-Specific Checklist: In-Memory Cache
 
-| ⚠️ CRITICAL | 1. Requirements Clarification | Max capacity, throughput (ops/sec), eviction policy (LRU/LFU/TTL), thread concurrency, performance targets (hit rate %, latency SLA) |
-| ⚠️ CRITICAL | 2. Capacity Estimation | Memory per entry (key + value + metadata overhead), hit rate targets, throughput expectations, total memory calculation |
-| ✗ NOT APPLICABLE | 3. Architecture Components | ~~Consistent Hashing~~ • ~~API Gateway~~ • ~~Load Balancer~~ • ~~Database~~ • ~~CDN~~ (single-process only) |
-| ✗ NOT APPLICABLE | 4. Data Layer | ~~Database choice~~ • ~~Sharding~~ • ~~Replication~~ (in-memory only, no persistence) |
-| ⚠️ PARTIAL | 5. Scalability & Performance | Single-node vertical scaling • Memory limits • GC behavior • Concurrent thread limits • ⚠️ CRITICAL: Monitoring (hit/miss ratio, eviction rate, latency, lock contention) |
-| ⚠️ CRITICAL | 6. Tradeoffs | LRU vs LFU (simplicity vs accuracy) • Coarse vs fine-grained locking (consistency vs throughput) • Eager vs lazy eviction (memory vs latency) • Lock contention vs correctness |
-| ⚠️ CRITICAL | **7. Cache-Specific Additions** | **Eviction Policy:** LRU (temporal locality) • LFU (frequency-based) • TTL • Hybrid • **Thread Safety:** ReentrantLock (simple, high contention) • Segment-based locks (better concurrency) • ReadWriteLock (read-heavy) • Lock-free (complex) • **Memory Management:** Max capacity, metadata overhead, proactive vs reactive eviction • **Monitoring:** Hit/miss %, eviction rate, lookup latency, memory utilization |
+### HLD (From Generic Checklist — Customized)
+
+- **⚠️ CRITICAL | 1. Requirements Clarification**
+  - Max capacity (number of entries or memory size in MB)
+  - Throughput expectations (operations/sec)
+  - Eviction policy preference (LRU, LFU, FIFO, TTL, Hybrid)
+  - Thread concurrency level
+  - Performance targets (hit rate %, latency SLA)
+
+- **⚠️ CRITICAL | 2. Capacity Estimation**
+  - Memory per entry (key + value + metadata overhead)
+  - Expected cache hit rate targets
+  - Read/write ratio
+  - Throughput expectations
+  - Total memory calculation
+
+- **✗ NOT APPLICABLE | 3. Architecture Components**
+  - ~~Consistent Hashing~~ (single-process, not distributed)
+  - ~~API Gateway~~ (in-memory, no network layer)
+  - ~~Load Balancer~~ (single node)
+  - ~~Database layer~~ (in-memory only)
+  - ~~CDN~~ (single machine)
+
+- **✗ NOT APPLICABLE | 4. Data Layer**
+  - ~~Database choice (SQL vs NoSQL)~~ (in-memory store only)
+  - ~~Sharding strategy~~ (single-node cache)
+  - ~~Replication & failover~~ (ephemeral data, no persistence)
+
+- **⚠️ PARTIAL | 5. Scalability & Performance**
+  - Single-node vertical scaling (max entries, memory limits)
+  - GC behavior and tuning
+  - Concurrent thread limits
+  - **⚠️ CRITICAL: Monitoring & Alerting**
+    - Cache hit/miss ratio (primary KPI)
+    - Eviction frequency and rate
+    - Average lookup time (latency p50, p99)
+    - Lock contention metrics
+    - Memory utilization %
+
+- **⚠️ CRITICAL | 6. Tradeoffs** (Explain all decisions)
+  - **LRU vs LFU:** Simplicity vs accuracy, O(1) LinkedList vs O(1) buckets
+  - **Coarse vs Fine-Grained Locking:** Consistency vs throughput under concurrency
+  - **Eager vs Lazy Eviction:** Memory efficiency vs latency on expired access
+  - **Lock Contention vs Correctness:** Critical section size vs blocking time
+  - **Memory vs Hit-Rate:** Larger capacity = higher hit rate but more memory
+
+- **⚠️ CRITICAL | 7. Cache-Specific Additions**
+  - **Eviction Policy Selection:**
+    - LRU (Least Recently Used): Temporal locality, HashMap + DoublyLinkedList
+    - LFU (Least Frequently Used): Frequency-based, HashMap + Frequency buckets
+    - TTL-Based: Expiration time per entry
+    - Hybrid: LRU + TTL combined
+  - **Thread Safety Model:**
+    - Coarse-Grained (Global ReentrantLock): Simple, high contention
+    - Fine-Grained (Segment-Based Locks): Better concurrency, complex eviction
+    - ReadWriteLock: Optimizes read-heavy workloads
+    - Lock-Free (Atomic operations): Minimal blocking, complex to implement
+  - **Memory Management:**
+    - Max capacity enforcement (hard limit, no OOM)
+    - Metadata overhead per entry (LRU: 2-3 pointers, LFU: frequency counter)
+    - Proactive vs reactive eviction
+    - GC impact minimization
+  - **Monitoring & Statistics:**
+    - Hit/miss counts and ratio
+    - Eviction count and rate
+    - Average lookup time
+    - Memory utilization (current/max)
+    - Lock wait time (if applicable)
+    - TTL expiration rate
 
 ### LLD (From Generic Checklist — Customized)
 
-| CRITICAL? | Item | Cache-Specific Details |
-|-----------|------|------------------------|
-| ⚠️ CRITICAL | 1. Data Models / Entities | Cache entry: {key, value, lastAccessTime/frequency, expirationTime, prev/next pointers (LRU)} • Metadata overhead per entry |
-| ⚠️ CRITICAL | 2. API Contracts | get(key) → V • put(key, value) → void • delete(key) → boolean • clear() • getStats() • Null handling: keys/values/expired entries |
-| ✗ NOT APPLICABLE | 3. Database Schema | ~~Indexes~~ • ~~Normalization~~ (HashMap IS the index, in-memory data structure) |
-| ⚠️ CRITICAL | 4. Core Logic / Algorithms | **MUST BE O(1):** get(key) • put(key, value) • delete(key) • **LRU:** HashMap + DoublyLinkedList → O(1) all ops • **LFU:** HashMap + Frequency buckets → O(1) all ops • **LFU (Heap):** HashMap + MinHeap → O(log N) eviction (slower) |
-| ⚠️ CRITICAL | 5. Concurrency & Consistency | **Thread-Safe Access:** All operations atomic, no race conditions on eviction • **Strategies:** (1) Global ReentrantLock: simple but high contention • (2) Segment-based locks: better concurrency, complex eviction • (3) ReadWriteLock: read-heavy optimization • **Critical Issues:** Lost updates, double eviction, capacity overflow, concurrent modification |
-| ✓ APPLICABLE | 6. Error Handling | Null keys/values (clarify), OOM prevention (evict before full), TTL expiration (lazy vs active cleanup), concurrent race conditions |
-| ⚠️ CRITICAL | 7. Optimization | Minimize lock critical section (<1ms) • O(1) node removal • Memory efficiency (no boxing) • Cache-line alignment • Avoid GC pressure • Lock-free where possible |
-| ✗ NOT APPLICABLE | 8. NOT APPLICABLE Items | ~~Database schema~~ • ~~Request transformation~~ • ~~Query optimization~~ • ~~Distributed transactions~~ |
-| ⚠️ CRITICAL | **9. Cache-Specific Additions** | **Data Structure:** LRU = HashMap + DoublyLinkedList • LFU = HashMap + Frequency buckets • **TTL:** Lazy (check on get) vs Active (background cleanup) vs Hybrid • **Segment Optimization:** Divide into N segments with own locks, reduces contention by N× |
+- **⚠️ CRITICAL | 1. Data Models / Entities**
+  - Cache entry structure: {key, value, lastAccessTime/frequency, expirationTime, prev/next pointers}
+  - For LRU: Doubly-linked list nodes with prev/next
+  - For LFU: Frequency counter + frequency bucket lists
+  - Metadata overhead must be accounted for in capacity
+
+- **⚠️ CRITICAL | 2. API Contracts**
+  - `get(K key) → V` (return value or null, move to recent for LRU)
+  - `put(K key, V value) → void` (insert/update, evict if full)
+  - `delete(K key) → boolean` (remove specific entry)
+  - `clear() → void` (remove all entries)
+  - `getStats() → CacheStats` (hit/miss/eviction statistics)
+  - Error handling: null keys, null values, expired entries
+
+- **✗ NOT APPLICABLE | 3. Database Schema**
+  - ~~Indexes~~ (HashMap IS the index)
+  - ~~Normalization~~ (in-memory data structure)
+  - ~~Schema design~~ (data structure-based, not relational)
+
+- **⚠️ CRITICAL | 4. Core Logic / Algorithms** (Must be O(1))
+  - **get(key):** HashMap lookup O(1) + move to recent O(1) = O(1)
+  - **put(key, value):** HashMap + LinkedList operations = O(1)
+  - **delete(key):** HashMap remove + LinkedList unlink = O(1)
+  - **LRU Implementation:** HashMap<K, Node> + DoublyLinkedList → O(1) all ops
+  - **LFU Implementation (Bucket-based):** HashMap<K, Node> + HashMap<int, LinkedList<Node>> → O(1) all ops
+  - **LFU Implementation (Heap-based):** HashMap + MinHeap → O(log N) eviction (slower, trade-off acceptable if rare updates)
+
+- **⚠️ CRITICAL | 5. Concurrency & Consistency**
+  - **Thread-Safe Access:**
+    - All operations must be atomic (no torn updates)
+    - No race conditions on eviction (prevent double-eviction)
+    - Cache size invariant: size ≤ capacity always
+  - **Lock Strategies (choose one):**
+    1. Global ReentrantLock: Simple, strong consistency, high contention
+    2. Segment-Based Locks: Better throughput, more complex, N segments with own locks
+    3. ReadWriteLock: Optimizes read-heavy scenarios (80%+ reads)
+    4. Lock-Free: AtomicReference/CAS loops, minimal blocking, very complex
+  - **Critical Race Conditions to Avoid:**
+    - Lost Update: Ensure read-update-write is atomic
+    - Double Eviction: Eviction check must be atomic with size decrement
+    - Capacity Overflow: Capacity check atomic with insertion
+    - Concurrent Modification: Don't expose iterators during concurrent access
+
+- **✓ APPLICABLE | 6. Error Handling**
+  - Null key handling: decide if allowed or throw exception
+  - Null value handling: distinguish "not found" vs allowed null
+  - OOM prevention: evict entries before OutOfMemoryError
+  - TTL expiration: lazy deletion (on access) vs active cleanup (background thread)
+  - Concurrent eviction race conditions: handle gracefully with locking
+
+- **⚠️ CRITICAL | 7. Optimization** (Code-level performance)
+  - Minimize lock critical section: keep under 1ms for high throughput
+  - O(1) node removal: requires direct reference, not searching
+  - Memory efficiency: minimize object overhead, avoid boxing primitives
+  - Cache-line alignment: reduce false sharing in segment-based approach
+  - Avoid GC pressure: reuse objects, minimize garbage generation
+  - Lock contention reduction: use fair=false for ReentrantLock, segment-based for concurrent scenarios
+
+- **✗ NOT APPLICABLE | 8. Items NOT Applicable**
+  - ~~Database schema~~ (in-memory data structure only)
+  - ~~Request/response transformation~~ (in-process, no serialization)
+  - ~~Query optimization~~ (no queries, just data structure traversal)
+  - ~~Distributed transaction handling~~ (single-process)
+  - ~~Cross-service API calls~~ (self-contained)
+
+- **⚠️ CRITICAL | 9. Cache-Specific Additions**
+  - **Data Structure Selection:**
+    - LRU: HashMap<K, Node> + DoublyLinkedList (O(1) all operations)
+    - LFU (Bucket): HashMap<K, Node> + HashMap<int, LinkedList<Node>> (O(1) all operations)
+    - LFU (Heap): HashMap + MinHeap (O(log N) eviction, simpler but slower)
+  - **TTL/Expiration Strategy:**
+    - Lazy Deletion: Check expiry on get() (simpler, no background thread)
+    - Active Cleanup: Background thread periodically removes expired entries (immediate memory freed)
+    - Hybrid: Periodic cleanup + lazy deletion (best balance)
+  - **Segment-Based Locking (for high concurrency):**
+    - Divide cache into N segments (typically 16 or 32)
+    - Each segment has own ReentrantLock
+    - Reduces lock contention by ~N times
+    - Trade-off: More complex, global size check needs coordination
 
 ---
 
