@@ -8392,6 +8392,312 @@ Result:
    - Trading/payment: ZGC
 3. **Monitor GC in production** → if pauses > acceptable, tune or switch algorithm
 4. **Reduce object creation** → less garbage = less GC work = better performance
+
+---
+
+#### Q2: GC Techniques for In-Memory Cache Systems (LRU/LFU Cache Design)
+
+**Scenario:** You're designing an in-memory LRU/LFU cache with 200MB capacity. It processes 1000 QPS with high eviction rates. Which GC technique should you use and why?
+
+---
+
+**PART A: Why GC Matters for Cache Systems**
+
+```
+Cache Problem (Why GC is critical):
+- Cache continuously evicts old entries
+- 1000 QPS × 1 KB = 1000 objects/sec removed from cache
+- Each removal = garbage waiting to be cleaned
+- Poor GC choice = latency spikes → cache becomes slow!
+
+Example:
+Without proper GC tuning:
+  └─ Request #1: get() → 1ms (fast, cache working)
+  └─ Request #2: get() → 1ms
+  └─ Request #3: get() → 500ms (GC pause! Missing market update!)
+  └─ Request #4: get() → 1ms
+  
+Problem: Unpredictable latency = cache system unreliable
+```
+
+---
+
+**PART B: GC Techniques Comparison for Cache**
+
+| GC Type | Pause Time | Best For | Why/Why Not for Cache |
+|---------|-----------|----------|----------------------|
+| **Generational (Default)** | 100-1000ms | Batch jobs | ❌ Too slow for cache (pauses unacceptable) |
+| **Parallel GC** | 100-500ms | Medium load | ⚠️ Better but still risky for cache |
+| **CMS (Concurrent)** | 10-100ms | Older systems | ⚠️ Works but deprecated, complex tuning |
+| **G1GC** | 10-50ms | Web servers | ✓✓ **BEST for most caches** (predictable) |
+| **ZGC** | <10ms | Ultra-low latency | ✓✓✓ **Best for critical caches** (<5ms requirement) |
+| **Shenandoah** | <10ms | Alternative to ZGC | ✓✓✓ Alternative to ZGC |
+
+---
+
+**PART C: Detailed Technique Explanations**
+
+**1. Serial GC (❌ NOT recommended for cache)**
+
+```
+How it works:
+- One thread cleans the entire garbage
+- Application STOPS during cleanup
+- Pause: 500ms - 2 seconds
+
+Cache impact:
+  Cache hit request arrives → PAUSE 500ms → Response delayed
+  Result: 80% of requests affected = unacceptable
+
+When: Only for tiny caches or dev environment
+```
+
+---
+
+**2. Parallel GC (⚠️ Acceptable but risky)**
+
+```
+How it works:
+- Multiple GC threads work simultaneously
+- Application STOPS during all cleanup
+- Pause: 100ms - 500ms
+
+Cache impact:
+  Cache hit → PAUSE 200ms → User gets timeout
+  Result: Some requests affected = acceptable if SLA > 200ms
+
+When: Medium-sized caches where 200ms pause acceptable
+```
+
+---
+
+**3. G1GC (✓✓ BEST for most caches)**
+
+```
+How it works:
+- Divides heap into regions
+- Cleans regions concurrently
+- Predictable small pauses
+- Pause: 10ms - 50ms (configurable)
+
+Cache impact:
+  Cache hit → PAUSE 20ms (unnoticed) → User never knows
+  Result: Minimal impact, consistent performance
+
+Tuning for cache:
+  -XX:+UseG1GC                    # Enable G1GC
+  -XX:MaxGCPauseMillis=50         # Target max pause: 50ms
+  -Xmx1G                          # Heap size (1GB for 200MB cache)
+
+When: RECOMMENDED for most in-memory cache systems
+```
+
+---
+
+**4. ZGC (✓✓✓ BEST for critical/high-throughput caches)**
+
+```
+How it works:
+- Almost entirely concurrent
+- Cleanup happens while cache processes
+- Pause: < 10ms (nearly zero)
+
+Cache impact:
+  Cache hit → PAUSE 2ms (unnoticed) → User never knows
+  Result: Ultra-predictable performance, no pauses
+
+Trade-off: Higher CPU usage (20-30% for GC threads)
+
+When: 
+  - Require < 5ms latency
+  - 10,000+ QPS
+  - Critical financial/trading systems
+
+Example: High-frequency trading cache
+  100,000 QPS × ZGC → pause < 2ms → PERFECT
+  100,000 QPS × G1GC → pause 20ms → TOO SLOW
+```
+
+---
+
+**PART D: Decision Tree for Cache GC Choice**
+
+```
+Start: Designing in-memory cache system
+
+Q1: Required latency SLA?
+  ├─ < 5ms? → Go to Q2
+  ├─ 5-50ms? → G1GC (recommended)
+  └─ > 50ms? → Parallel GC
+
+Q2: Processing throughput?
+  ├─ 10,000+ QPS? → ZGC or Shenandoah
+  ├─ 1,000-10,000 QPS? → G1GC
+  └─ < 1,000 QPS? → G1GC (or Parallel)
+
+Q3: Hardware availability?
+  ├─ Limited CPU? → G1GC (lower overhead than ZGC)
+  ├─ Abundant CPU? → ZGC (higher CPU ok)
+  └─ Constrained memory? → G1GC (works with variable heap)
+
+RESULT:
+  ├─ Most cases → **G1GC** ← Sweet spot
+  ├─ Ultra-critical systems → **ZGC**
+  └─ Learning/dev → Generational (default)
+```
+
+---
+
+**PART E: Real Example - 200MB LRU Cache**
+
+```java
+// Scenario: 200MB cache, 1000 QPS, 80% hit rate
+// Cache evicts ~200 objects/sec
+
+Approach 1: Generational GC (❌ BAD)
+Startup: java -Xmx1G MyCache
+Result:
+  └─ Request #1000: get() → 1ms
+  └─ Request #1001: Full GC triggered → PAUSE 600ms
+  └─ Customer timeout, complains
+  └─ Unacceptable
+
+Approach 2: G1GC (✓ GOOD)
+Startup: java -Xmx1G -XX:+UseG1GC -XX:MaxGCPauseMillis=50 MyCache
+Result:
+  └─ Request #1000: get() → 1ms
+  └─ Request #1001: Young GC region → PAUSE 15ms (unnoticed)
+  └─ Request #1002: get() → 1ms (consistent)
+  └─ 99.9% of requests < 50ms latency
+  └─ Acceptable!
+
+Approach 3: ZGC (✓✓ EXCELLENT)
+Startup: java -Xmx1G -XX:+UseZGC MyCache
+Result:
+  └─ Request #1000: get() → 1ms
+  └─ Request #1001: Concurrent GC → PAUSE 2ms (nearly invisible)
+  └─ Request #1002: get() → 1ms (ultra-consistent)
+  └─ 99.99% of requests < 10ms latency
+  └─ Perfect!
+```
+
+---
+
+**PART F: Monitoring GC for Cache Systems**
+
+```java
+// Monitor GC behavior
+List<GarbageCollectorMXBean> gcBeans = 
+    ManagementFactory.getGarbageCollectorMXBeans();
+
+for (GarbageCollectorMXBean bean : gcBeans) {
+    System.out.println("GC: " + bean.getName());
+    System.out.println("  Collections: " + bean.getCollectionCount());
+    System.out.println("  Time: " + bean.getCollectionTime() + "ms");
+}
+
+// Expected for 200MB cache with 1000 QPS:
+// G1GC Young GC:  Every 5-10 seconds,  ~20ms pause time
+// G1GC Full GC:   Every 1-2 hours,     ~200ms pause time
+// ZGC:            Continuous minor,    < 5ms pause time
+
+// Alert if:
+// └─ Full GC happening more than every 30 minutes → Cache too small
+// └─ Average pause time > 100ms → Wrong GC choice
+// └─ GC CPU > 30% → Excessive object creation in cache
+```
+
+---
+
+**PART G: Tuning Parameters for Different Scenarios**
+
+**Scenario 1: 200MB Cache, 1000 QPS (Most Common)**
+
+```bash
+java -Xmx1G \
+     -XX:+UseG1GC \
+     -XX:MaxGCPauseMillis=50 \
+     -XX:+ParallelRefProcEnabled \
+     MyCache
+
+# Explanation:
+# -Xmx1G: 1GB heap (5x cache size, room for GC)
+# -XX:+UseG1GC: G1 garbage collector
+# -XX:MaxGCPauseMillis=50: Target max pause 50ms
+# -XX:+ParallelRefProcEnabled: Parallel reference processing
+```
+
+**Scenario 2: Large Cache, High Throughput (10,000+ QPS)**
+
+```bash
+java -Xmx8G \
+     -XX:+UseZGC \
+     -XX:ConcGCThreads=4 \
+     MyHighThroughputCache
+
+# Explanation:
+# -Xmx8G: 8GB heap for large cache
+# -XX:+UseZGC: ZGC for ultra-low latency
+# -XX:ConcGCThreads=4: 4 concurrent GC threads
+```
+
+**Scenario 3: Learning/Development**
+
+```bash
+java -Xmx512M MyCache  # Let default GC handle it
+```
+
+---
+
+**PART H: Interview Answer**
+
+> "**GC Strategy for In-Memory Cache (200MB, 1000 QPS):**
+>
+> **Recommended: G1GC** with these tuning parameters:
+> ```
+> -Xmx1G -XX:+UseG1GC -XX:MaxGCPauseMillis=50
+> ```
+>
+> **Why G1GC:**
+> - Predictable pause times (10-50ms) → cache latency acceptable
+> - Region-based collection → efficient for eviction-heavy workloads
+> - Default in modern Java 11+ → no special JDK needed
+> - Good balance: low latency + reasonable CPU overhead
+>
+> **How it works for cache:**
+> - Cache evicts objects continuously (1000 QPS)
+> - G1GC collects garbage-heavy regions
+> - Pause time ~20ms (unnoticeable to users)
+> - Hit rate target 80% achieved consistently
+>
+> **Alternative: ZGC (if latency < 5ms required)**
+> ```
+> -Xmx1G -XX:+UseZGC
+> ```
+> - Ultra-low pause times (< 10ms)
+> - Better for trading/financial systems
+> - Higher CPU overhead (acceptable for critical systems)
+>
+> **Monitoring:**
+> - Alert if GC pause time > 100ms
+> - Monitor GC frequency (full GC should be rare)
+> - Cache hit rate + latency percentiles (p50, p99)
+> 
+> **Key insight:** Cache system success depends on predictable latency.
+> G1GC provides that predictability without over-engineering."
+>
+> **Follow-up:** "Should we add heap size tuning based on actual metrics?"
+> **Answer:** "Yes, start with 1GB heap for 200MB cache. Monitor GC logs. If full GC > 2/hour, increase to 2GB."
+
+---
+
+**Key Takeaways for Cache GC:**
+
+1. **G1GC is the sweet spot** for most in-memory cache systems (200MB - 2GB)
+2. **ZGC for ultra-low latency** (< 5ms required, high throughput)
+3. **Heap size = 4-5x cache size** (room for temporary objects, GC overhead)
+4. **Monitor pause times** → if > 100ms, tune or switch GC algorithm
+5. **Eviction rate matters** → more evictions = more garbage = GC pressure
 5. **Avoid memory leaks** → don't hold references to objects that should be garbage
 
 ---
