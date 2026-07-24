@@ -5,6 +5,95 @@
 
 ---
 
+## Interview Checklist: HLD & LLD Coverage
+
+### HLD (High-Level Design) — Start Here
+
+**1. Requirements Clarification**
+- Functional requirements (what features?)
+- Non-functional requirements (scale, latency, availability, consistency)
+- Example: "How many users? QPS? Read/write ratio? Geographic distribution?"
+
+**2. Capacity Estimation**
+- DAU/MAU → QPS calculations
+- Storage estimates
+- Bandwidth requirements
+
+**3. Architecture Components**
+- Client layer (web, mobile, APIs)
+- API Gateway / Load Balancer
+- Application servers / microservices
+- Database (SQL vs NoSQL choice + reasoning)
+- Cache layer (Redis, Memcached where)
+- Message queue (Kafka, RabbitMQ if async needed)
+- Search (Elasticsearch if needed)
+- CDN / static storage
+
+**4. Data Layer**
+- Database choice & schema design
+- Partitioning/sharding strategy (if needed)
+- Replication & failover
+
+**5. Scalability & Performance**
+- Horizontal scaling approach
+- Caching strategy (what to cache, TTL)
+- Rate limiting / throttling
+- Monitoring & alerting
+
+**6. Tradeoffs**
+- Why this choice over alternatives
+- Consistency vs Availability tradeoffs
+- Latency vs Durability
+
+---
+
+### LLD (Low-Level Design) — Deep Dive When Asked
+
+**1. Data Models / Entities**
+- Class/object definitions
+- Relationships (1:1, 1:N, M:N)
+- Primary/foreign keys
+
+**2. API Contracts**
+- Endpoints (REST, gRPC)
+- Request/response format
+- Status codes & error handling
+
+**3. Database Schema**
+- Normalized vs denormalized approach
+- Indexes (what to index, why)
+- Partitioning keys if sharded
+
+**4. Core Logic / Algorithms**
+- Key operations (read, write, search, delete)
+- Algorithm complexity
+- Edge cases handled
+
+**5. Concurrency & Consistency**
+- Thread safety (locks, atomic operations, ConcurrentHashMap)
+- Transaction handling
+- Consistency guarantees per operation
+
+**6. Error Handling**
+- Exception types
+- Retry logic
+- Graceful degradation
+
+**7. Optimization**
+- Query optimization
+- Caching at code level
+- Connection pooling
+
+---
+
+### Pro Tips
+- **HLD first, then LLD** — start broad, drill down only when asked
+- **Explain tradeoffs**, not just choices — "I chose X because Y, tradeoff is Z"
+- **Be ready to scale deeper** — if they push, have LLD details ready
+- **Time management** — spend 60-70% on HLD, 30-40% on LLD (unless they ask otherwise)
+
+---
+
 ## Table of Contents
 
 ### 🔴 Highest Priority (70%+)
