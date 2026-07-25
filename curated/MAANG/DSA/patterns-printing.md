@@ -65,7 +65,7 @@ The 43 problems are organized into 5 difficulty levels to help with progressive 
 | 27 | Normal Diamond Pattern | ✅ | [View](#problem-27-normal-diamond-pattern) |
 | 28 | Hollow Diamond Pattern | ✅ | [View](#problem-28-hollow-diamond-pattern) |
 | 29 | Right Arrow Pattern | ✅ | [View](#problem-29-right-arrow-pattern) |
-| 30 | Diamond/Arrow Pattern (Input 11) | ⏳ | [View](#problem-30-diamondarrow-pattern-input-11) |
+| 30 | Diamond/Arrow Pattern (Input 11) | ✅ | [View](#problem-30-diamondarrow-pattern-input-11) |
 | 31 | Diamond/Arrow Pattern (Input 12) | ⏳ | [View](#problem-31-diamondarrow-pattern-input-12) |
 | 32 | Cross Pattern | ✅ | [View](#problem-32-cross-pattern) |
 | 33 | Rhombus Pattern | ✅ | [View](#problem-33-rhombus-pattern) |
@@ -955,7 +955,29 @@ public static void main(String args[]) {
 ```
 
 ### Solution with O(1) Space Complexity
-(To be added)
+```java
+public static void main(String args[]) {
+    int n = 4;
+    
+    //1st half
+    for(int i=1; i<=n; i++){
+        for(int j=1; j<=4*i-3; j++){
+            System.out.print("*");
+            if (j<4*i-3) System.out.print(" ");//print space after each number, except last one
+        }
+        System.out.println();
+    }
+
+    //2nd half      
+    for(int i=n-1; i>=1; i--){
+        for(int j=1; j<=4*i-3; j++){
+            System.out.print("*");
+            if (j<4*i-3) System.out.print(" ");//print space after each number, except last one
+        }
+        System.out.println();
+    }
+}
+```
 
 ---
 
