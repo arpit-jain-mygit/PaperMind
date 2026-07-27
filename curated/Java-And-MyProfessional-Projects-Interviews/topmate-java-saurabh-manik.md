@@ -607,47 +607,49 @@ public class ConnectionPool {
     private final int poolSize = 3;
     
     public ConnectionPool() {
-        this.semaphore = new Semaphore(poolSize); // 3 available connections
+        this.semaphore = new Semaphore(poolSize);
     }
     
     public void useConnection(String userId) throws InterruptedException {
         System.out.println("[" + userId + "] Waiting for connection...");
         long start = System.currentTimeMillis();
         
-        semaphore.acquire(); // Wait for available connection
+        semaphore.acquire();
         long waitTime = System.currentTimeMillis() - start;
         
         System.out.println("[" + userId + "] Got connection (waited " + waitTime + "ms)");
-        
-        // Simulate using connection
         Thread.sleep(1000);
-        
         System.out.println("[" + userId + "] Releasing connection");
-        semaphore.release(); // Release connection for others
+        semaphore.release();
     }
     
-    public static void main(String[] args) throws InterruptedException {
-        ConnectionPool pool = new ConnectionPool();
-        
+    // Helper method - creates the task for each user
+    private Runnable userTask(int userId) {
+        return () -> {
+            try {
+                useConnection("User-" + userId);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        };
+    }
+    
+    public void run() throws InterruptedException {
         System.out.println("=== Connection Pool with 3 Available Connections ===\n");
         
-        // 5 users try to connect (but only 3 connections available)
         Thread[] threads = new Thread[5];
         for (int i = 1; i <= 5; i++) {
-            final int userId = i;
-            threads[i-1] = new Thread(() -> {
-                try {
-                    pool.useConnection("User-" + userId);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            });
+            threads[i-1] = new Thread(userTask(i));
         }
         
         for (Thread t : threads) t.start();
         for (Thread t : threads) t.join();
         
         System.out.println("\n✓ All users processed");
+    }
+    
+    public static void main(String[] args) throws InterruptedException {
+        new ConnectionPool().run();
     }
 }
 
