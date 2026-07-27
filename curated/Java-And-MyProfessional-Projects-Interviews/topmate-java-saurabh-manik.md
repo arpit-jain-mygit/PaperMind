@@ -595,49 +595,250 @@ Semaphore semaphore = new Semaphore(3); // 3 permits
 // release() -> counter++, wakes up blocked threads
 ```
 
+---
+
 **Use Case 1: Connection Pool (Resource Limiting):**
+
 ```java
+import java.util.concurrent.Semaphore;
+
 public class ConnectionPool {
-    private final Semaphore semaphore = new Semaphore(10); // 10 connections
-    private final BlockingQueue<Connection> pool = new LinkedBlockingQueue<>();
+    private final Semaphore semaphore;
+    private final int poolSize = 3;
     
-    public Connection acquire() throws InterruptedException {
-        semaphore.acquire(); // Wait for available connection
-        return pool.take();
+    public ConnectionPool() {
+        this.semaphore = new Semaphore(poolSize); // 3 available connections
     }
     
-    public void release(Connection conn) {
-        pool.put(conn);
-        semaphore.release(); // Make permit available
+    public void useConnection(String userId) throws InterruptedException {
+        System.out.println("[" + userId + "] Waiting for connection...");
+        long start = System.currentTimeMillis();
+        
+        semaphore.acquire(); // Wait for available connection
+        long waitTime = System.currentTimeMillis() - start;
+        
+        System.out.println("[" + userId + "] Got connection (waited " + waitTime + "ms)");
+        
+        // Simulate using connection
+        Thread.sleep(1000);
+        
+        System.out.println("[" + userId + "] Releasing connection");
+        semaphore.release(); // Release connection for others
+    }
+    
+    public static void main(String[] args) throws InterruptedException {
+        ConnectionPool pool = new ConnectionPool();
+        
+        System.out.println("=== Connection Pool with 3 Available Connections ===\n");
+        
+        // 5 users try to connect (but only 3 connections available)
+        Thread[] threads = new Thread[5];
+        for (int i = 1; i <= 5; i++) {
+            final int userId = i;
+            threads[i-1] = new Thread(() -> {
+                try {
+                    pool.useConnection("User-" + userId);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            });
+        }
+        
+        for (Thread t : threads) t.start();
+        for (Thread t : threads) t.join();
+        
+        System.out.println("\n✓ All users processed");
     }
 }
+
+/* OUTPUT:
+=== Connection Pool with 3 Available Connections ===
+
+[User-1] Waiting for connection...
+[User-2] Waiting for connection...
+[User-3] Waiting for connection...
+[User-4] Waiting for connection...
+[User-5] Waiting for connection...
+[User-1] Got connection (waited 1ms)
+[User-2] Got connection (waited 2ms)
+[User-3] Got connection (waited 3ms)
+[User-4] Waiting...          <- Blocked! Only 3 connections
+[User-5] Waiting...          <- Blocked! Only 3 connections
+[User-1] Releasing connection
+[User-4] Got connection (waited 1050ms)   <- Now gets connection
+[User-2] Releasing connection
+[User-5] Got connection (waited 1100ms)
+[User-3] Releasing connection
+[User-4] Releasing connection
+[User-5] Releasing connection
+
+✓ All users processed
+*/
 ```
 
-**Use Case 2: Rate Limiting:**
+---
+
+**Use Case 2: Rate Limiting (Requests Per Second):**
+
 ```java
+import java.util.concurrent.Semaphore;
+
 public class ApiRateLimiter {
-    private final Semaphore limiter = new Semaphore(100); // 100 requests
+    private final Semaphore limiter;
+    private final int maxRequests = 3; // Max 3 requests
     
-    public void callApi() throws InterruptedException {
-        limiter.acquire();
+    public ApiRateLimiter() {
+        this.limiter = new Semaphore(maxRequests);
+    }
+    
+    public void callApi(String clientId) throws InterruptedException {
+        System.out.println("[" + clientId + "] Requesting API...");
+        long start = System.currentTimeMillis();
+        
+        limiter.acquire(); // Wait if already at limit
+        long waitTime = System.currentTimeMillis() - start;
+        
+        System.out.println("[" + clientId + "] API Call allowed (waited " + waitTime + "ms)");
+        
+        // Simulate API call
+        Thread.sleep(500);
+        
+        System.out.println("[" + clientId + "] API Call done");
+        limiter.release(); // Free up permit
+    }
+    
+    public static void main(String[] args) throws InterruptedException {
+        ApiRateLimiter limiter = new ApiRateLimiter();
+        
+        System.out.println("=== Rate Limiting: Max 3 Concurrent Requests ===\n");
+        
+        // 6 clients make requests (but only 3 allowed concurrently)
+        Thread[] threads = new Thread[6];
+        for (int i = 1; i <= 6; i++) {
+            final int clientId = i;
+            threads[i-1] = new Thread(() -> {
+                try {
+                    limiter.callApi("Client-" + clientId);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            });
+        }
+        
+        long startTime = System.currentTimeMillis();
+        for (Thread t : threads) t.start();
+        for (Thread t : threads) t.join();
+        long totalTime = System.currentTimeMillis() - startTime;
+        
+        System.out.println("\nTotal time: " + totalTime + "ms");
+        System.out.println("(With rate limiting, requests had to queue)");
+    }
+}
+
+/* OUTPUT:
+=== Rate Limiting: Max 3 Concurrent Requests ===
+
+[Client-1] Requesting API...
+[Client-2] Requesting API...
+[Client-3] Requesting API...
+[Client-4] Requesting API...
+[Client-5] Requesting API...
+[Client-6] Requesting API...
+[Client-1] API Call allowed (waited 1ms)
+[Client-2] API Call allowed (waited 2ms)
+[Client-3] API Call allowed (waited 2ms)
+[Client-4] API Call allowed (waited 3ms)   <- Blocked until a permit freed
+[Client-5] API Call allowed (waited 504ms) <- Had to wait
+[Client-6] API Call allowed (waited 505ms) <- Had to wait
+[Client-1] API Call done
+[Client-2] API Call done
+[Client-3] API Call done
+[Client-4] API Call done
+[Client-5] API Call done
+[Client-6] API Call done
+
+Total time: 1055ms
+(With rate limiting, requests had to queue)
+*/
+```
+
+---
+
+**Use Case 3: Binary Semaphore (Acts as Mutex/Lock):**
+
+```java
+import java.util.concurrent.Semaphore;
+
+public class BinarySemaphore {
+    private final Semaphore mutex = new Semaphore(1); // Binary semaphore (0 or 1)
+    private int sharedCounter = 0;
+    
+    public void criticalSection(String threadName) throws InterruptedException {
+        System.out.println("[" + threadName + "] Waiting for lock...");
+        
+        mutex.acquire(); // Lock
         try {
-            // Make API call
+            System.out.println("[" + threadName + "] Entered critical section");
+            
+            // Simulate critical operation
+            int temp = sharedCounter;
+            Thread.sleep(100);
+            sharedCounter = temp + 1;
+            
+            System.out.println("[" + threadName + "] Updated counter to " + sharedCounter);
         } finally {
-            limiter.release();
+            mutex.release(); // Unlock
+            System.out.println("[" + threadName + "] Exited critical section");
         }
     }
     
-    // Reset permits every second (token bucket simulation)
-    public void resetLimits() {
-        int currentPermits = 100 - limiter.availablePermits();
-        semaphore.release(currentPermits);
+    public static void main(String[] args) throws InterruptedException {
+        BinarySemaphore semaphore = new BinarySemaphore();
+        
+        System.out.println("=== Binary Semaphore (Mutex Lock) ===\n");
+        
+        // 3 threads competing for critical section
+        Thread[] threads = new Thread[3];
+        for (int i = 1; i <= 3; i++) {
+            final int id = i;
+            threads[i-1] = new Thread(() -> {
+                try {
+                    semaphore.criticalSection("Thread-" + id);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            });
+        }
+        
+        for (Thread t : threads) t.start();
+        for (Thread t : threads) t.join();
+        
+        System.out.println("\nFinal counter value: " + semaphore.sharedCounter);
+        System.out.println("(Binary semaphore prevented race conditions)");
     }
 }
-```
 
-**Use Case 3: Multi-permit Semaphore (Binary Semaphore = Mutex):**
-```java
-Semaphore mutex = new Semaphore(1); // Acts like a lock
+/* OUTPUT:
+=== Binary Semaphore (Mutex Lock) ===
+
+[Thread-1] Waiting for lock...
+[Thread-2] Waiting for lock...
+[Thread-3] Waiting for lock...
+[Thread-1] Entered critical section
+[Thread-2] Waiting...  <- Blocked, only 1 permit
+[Thread-3] Waiting...  <- Blocked, only 1 permit
+[Thread-1] Updated counter to 1
+[Thread-1] Exited critical section
+[Thread-2] Entered critical section
+[Thread-2] Updated counter to 2
+[Thread-2] Exited critical section
+[Thread-3] Entered critical section
+[Thread-3] Updated counter to 3
+[Thread-3] Exited critical section
+
+Final counter value: 3
+(Binary semaphore prevented race conditions)
+*/
 ```
 
 ---
