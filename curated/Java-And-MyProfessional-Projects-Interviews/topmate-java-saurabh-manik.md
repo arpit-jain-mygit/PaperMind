@@ -6,6 +6,8 @@
 ## Table of Contents
 1. [Core Java - Collections](#core-java---collections)
 2. [Core Java - Multi-Threading](#core-java---multi-threading)
+   - [Q1-Q12: Core threading concepts](#core-java---collections)
+   - [Q13-Q16: ExecutorService & ThreadPoolExecutor](#q13-executorservice---thread-pool-abstraction)
 3. [Other Topics](#other-topics)
    - [JWT Token](#jwt-token)
    - [Design Patterns](#design-patterns)
@@ -760,6 +762,479 @@ public class EvenOddWithLock {
 - **Solution 1 (Wait-Notify)**: Classic but error-prone (spurious wakeups)
 - **Solution 2 (Semaphore)**: Clean and explicit intent
 - **Solution 3 (Lock + Condition)**: Most flexible, best for multiple conditions
+
+---
+
+### Q13: ExecutorService - Thread Pool Abstraction
+
+**What is ExecutorService?**
+An abstraction layer for managing a pool of reusable threads. Instead of creating new threads for each task, you submit tasks to a pool that handles thread management.
+
+**Without ExecutorService (Bad Practice):**
+```java
+// Creating threads for each task is expensive
+for (int i = 0; i < 1000; i++) {
+    new Thread(() -> {
+        performTask(i);
+    }).start(); // 1000 threads created!
+}
+
+// Problems:
+// - Thread creation is expensive (10s of ms per thread)
+// - Memory overhead (each thread ~1MB stack)
+// - Context switching overhead (1000 threads competing)
+// - GC pressure from creating/destroying threads
+```
+
+**With ExecutorService (Best Practice):**
+```java
+// Reuse a pool of threads
+ExecutorService executor = Executors.newFixedThreadPool(10); // 10 threads
+
+for (int i = 0; i < 1000; i++) {
+    executor.execute(() -> performTask(i)); // Task queued to pool
+}
+
+executor.shutdown();
+executor.awaitTermination(1, TimeUnit.MINUTES);
+
+// Benefits:
+// - 10 threads handle 1000 tasks
+// - Threads reused (no creation overhead)
+// - Bounded concurrency (no resource explosion)
+// - Work queue buffers tasks
+```
+
+**ExecutorService Hierarchy:**
+```
+Executor (interface)
+├── void execute(Runnable command)
+│
+ExecutorService (extends Executor)
+├── <T> Future<T> submit(Callable<T> task)
+├── void shutdown()
+├── List<Runnable> shutdownNow()
+├── boolean awaitTermination(long timeout, TimeUnit unit)
+│
+AbstractExecutorService
+│
+ThreadPoolExecutor (most common implementation)
+├── newFixedThreadPool()
+├── newCachedThreadPool()
+├── newSingleThreadExecutor()
+```
+
+**Factory Methods vs Constructor:**
+```java
+// Using Executors factory methods (simple)
+ExecutorService fixed = Executors.newFixedThreadPool(10);
+ExecutorService cached = Executors.newCachedThreadPool();
+ExecutorService single = Executors.newSingleThreadExecutor();
+
+// Direct ThreadPoolExecutor (full control)
+ExecutorService customPool = new ThreadPoolExecutor(
+    5,                                    // corePoolSize
+    15,                                   // maximumPoolSize
+    60, TimeUnit.SECONDS,                 // keepAliveTime
+    new LinkedBlockingQueue<>(100),       // workQueue
+    Executors.defaultThreadFactory(),     // threadFactory
+    new ThreadPoolExecutor.AbortPolicy()  // rejectionPolicy
+);
+```
+
+**Common Executors Patterns:**
+```java
+// 1. Fixed Thread Pool - Best for known workload
+ExecutorService fixed = Executors.newFixedThreadPool(10);
+
+// 2. Cached Thread Pool - Best for short-lived async tasks
+ExecutorService cached = Executors.newCachedThreadPool();
+
+// 3. Single Thread Executor - Serialized task execution
+ExecutorService single = Executors.newSingleThreadExecutor();
+
+// 4. Scheduled Executor - For recurring tasks
+ScheduledExecutorService scheduled = Executors.newScheduledThreadPool(5);
+scheduled.schedule(() -> System.out.println("Hello"), 5, TimeUnit.SECONDS);
+scheduled.scheduleAtFixedRate(() -> System.out.println("Tick"), 0, 1, TimeUnit.SECONDS);
+
+// 5. Work Stealing Pool (Java 8+) - Fork/Join framework
+ExecutorService forkJoin = Executors.newWorkStealingPool();
+```
+
+**Using Callable vs Runnable:**
+```java
+// Runnable - returns void
+executor.execute(() -> System.out.println("Task"));
+
+// Callable - returns result + throws checked exceptions
+Future<Integer> future = executor.submit(() -> {
+    return expensiveCalculation();
+});
+
+try {
+    Integer result = future.get(5, TimeUnit.SECONDS); // Blocks until complete
+    System.out.println("Result: " + result);
+} catch (TimeoutException e) {
+    System.out.println("Task took too long");
+    future.cancel(true); // Cancel task
+}
+```
+
+---
+
+### Q14: ThreadPoolExecutor - Detailed Configuration
+
+**Thread Pool Parameters:**
+```
+┌─────────────────────────────────────────────┐
+│  ThreadPoolExecutor Configuration           │
+├─────────────────────────────────────────────┤
+│ Core Pool Size:    5                        │
+│ Max Pool Size:     20                       │
+│ Keep Alive Time:   60s                      │
+│ Work Queue:        LinkedBlockingQueue(100) │
+│ Rejection Policy:  AbortPolicy              │
+└─────────────────────────────────────────────┘
+```
+
+**Thread Lifecycle:**
+```
+Initial:           0 threads
+
+Submit task 1:     1 thread created (< corePoolSize)
+Submit tasks 2-5:  4 more threads created (total 5 = corePoolSize)
+Submit task 6:     Added to queue (doesn't create new thread yet)
+Submit task 11:    Queue full, create thread 6 (up to maximumPoolSize)
+Submit task 26:    All threads busy, queue full
+                   → Rejection Policy triggered (reject, queue wait, etc)
+
+Thread Idle 60s:   Thread killed (back to corePoolSize = 5)
+```
+
+**Configuration Strategy:**
+
+```java
+public class ThreadPoolConfig {
+    
+    // CPU-bound tasks (computation, algorithms)
+    // Pool size = number of CPU cores
+    public static ExecutorService cpuBoundPool() {
+        int cores = Runtime.getRuntime().availableProcessors();
+        return new ThreadPoolExecutor(
+            cores,
+            cores,
+            0, TimeUnit.SECONDS,
+            new LinkedBlockingQueue<>()
+        );
+    }
+    
+    // I/O-bound tasks (database, API calls, file reads)
+    // Pool size = (number of cores) * (1 + wait/compute ratio)
+    // Typically 2-4x cores
+    public static ExecutorService ioBoundPool() {
+        int cores = Runtime.getRuntime().availableProcessors();
+        return new ThreadPoolExecutor(
+            cores * 2,
+            cores * 4,
+            60, TimeUnit.SECONDS,
+            new LinkedBlockingQueue<>(1000) // Bounded queue for backpressure
+        );
+    }
+    
+    // Event-driven (web requests, message processing)
+    // Pool size = concurrent requests expected
+    public static ExecutorService eventDrivenPool() {
+        return new ThreadPoolExecutor(
+            100,
+            500,
+            30, TimeUnit.SECONDS,
+            new LinkedBlockingQueue<>(5000),
+            new ThreadPoolExecutor.CallerRunsPolicy() // Block caller if queue full
+        );
+    }
+}
+```
+
+**Rejection Policies:**
+
+| Policy | Behavior | Use Case |
+|--------|----------|----------|
+| **AbortPolicy** | Throws RejectedExecutionException | Fail-fast, critical system |
+| **CallerRunsPolicy** | Caller thread executes task | Backpressure, prevent queue explosion |
+| **DiscardPolicy** | Silently discard task | Non-critical background tasks |
+| **DiscardOldestPolicy** | Discard oldest task, add new | Time-series data, keep fresh |
+
+**Implementation:**
+```java
+// Custom rejection handler
+public class LoggingRejectionHandler implements RejectedExecutionHandler {
+    @Override
+    public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
+        logger.warn("Task rejected. Active: {}, Queue: {}, Pool: {}/{}",
+            executor.getActiveCount(),
+            executor.getQueue().size(),
+            executor.getPoolSize(),
+            executor.getMaximumPoolSize()
+        );
+        
+        // Backoff and retry
+        try {
+            executor.getQueue().put((Runnable) r); // Block caller
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+}
+
+executor = new ThreadPoolExecutor(
+    10, 50, 60, TimeUnit.SECONDS,
+    new LinkedBlockingQueue<>(1000),
+    new LoggingRejectionHandler()
+);
+```
+
+**Work Queue Selection:**
+
+| Queue | Behavior | When to Use |
+|-------|----------|------------|
+| **LinkedBlockingQueue** | Unbounded | Throughput > memory (risk of OOM) |
+| **ArrayBlockingQueue** | Bounded | Memory-constrained, strict limits |
+| **SynchronousQueue** | No buffer | Direct handoff (cached pool) |
+| **PriorityBlockingQueue** | Priority-based | Task prioritization |
+
+**Real-world Example - Web Server Thread Pool:**
+```java
+@Configuration
+public class ThreadPoolConfig {
+    
+    @Bean
+    public ExecutorService requestExecutor() {
+        int coreThreads = Runtime.getRuntime().availableProcessors();
+        int maxThreads = coreThreads * 4;
+        
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+            coreThreads,
+            maxThreads,
+            60, TimeUnit.SECONDS,
+            new LinkedBlockingQueue<>(10000), // Bounded queue
+            new ThreadFactory() {
+                private AtomicInteger count = new AtomicInteger();
+                
+                @Override
+                public Thread newThread(Runnable r) {
+                    Thread t = new Thread(r);
+                    t.setName("request-worker-" + count.incrementAndGet());
+                    t.setDaemon(false); // Non-daemon, must wait for completion
+                    return t;
+                }
+            },
+            new ThreadPoolExecutor.CallerRunsPolicy() // Block if queue full
+        );
+        
+        // Monitor pool stats
+        new Timer().scheduleAtFixedRate(() -> {
+            System.out.println(String.format(
+                "Pool: %d/%d, Active: %d, Queue: %d, Completed: %d",
+                executor.getPoolSize(),
+                executor.getMaximumPoolSize(),
+                executor.getActiveCount(),
+                executor.getQueue().size(),
+                executor.getCompletedTaskCount()
+            ));
+        }, 0, 10, TimeUnit.SECONDS);
+        
+        return executor;
+    }
+}
+```
+
+---
+
+### Q15: ExecutorService Lifecycle & Shutdown
+
+**Proper Shutdown Pattern:**
+```java
+ExecutorService executor = Executors.newFixedThreadPool(10);
+
+try {
+    // Submit tasks
+    for (int i = 0; i < 100; i++) {
+        executor.submit(() -> processTask());
+    }
+} finally {
+    // Initiate shutdown (no new tasks accepted)
+    executor.shutdown();
+    
+    // Wait for all tasks to complete
+    try {
+        if (!executor.awaitTermination(30, TimeUnit.SECONDS)) {
+            // Timeout - force shutdown
+            List<Runnable> remaining = executor.shutdownNow();
+            logger.error("Executor did not terminate. Remaining tasks: {}", remaining.size());
+            
+            if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
+                logger.error("Executor still not terminated after forced shutdown");
+            }
+        }
+    } catch (InterruptedException e) {
+        executor.shutdownNow();
+        Thread.currentThread().interrupt();
+    }
+}
+```
+
+**Shutdown vs ShutdownNow:**
+
+| Method | Behavior |
+|--------|----------|
+| **shutdown()** | No new tasks accepted, existing tasks complete |
+| **shutdownNow()** | Stops accepting new tasks, interrupts running tasks, returns pending tasks |
+
+**Better Approach - Try-with-resources (Java 7+):**
+```java
+// ExecutorService extends AutoCloseable
+try (ExecutorService executor = Executors.newFixedThreadPool(10)) {
+    for (int i = 0; i < 100; i++) {
+        executor.submit(() -> processTask());
+    }
+    // Automatically calls executor.shutdown() on exit
+} catch (Exception e) {
+    logger.error("Error", e);
+}
+```
+
+**Monitoring & Metrics:**
+```java
+public class ExecutorMetrics {
+    private final ThreadPoolExecutor executor;
+    
+    public ExecutorMetrics(ThreadPoolExecutor executor) {
+        this.executor = executor;
+    }
+    
+    public void printStats() {
+        System.out.println(String.format(
+            "Executor Stats: Core=%d, Max=%d, Current=%d, " +
+            "Active=%d, Completed=%d, Queue=%d, Queue Remaining=%d",
+            executor.getCorePoolSize(),
+            executor.getMaximumPoolSize(),
+            executor.getPoolSize(),
+            executor.getActiveCount(),
+            executor.getCompletedTaskCount(),
+            executor.getQueue().size(),
+            executor.getQueue().remainingCapacity()
+        ));
+    }
+    
+    public double getQueueUtilization() {
+        BlockingQueue<Runnable> queue = executor.getQueue();
+        return (double) queue.size() / queue.remainingCapacity();
+    }
+    
+    public boolean isUnderPressure() {
+        return getQueueUtilization() > 0.8; // > 80% full
+    }
+}
+```
+
+---
+
+### Q16: ForkJoinPool - For Divide-and-Conquer Tasks
+
+**Problem:** Standard thread pools aren't optimal for recursive, divide-and-conquer algorithms.
+
+**Example - Without ForkJoinPool:**
+```java
+// Merge sort using regular threads - inefficient
+public class MergeSortWithThreads {
+    private ExecutorService executor = Executors.newFixedThreadPool(10);
+    
+    public void mergeSort(int[] arr, int left, int right) {
+        if (left < right) {
+            int mid = (left + right) / 2;
+            
+            // Create two threads for left and right halves
+            Future<?> leftSort = executor.submit(() -> mergeSort(arr, left, mid));
+            Future<?> rightSort = executor.submit(() -> mergeSort(arr, mid + 1, right));
+            
+            leftSort.get();   // Wait for left
+            rightSort.get();  // Wait for right
+            
+            merge(arr, left, mid, right);
+        }
+    }
+}
+
+// Problem: Thread overhead for small sub-problems, not efficient
+```
+
+**Solution - ForkJoinPool:**
+```java
+public class MergeSortForkJoin extends RecursiveAction {
+    private static final int THRESHOLD = 1000;
+    private int[] arr;
+    private int left, right;
+    
+    public MergeSortForkJoin(int[] arr, int left, int right) {
+        this.arr = arr;
+        this.left = left;
+        this.right = right;
+    }
+    
+    @Override
+    protected void compute() {
+        if (right - left < THRESHOLD) {
+            // Base case: small enough to sort directly
+            Arrays.sort(arr, left, right + 1);
+        } else {
+            // Divide
+            int mid = (left + right) / 2;
+            
+            MergeSortForkJoin leftTask = new MergeSortForkJoin(arr, left, mid);
+            MergeSortForkJoin rightTask = new MergeSortForkJoin(arr, mid + 1, right);
+            
+            // Fork both tasks
+            leftTask.fork();
+            rightTask.fork();
+            
+            // Wait for both to complete
+            leftTask.join();
+            rightTask.join();
+            
+            // Merge
+            merge(arr, left, mid, right);
+        }
+    }
+}
+
+// Usage
+int[] arr = new int[1_000_000];
+ForkJoinPool.commonPool().invoke(new MergeSortForkJoin(arr, 0, arr.length - 1));
+```
+
+**ForkJoinTask vs RecursiveTask/RecursiveAction:**
+
+| Class | Return Value | When to Use |
+|-------|--------------|------------|
+| **RecursiveAction** | void | Pure side-effect computation |
+| **RecursiveTask<T>** | T | Computation with result |
+
+**Work Stealing Benefit:**
+```
+ForkJoinPool (8 threads):
+┌──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┐
+│ Thread 1 │ Thread 2 │ Thread 3 │ Thread 4 │ Thread 5 │ Thread 6 │ Thread 7 │ Thread 8 │
+├──────────┼──────────┼──────────┼──────────┼──────────┼──────────┼──────────┼──────────┤
+│ Task A   │ Task B   │ Task C   │ Task D   │ Task E   │ Task F   │ Task G   │ Task H   │
+│ ├─ A1    │ ├─ B1    │ ├─ C1    │ ├─ D1    │ empty    │ empty    │ empty    │ empty    │
+│ └─ A2    │ └─ B2    │ └─ C2    │ └─ D2    │          │          │          │          │
+│          │          │          │          │ steals   │ steals   │ steals   │ steals   │
+│          │          │          │          │ from A2  │ from B2  │ from C2  │ from D2  │
+└──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┘
+
+Threads 5-8 don't idle; they steal from overloaded threads' work queues
+```
 
 ---
 
