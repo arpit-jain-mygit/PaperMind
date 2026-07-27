@@ -602,6 +602,25 @@ Semaphore semaphore = new Semaphore(3); // 3 permits
 ```java
 import java.util.concurrent.Semaphore;
 
+class UserTask extends Thread {
+    private final ConnectionPool pool;
+    private final int userId;
+    
+    public UserTask(ConnectionPool pool, int userId) {
+        super("User-" + userId);
+        this.pool = pool;
+        this.userId = userId;
+    }
+    
+    public void run() {
+        try {
+            pool.useConnection("User-" + userId);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+}
+
 public class ConnectionPool {
     private final Semaphore semaphore;
     private final int poolSize = 3;
@@ -623,23 +642,12 @@ public class ConnectionPool {
         semaphore.release();
     }
     
-    // Helper method - creates the task for each user
-    private Runnable userTask(int userId) {
-        return () -> {
-            try {
-                useConnection("User-" + userId);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        };
-    }
-    
     public void run() throws InterruptedException {
         System.out.println("=== Connection Pool with 3 Available Connections ===\n");
         
         Thread[] threads = new Thread[5];
         for (int i = 1; i <= 5; i++) {
-            threads[i-1] = new Thread(userTask(i));
+            threads[i-1] = new UserTask(this, i);
         }
         
         for (Thread t : threads) t.start();
@@ -685,9 +693,28 @@ public class ConnectionPool {
 ```java
 import java.util.concurrent.Semaphore;
 
+class ClientTask extends Thread {
+    private final ApiRateLimiter limiter;
+    private final int clientId;
+    
+    public ClientTask(ApiRateLimiter limiter, int clientId) {
+        super("Client-" + clientId);
+        this.limiter = limiter;
+        this.clientId = clientId;
+    }
+    
+    public void run() {
+        try {
+            limiter.callApi("Client-" + clientId);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+}
+
 public class ApiRateLimiter {
     private final Semaphore limiter;
-    private final int maxRequests = 3; // Max 3 requests
+    private final int maxRequests = 3;
     
     public ApiRateLimiter() {
         this.limiter = new Semaphore(maxRequests);
@@ -697,34 +724,21 @@ public class ApiRateLimiter {
         System.out.println("[" + clientId + "] Requesting API...");
         long start = System.currentTimeMillis();
         
-        limiter.acquire(); // Wait if already at limit
+        limiter.acquire();
         long waitTime = System.currentTimeMillis() - start;
         
         System.out.println("[" + clientId + "] API Call allowed (waited " + waitTime + "ms)");
-        
-        // Simulate API call
         Thread.sleep(500);
-        
         System.out.println("[" + clientId + "] API Call done");
-        limiter.release(); // Free up permit
+        limiter.release();
     }
     
-    public static void main(String[] args) throws InterruptedException {
-        ApiRateLimiter limiter = new ApiRateLimiter();
-        
+    public void run() throws InterruptedException {
         System.out.println("=== Rate Limiting: Max 3 Concurrent Requests ===\n");
         
-        // 6 clients make requests (but only 3 allowed concurrently)
         Thread[] threads = new Thread[6];
         for (int i = 1; i <= 6; i++) {
-            final int clientId = i;
-            threads[i-1] = new Thread(() -> {
-                try {
-                    limiter.callApi("Client-" + clientId);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            });
+            threads[i-1] = new ClientTask(this, i);
         }
         
         long startTime = System.currentTimeMillis();
@@ -734,6 +748,10 @@ public class ApiRateLimiter {
         
         System.out.println("\nTotal time: " + totalTime + "ms");
         System.out.println("(With rate limiting, requests had to queue)");
+    }
+    
+    public static void main(String[] args) throws InterruptedException {
+        new ApiRateLimiter().run();
     }
 }
 
@@ -771,52 +789,64 @@ Total time: 1055ms
 ```java
 import java.util.concurrent.Semaphore;
 
+class CriticalSectionTask extends Thread {
+    private final BinarySemaphore binarySemaphore;
+    private final int threadId;
+    
+    public CriticalSectionTask(BinarySemaphore binarySemaphore, int threadId) {
+        super("Thread-" + threadId);
+        this.binarySemaphore = binarySemaphore;
+        this.threadId = threadId;
+    }
+    
+    public void run() {
+        try {
+            binarySemaphore.criticalSection("Thread-" + threadId);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+}
+
 public class BinarySemaphore {
-    private final Semaphore mutex = new Semaphore(1); // Binary semaphore (0 or 1)
+    private final Semaphore mutex = new Semaphore(1);
     private int sharedCounter = 0;
     
     public void criticalSection(String threadName) throws InterruptedException {
         System.out.println("[" + threadName + "] Waiting for lock...");
         
-        mutex.acquire(); // Lock
+        mutex.acquire();
         try {
             System.out.println("[" + threadName + "] Entered critical section");
             
-            // Simulate critical operation
             int temp = sharedCounter;
             Thread.sleep(100);
             sharedCounter = temp + 1;
             
             System.out.println("[" + threadName + "] Updated counter to " + sharedCounter);
         } finally {
-            mutex.release(); // Unlock
+            mutex.release();
             System.out.println("[" + threadName + "] Exited critical section");
         }
     }
     
-    public static void main(String[] args) throws InterruptedException {
-        BinarySemaphore semaphore = new BinarySemaphore();
-        
+    public void run() throws InterruptedException {
         System.out.println("=== Binary Semaphore (Mutex Lock) ===\n");
         
-        // 3 threads competing for critical section
         Thread[] threads = new Thread[3];
         for (int i = 1; i <= 3; i++) {
-            final int id = i;
-            threads[i-1] = new Thread(() -> {
-                try {
-                    semaphore.criticalSection("Thread-" + id);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            });
+            threads[i-1] = new CriticalSectionTask(this, i);
         }
         
         for (Thread t : threads) t.start();
         for (Thread t : threads) t.join();
         
-        System.out.println("\nFinal counter value: " + semaphore.sharedCounter);
+        System.out.println("\nFinal counter value: " + sharedCounter);
         System.out.println("(Binary semaphore prevented race conditions)");
+    }
+    
+    public static void main(String[] args) throws InterruptedException {
+        new BinarySemaphore().run();
     }
 }
 
