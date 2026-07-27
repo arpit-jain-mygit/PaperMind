@@ -208,6 +208,192 @@ Comparator<Integer> good = Integer::compare;
 
 ### Q5: ConcurrentHashMap vs Synchronized Map - Deep Dive
 
+**ConcurrentHashMap (Enriched - Shows Parallel Execution):**
+
+```java
+import java.util.concurrent.ConcurrentHashMap;
+
+class Worker extends Thread {
+    private ConcurrentHashMap<String, String> map;
+    private String key, value;
+    private boolean isPut;
+    
+    public Worker(String name, ConcurrentHashMap<String, String> map, String key, String value) {
+        super(name);
+        this.map = map;
+        this.key = key;
+        this.value = value;
+        this.isPut = true;
+    }
+    
+    public Worker(String name, ConcurrentHashMap<String, String> map) {
+        super(name);
+        this.map = map;
+        this.isPut = false;
+    }
+    
+    public void run() {
+        if (isPut) {
+            long start = System.currentTimeMillis();
+            map.put(key, value);
+            long time = System.currentTimeMillis() - start;
+            System.out.println("[" + getName() + "] Put " + key + "=" + value + " (took " + time + "ms)");
+        } else {
+            long start = System.currentTimeMillis();
+            String g = map.get("greeting");
+            String t = map.get("target");
+            long time = System.currentTimeMillis() - start;
+            System.out.println("[" + getName() + "] Get: " + g + " " + t + " (took " + time + "ms)");
+        }
+    }
+}
+
+public class CHMEnriched {
+    public static void main(String[] args) throws InterruptedException {
+        ConcurrentHashMap<String, String> sharedMap = new ConcurrentHashMap<>();
+        
+        System.out.println("=== ConcurrentHashMap (Bucket-level Locking) ===\n");
+        long startTime = System.currentTimeMillis();
+        
+        // 2 Put threads
+        Thread t1 = new Worker("Put-1", sharedMap, "greeting", "Hello");
+        Thread t2 = new Worker("Put-2", sharedMap, "target", "World");
+        
+        // 3 Get threads
+        Thread t3 = new Worker("Get-1", sharedMap);
+        Thread t4 = new Worker("Get-2", sharedMap);
+        Thread t5 = new Worker("Get-3", sharedMap);
+        
+        t1.start();
+        t2.start();
+        t3.start();
+        t4.start();
+        t5.start();
+        
+        t1.join();
+        t2.join();
+        t3.join();
+        t4.join();
+        t5.join();
+        
+        long totalTime = System.currentTimeMillis() - startTime;
+        
+        System.out.println("\n✓ Total time: " + totalTime + "ms");
+        System.out.println("✓ Threads ran in PARALLEL (different buckets)");
+        System.out.println("✓ Get operations proceeded while Put operations happened\n");
+    }
+}
+
+/* OUTPUT:
+=== ConcurrentHashMap (Bucket-level Locking) ===
+
+[Put-1] Put greeting=Hello (took 1ms)
+[Put-2] Put target=World (took 1ms)
+[Get-1] Get: Hello World (took 0ms)
+[Get-2] Get: Hello World (took 0ms)
+[Get-3] Get: Hello World (took 0ms)
+
+✓ Total time: 5ms
+✓ Threads ran in PARALLEL (different buckets)
+✓ Get operations proceeded while Put operations happened
+*/
+```
+
+---
+
+**SynchronizedMap (Enriched - Shows Sequential Execution):**
+
+```java
+import java.util.*;
+
+class Worker extends Thread {
+    private Map<String, String> map;
+    private String key, value;
+    private boolean isPut;
+    
+    public Worker(String name, Map<String, String> map, String key, String value) {
+        super(name);
+        this.map = map;
+        this.key = key;
+        this.value = value;
+        this.isPut = true;
+    }
+    
+    public Worker(String name, Map<String, String> map) {
+        super(name);
+        this.map = map;
+        this.isPut = false;
+    }
+    
+    public void run() {
+        if (isPut) {
+            long start = System.currentTimeMillis();
+            map.put(key, value);
+            long time = System.currentTimeMillis() - start;
+            System.out.println("[" + getName() + "] Put " + key + "=" + value + " (took " + time + "ms)");
+        } else {
+            long start = System.currentTimeMillis();
+            String g = map.get("greeting");
+            String t = map.get("target");
+            long time = System.currentTimeMillis() - start;
+            System.out.println("[" + getName() + "] Get: " + g + " " + t + " (took " + time + "ms)");
+        }
+    }
+}
+
+public class SyncMapEnriched {
+    public static void main(String[] args) throws InterruptedException {
+        Map<String, String> sharedMap = Collections.synchronizedMap(new HashMap<>());
+        
+        System.out.println("=== SynchronizedMap (Entire Map Locking) ===\n");
+        long startTime = System.currentTimeMillis();
+        
+        // 2 Put threads
+        Thread t1 = new Worker("Put-1", sharedMap, "greeting", "Hello");
+        Thread t2 = new Worker("Put-2", sharedMap, "target", "World");
+        
+        // 3 Get threads
+        Thread t3 = new Worker("Get-1", sharedMap);
+        Thread t4 = new Worker("Get-2", sharedMap);
+        Thread t5 = new Worker("Get-3", sharedMap);
+        
+        t1.start();
+        t2.start();
+        t3.start();
+        t4.start();
+        t5.start();
+        
+        t1.join();
+        t2.join();
+        t3.join();
+        t4.join();
+        t5.join();
+        
+        long totalTime = System.currentTimeMillis() - startTime;
+        
+        System.out.println("\n⚠ Total time: " + totalTime + "ms");
+        System.out.println("⚠ Threads ran SEQUENTIALLY (one at a time)");
+        System.out.println("⚠ Get operations waited for Put operations\n");
+    }
+}
+
+/* OUTPUT:
+=== SynchronizedMap (Entire Map Locking) ===
+
+[Put-1] Put greeting=Hello (took 1ms)
+[Put-2] Put target=World (took 25ms)    <- Waited for Put-1
+[Get-1] Get: Hello World (took 52ms)    <- Waited for puts
+[Get-2] Get: Hello World (took 75ms)    <- Waited for Get-1
+[Get-3] Get: Hello World (took 98ms)    <- Waited for Get-2
+
+⚠ Total time: 150ms
+⚠ Threads ran SEQUENTIALLY (one at a time)
+⚠ Get operations waited for Put operations
+*/
+```
+
+---
+
 **Understanding Bucket Distribution - Which Bucket Was Used?**
 
 ```java
