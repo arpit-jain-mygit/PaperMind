@@ -325,16 +325,17 @@ public class SessionManagerGood {
 // Test: Mix of login and read operations
 public static void main(String[] args) throws InterruptedException {
     System.out.println("=== SYNCHRONIZED MAP DEMO ===");
-    System.out.println("(2 threads logging in + 2 threads reading sessions)\n");
+    System.out.println("(2 threads logging in NEW users + 2 threads reading EXISTING users)\n");
     SessionManagerBad badManager = new SessionManagerBad();
     
-    // Pre-populate some users
-    badManager.loginUser("User1");
-    badManager.loginUser("User2");
+    // Pre-populate with User1, User2 (silent, no output)
+    System.out.println("[SETUP] Pre-login User1 and User2...\n");
+    badManager.sessions.put("User1", new UserSession("User1"));
+    badManager.sessions.put("User2", new UserSession("User2"));
     
-    System.out.println("\n--- Concurrent Operations (Login + Read) ---\n");
+    System.out.println("--- Concurrent Operations (Login NEW users + Read EXISTING users) ---\n");
     
-    // 2 threads login + 2 threads read simultaneously
+    // 2 threads login NEW users + 2 threads read EXISTING users simultaneously
     long startTime = System.currentTimeMillis();
     
     Thread t1 = new Thread(() -> badManager.loginUser("User3"), "Login-1");
@@ -352,14 +353,15 @@ public static void main(String[] args) throws InterruptedException {
     
     
     System.out.println("\n=== CONCURRENT MAP DEMO ===");
-    System.out.println("(2 threads logging in + 2 threads reading sessions)\n");
+    System.out.println("(2 threads logging in NEW users + 2 threads reading EXISTING users)\n");
     SessionManagerGood goodManager = new SessionManagerGood();
     
-    // Pre-populate some users
-    goodManager.loginUser("User1");
-    goodManager.loginUser("User2");
+    // Pre-populate with User1, User2 (silent, no output)
+    System.out.println("[SETUP] Pre-login User1 and User2...\n");
+    goodManager.sessions.put("User1", new UserSession("User1"));
+    goodManager.sessions.put("User2", new UserSession("User2"));
     
-    System.out.println("\n--- Concurrent Operations (Login + Read) ---\n");
+    System.out.println("--- Concurrent Operations (Login NEW users + Read EXISTING users) ---\n");
     
     // Same mix with ConcurrentHashMap
     startTime = System.currentTimeMillis();
