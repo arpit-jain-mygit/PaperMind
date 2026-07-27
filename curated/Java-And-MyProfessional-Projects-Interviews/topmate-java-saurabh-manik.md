@@ -773,133 +773,86 @@ public class ProducerConsumer {
 
 **Problem:** 2 threads print 1-10 alternately (1, 2, 3, ... 10) using volatile.
 
-**Solution 1: Using Volatile and Wait-Notify (Optimized):**
-```java
-public class EvenOddPrinter {
-    // volatile ensures both threads see the latest value immediately (no caching)
-    // Counter starts at 1, increments up to 100
-    private volatile int cnt = 1;
-    
-    // Shared lock object - used for synchronization between threads
-    // Only one thread can be in synchronized(lock) block at a time
-    // Acts like a mutex/critical section guard
-    private final Object lock = new Object();
+**Solution 1: Using Volatile and Wait-Notify**
 
-    // Even thread: prints all even numbers (2, 4, 6, 8, ... 100)
-    public void printEvenNumber() {
-        // Keep looping until cnt exceeds 100
-        while (cnt <= 100) {
-            // Acquire lock - ensure only one thread enters this synchronized block
-            // If another thread is inside, this thread waits outside
-            synchronized (lock) {
-                // Check if current number is EVEN (cnt % 2 == 0)
-                if (cnt % 2 == 0) {
-                    // It's our turn! The number is even
+```java
+public class EvenOddPrinter{
+    private volatile int cnt = 1;
+    private Object lock = new Object();
+    
+    public void printEven(){
+        while(cnt<=10){
+            synchronized(lock){
+                if(cnt%2==0){
                     System.out.println(cnt);
-                    // Increment counter to next number
                     cnt++;
-                    // Wake up ALL waiting threads (both odd and even thread)
-                    // The waiting threads will compete to acquire the lock
                     lock.notifyAll();
-                } else {
-                    // Current number is ODD, not our turn yet
-                    // Go to sleep and wait for odd thread to wake us
-                    try {
-                        // Release the lock and wait
-                        // Thread enters a waiting state and releases the lock
-                        // When odd thread calls notifyAll(), we wake up
-                        lock.wait();
-                        // After waking up, loop continues and re-checks the condition
-                    } catch (InterruptedException ex) {
-                        // Handle thread interruption gracefully
-                        // Restore interrupted status for proper shutdown
+                }else{
+                    try{
+                        lock.wait();    
+                    }catch(InterruptedException iex){
                         Thread.currentThread().interrupt();
                     }
                 }
-            } // Release lock here - other threads can now enter the synchronized block
+            }
         }
     }
     
-    // Odd thread: prints all odd numbers (1, 3, 5, 7, ... 99)
-    public void printOddNumber() {
-        // Keep looping until cnt exceeds 100
-        while (cnt <= 100) {
-            // Acquire lock - ensure only one thread enters this synchronized block
-            synchronized (lock) {
-                // Check if current number is ODD (cnt % 2 != 0)
-                // This is equivalent to cnt % 2 == 1 (odd remainder)
-                if (cnt % 2 != 0) {
-                    // It's our turn! The number is odd
+    public void printOdd(){
+        while(cnt<=10){
+            synchronized(lock){
+                if(cnt%2!=0){
                     System.out.println(cnt);
-                    // Increment counter to next number
                     cnt++;
-                    // Wake up ALL waiting threads (both odd and even thread)
-                    // They will compete to acquire the lock
                     lock.notifyAll();
-                } else {
-                    // Current number is EVEN, not our turn yet
-                    // Go to sleep and wait for even thread to wake us
-                    try {
-                        // Release the lock and wait for notification
-                        lock.wait();
-                    } catch (InterruptedException ex) {
-                        // Handle thread interruption gracefully
+                }else{
+                    try{
+                        lock.wait();    
+                    }catch(InterruptedException iex){
                         Thread.currentThread().interrupt();
                     }
                 }
-            } // Release lock here
+            }
         }
+        
     }
     
-    public static void main(String[] args) {
-        // Create single printer instance shared between both threads
+    public static void main(String[] args){
         EvenOddPrinter evenOddPrinter = new EvenOddPrinter();
-        
-        // Create odd number thread
-        // This thread will call printOddNumber() and is labeled "Odd"
-        Thread oddThread = new Thread(evenOddPrinter::printOddNumber, "Odd");
-        
-        // Create even number thread
-        // This thread will call printEvenNumber() and is labeled "Even"
-        // NOTE: In the original code, both threads were labeled "Odd" (typo in second parameter)
-        // Should be "Even" for the even thread for clarity in debugging
-        Thread evenThread = new Thread(evenOddPrinter::printEvenNumber, "Even");
-        
-        // Start odd thread - it begins executing printOddNumber()
+        Thread oddThread = new Thread(evenOddPrinter::printOdd, "oddThread");
+        Thread evenThread = new Thread(evenOddPrinter::printEven, "evenThread");
         oddThread.start();
-        
-        // Start even thread - it begins executing printEvenNumber()
         evenThread.start();
-        
-        // Both threads now run concurrently and take turns printing
     }
 }
+```
 
-// Execution Flow:
-// Start: cnt=1
-// 1. Odd thread: acquires lock, cnt=1 is odd, prints "1", cnt becomes 2, notifies all
-// 2. Even thread: acquires lock, cnt=2 is even, prints "2", cnt becomes 3, notifies all
-// 3. Odd thread: acquires lock, cnt=3 is odd, prints "3", cnt becomes 4, notifies all
-// 4. Even thread: acquires lock, cnt=4 is even, prints "4", cnt becomes 5, notifies all
-// ... continues alternating until cnt > 100
+**How It Works:**
+- `volatile int cnt`: Ensures both threads see the latest counter value
+- `synchronized(lock)`: Only one thread can enter the critical section at a time
+- `if(cnt%2==0)`: Check if it's our turn (even thread checks for even, odd thread checks for odd)
+- `lock.wait()`: If not our turn, sleep and wait for the other thread to notify
+- `lock.notifyAll()`: After printing, wake up the other thread waiting on this lock
 
-// Output:
-// 1
-// 2
-// 3
-// 4
-// 5
-// 6
-// ...
-// 99
-// 100
+**Output:**
+```
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+```
 
-// Key Improvements over previous version:
-// ✓ Cleaner code with cnt instead of counter
-// ✓ Counts to 100 (more realistic test)
-// ✓ Uses cnt % 2 != 0 instead of cnt % 2 == 1 (both equivalent but != is clearer)
-// ✓ No unnecessary boolean flag (isEvenTurn removed - not needed)
-// ✓ Simpler logic without extra variable tracking
+**Execution Flow:**
+1. Odd thread starts first, cnt=1 (odd) → prints 1, cnt becomes 2, notifies
+2. Even thread wakes up, cnt=2 (even) → prints 2, cnt becomes 3, notifies
+3. Odd thread wakes up, cnt=3 (odd) → prints 3, cnt becomes 4, notifies
+4. Continues alternating until cnt > 10
 ```
 
 ---
