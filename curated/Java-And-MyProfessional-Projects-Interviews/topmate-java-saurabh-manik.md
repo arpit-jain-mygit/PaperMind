@@ -877,222 +877,209 @@ Final counter value: 3
 
 ### Q8: CountDownLatch vs CyclicBarrier - The Difference
 
-**CountDownLatch - Layman's Explanation:**
+**CountDownLatch - Real Business Scenario:**
 
-Imagine you're organizing a race with 5 runners:
-1. **Main thread (Starter)** creates a "countdown" with value 5
-2. All 5 runners **wait at the starting line** (await) for the countdown to reach 0
-3. Each runner, when they **finish** the race, decrements the countdown by 1 (countDown)
-4. Only when **all 5 runners finish** (countdown reaches 0), the race is officially over
-5. **One-time use**: After that race, you can't reuse the same countdown
+**Scenario: Database Migration at Startup**
+- Main application thread waits for all database schema migrations to complete
+- Each migration script runs in parallel in a separate thread
+- Only after all migrations finish, the application starts accepting requests
 
-**CyclicBarrier - Layman's Explanation:**
+**CyclicBarrier - Real Business Scenario:**
 
-Imagine 3 friends traveling together in stages:
-1. **Stage 1**: All 3 friends do stage 1 work
-   - Friend 1 finishes, waits at barrier
-   - Friend 2 finishes, waits at barrier
-   - Friend 3 finishes → **All 3 at barrier, move to stage 2**
-2. **Stage 2**: All 3 friends do stage 2 work
-   - They reach barrier again
-   - All 3 wait, then move to stage 3
-3. **Stage 3**: Repeats...
-4. **Reusable**: The barrier resets after each stage and can be used again
+**Scenario: Multi-Phase Data Processing Pipeline**
+- 3 data processors (Validation → Transformation → Storage)
+- Phase 1: All processors validate their data chunk
+- All wait at barrier, then move to Phase 2
+- Phase 2: All processors transform data
+- All wait at barrier, then move to Phase 3
+- Phase 3: All processors store data
 
 ---
 
-**CountDownLatch - Full Working Example:**
+**CountDownLatch - Database Migration (Full Working Example):**
 
 ```java
 import java.util.concurrent.CountDownLatch;
 
-class Worker extends Thread {
-    private final CountDownLatch startSignal;
-    private final CountDownLatch doneSignal;
-    private final int workerId;
+class MigrationTask extends Thread {
+    private final CountDownLatch completionSignal;
+    private final int migrationId;
     
-    public Worker(CountDownLatch startSignal, CountDownLatch doneSignal, int workerId) {
-        super("Worker-" + workerId);
-        this.startSignal = startSignal;
-        this.doneSignal = doneSignal;
-        this.workerId = workerId;
+    public MigrationTask(CountDownLatch completionSignal, int migrationId) {
+        super("Migration-" + migrationId);
+        this.completionSignal = completionSignal;
+        this.migrationId = migrationId;
     }
     
     public void run() {
         try {
-            System.out.println("[" + getName() + "] Waiting for start signal...");
-            startSignal.await();  // All wait for signal to start
-            
-            System.out.println("[" + getName() + "] Started work");
-            Thread.sleep(1000);  // Simulate work
-            System.out.println("[" + getName() + "] Finished work");
-            
-            doneSignal.countDown();  // Signal that this worker is done
+            System.out.println("[" + getName() + "] Starting database migration...");
+            Thread.sleep(1500);  // Simulate migration work
+            System.out.println("[" + getName() + "] Migration completed ✓");
+            completionSignal.countDown();  // Signal that this migration is done
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
     }
 }
 
-public class CountDownLatchDemo {
+public class DatabaseMigrationDemo {
     public void run() throws InterruptedException {
-        System.out.println("=== CountDownLatch: Race Start Scenario ===\n");
+        System.out.println("=== CountDownLatch: Database Migration at Startup ===\n");
         
-        CountDownLatch startSignal = new CountDownLatch(1);  // 1 = start signal
-        CountDownLatch doneSignal = new CountDownLatch(5);   // 5 = number of workers
+        CountDownLatch migrationsDone = new CountDownLatch(4);  // 4 migrations to run
         
-        // Create 5 worker threads
-        for (int i = 1; i <= 5; i++) {
-            new Worker(startSignal, doneSignal, i).start();
+        System.out.println("[App] Starting 4 database migrations in parallel...\n");
+        
+        // Launch 4 migration tasks in parallel
+        for (int i = 1; i <= 4; i++) {
+            new MigrationTask(migrationsDone, i).start();
         }
         
-        System.out.println("All workers created, waiting for 2 seconds before starting...\n");
-        Thread.sleep(2000);
+        System.out.println("[App] Waiting for all migrations to complete...\n");
+        migrationsDone.await();  // Main thread waits for all migrations
         
-        System.out.println("[Main] START SIGNAL! All workers begin!\n");
-        startSignal.countDown();  // Signal all workers to start
-        
-        System.out.println("[Main] Waiting for all workers to finish...\n");
-        doneSignal.await();  // Wait for all workers to finish
-        
-        System.out.println("\n[Main] ✓ All workers done! Race is over!");
+        System.out.println("\n[App] ✓ All migrations completed!");
+        System.out.println("[App] Starting application and accepting requests...");
     }
     
     public static void main(String[] args) throws InterruptedException {
-        new CountDownLatchDemo().run();
+        new DatabaseMigrationDemo().run();
     }
 }
 
 /* OUTPUT:
-=== CountDownLatch: Race Start Scenario ===
+=== CountDownLatch: Database Migration at Startup ===
 
-All workers created, waiting for 2 seconds before starting...
+[App] Starting 4 database migrations in parallel...
 
-[Worker-1] Waiting for start signal...
-[Worker-2] Waiting for start signal...
-[Worker-3] Waiting for start signal...
-[Worker-4] Waiting for start signal...
-[Worker-5] Waiting for start signal...
+[App] Waiting for all migrations to complete...
 
-(2 second wait)
+[Migration-1] Starting database migration...
+[Migration-2] Starting database migration...
+[Migration-3] Starting database migration...
+[Migration-4] Starting database migration...
 
-[Main] START SIGNAL! All workers begin!
+(1.5 second work)
 
-[Main] Waiting for all workers to finish...
+[Migration-1] Migration completed ✓
+[Migration-2] Migration completed ✓
+[Migration-3] Migration completed ✓
+[Migration-4] Migration completed ✓
 
-[Worker-1] Started work
-[Worker-2] Started work
-[Worker-3] Started work
-[Worker-4] Started work
-[Worker-5] Started work
-
-(1 second work)
-
-[Worker-1] Finished work
-[Worker-2] Finished work
-[Worker-3] Finished work
-[Worker-4] Finished work
-[Worker-5] Finished work
-
-[Main] ✓ All workers done! Race is over!
+[App] ✓ All migrations completed!
+[App] Starting application and accepting requests...
 */
 ```
 
 ---
 
-**CyclicBarrier - Full Working Example:**
+**CyclicBarrier - Multi-Phase Data Processing (Full Working Example):**
 
 ```java
 import java.util.concurrent.CyclicBarrier;
 
-class Traveler extends Thread {
-    private final CyclicBarrier barrier;
-    private final int travelerId;
+class DataProcessor extends Thread {
+    private final CyclicBarrier phaseBarrier;
+    private final int processorId;
     
-    public Traveler(CyclicBarrier barrier, int travelerId) {
-        super("Traveler-" + travelerId);
-        this.barrier = barrier;
-        this.travelerId = travelerId;
+    public DataProcessor(CyclicBarrier phaseBarrier, int processorId) {
+        super("Processor-" + processorId);
+        this.phaseBarrier = phaseBarrier;
+        this.processorId = processorId;
     }
     
     public void run() {
         try {
-            for (int stage = 1; stage <= 3; stage++) {
-                System.out.println("[" + getName() + "] Stage " + stage + " - Working...");
-                Thread.sleep(1000);  // Simulate work at this stage
-                
-                System.out.println("[" + getName() + "] Stage " + stage + " - Done! Waiting at barrier...");
-                barrier.await();  // Wait for all travelers at this stage
-                
-                System.out.println("[" + getName() + "] All travelers ready! Moving to stage " + (stage + 1));
-            }
+            // Phase 1: Validation
+            System.out.println("[" + getName() + "] Phase 1: Validating data chunk...");
+            Thread.sleep(800);
+            System.out.println("[" + getName() + "] Phase 1: Data validated ✓");
+            phaseBarrier.await();
+            
+            // Phase 2: Transformation
+            System.out.println("[" + getName() + "] Phase 2: Transforming data...");
+            Thread.sleep(1000);
+            System.out.println("[" + getName() + "] Phase 2: Data transformed ✓");
+            phaseBarrier.await();
+            
+            // Phase 3: Storage
+            System.out.println("[" + getName() + "] Phase 3: Storing data to database...");
+            Thread.sleep(1200);
+            System.out.println("[" + getName() + "] Phase 3: Data stored ✓");
+            phaseBarrier.await();
+            
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 }
 
-public class CyclicBarrierDemo {
+public class DataProcessingPipelineDemo {
     public void run() throws InterruptedException {
-        System.out.println("=== CyclicBarrier: Multi-Stage Journey ===\n");
+        System.out.println("=== CyclicBarrier: Multi-Phase Data Processing ===\n");
         
-        // Barrier for 3 travelers + 1 action when all arrive
-        CyclicBarrier barrier = new CyclicBarrier(3, () -> {
-            System.out.println("[BARRIER] All travelers arrived! Stage complete!\n");
+        CyclicBarrier phaseBarrier = new CyclicBarrier(3, () -> {
+            System.out.println("[PIPELINE] All processors completed phase. Moving to next phase...\n");
         });
         
-        // Create 3 traveler threads
+        System.out.println("[Pipeline] Starting 3 data processors...\n");
+        
+        // Launch 3 data processors
         for (int i = 1; i <= 3; i++) {
-            new Traveler(barrier, i).start();
+            new DataProcessor(phaseBarrier, i).start();
         }
         
-        // Wait for all to complete
-        Thread.sleep(15000);
+        // Wait for all processors to complete all phases
+        Thread.sleep(10000);
         
-        System.out.println("✓ Journey complete!");
+        System.out.println("[Pipeline] ✓ All phases completed for all processors!");
     }
     
     public static void main(String[] args) throws InterruptedException {
-        new CyclicBarrierDemo().run();
+        new DataProcessingPipelineDemo().run();
     }
 }
 
 /* OUTPUT:
-=== CyclicBarrier: Multi-Stage Journey ===
+=== CyclicBarrier: Multi-Phase Data Processing ===
 
-[Traveler-1] Stage 1 - Working...
-[Traveler-2] Stage 1 - Working...
-[Traveler-3] Stage 1 - Working...
+[Pipeline] Starting 3 data processors...
 
-(1 second work)
+[Processor-1] Phase 1: Validating data chunk...
+[Processor-2] Phase 1: Validating data chunk...
+[Processor-3] Phase 1: Validating data chunk...
 
-[Traveler-1] Stage 1 - Done! Waiting at barrier...
-[Traveler-2] Stage 1 - Done! Waiting at barrier...
-[Traveler-3] Stage 1 - Done! Waiting at barrier...
-[BARRIER] All travelers arrived! Stage complete!
+(0.8 second work)
 
-[Traveler-1] All travelers ready! Moving to stage 2
-[Traveler-2] All travelers ready! Moving to stage 2
-[Traveler-3] All travelers ready! Moving to stage 2
+[Processor-1] Phase 1: Data validated ✓
+[Processor-2] Phase 1: Data validated ✓
+[Processor-3] Phase 1: Data validated ✓
+[PIPELINE] All processors completed phase. Moving to next phase...
 
-[Traveler-1] Stage 2 - Working...
-[Traveler-2] Stage 2 - Working...
-[Traveler-3] Stage 2 - Working...
+[Processor-1] Phase 2: Transforming data...
+[Processor-2] Phase 2: Transforming data...
+[Processor-3] Phase 2: Transforming data...
 
 (1 second work)
 
-[Traveler-1] Stage 2 - Done! Waiting at barrier...
-[Traveler-2] Stage 2 - Done! Waiting at barrier...
-[Traveler-3] Stage 2 - Done! Waiting at barrier...
-[BARRIER] All travelers arrived! Stage complete!
+[Processor-1] Phase 2: Data transformed ✓
+[Processor-2] Phase 2: Data transformed ✓
+[Processor-3] Phase 2: Data transformed ✓
+[PIPELINE] All processors completed phase. Moving to next phase...
 
-[Traveler-1] All travelers ready! Moving to stage 3
-[Traveler-2] All travelers ready! Moving to stage 3
-[Traveler-3] All travelers ready! Moving to stage 3
+[Processor-1] Phase 3: Storing data to database...
+[Processor-2] Phase 3: Storing data to database...
+[Processor-3] Phase 3: Storing data to database...
 
-(Continues for stage 3...)
+(1.2 second work)
 
-✓ Journey complete!
+[Processor-1] Phase 3: Data stored ✓
+[Processor-2] Phase 3: Data stored ✓
+[Processor-3] Phase 3: Data stored ✓
+[PIPELINE] All processors completed phase. Moving to next phase...
+
+[Pipeline] ✓ All phases completed for all processors!
 */
 ```
 
