@@ -877,52 +877,237 @@ Final counter value: 3
 
 ### Q8: CountDownLatch vs CyclicBarrier - The Difference
 
+**CountDownLatch - Layman's Explanation:**
+
+Imagine you're organizing a race with 5 runners:
+1. **Main thread (Starter)** creates a "countdown" with value 5
+2. All 5 runners **wait at the starting line** (await) for the countdown to reach 0
+3. Each runner, when they **finish** the race, decrements the countdown by 1 (countDown)
+4. Only when **all 5 runners finish** (countdown reaches 0), the race is officially over
+5. **One-time use**: After that race, you can't reuse the same countdown
+
+**CyclicBarrier - Layman's Explanation:**
+
+Imagine 3 friends traveling together in stages:
+1. **Stage 1**: All 3 friends do stage 1 work
+   - Friend 1 finishes, waits at barrier
+   - Friend 2 finishes, waits at barrier
+   - Friend 3 finishes → **All 3 at barrier, move to stage 2**
+2. **Stage 2**: All 3 friends do stage 2 work
+   - They reach barrier again
+   - All 3 wait, then move to stage 3
+3. **Stage 3**: Repeats...
+4. **Reusable**: The barrier resets after each stage and can be used again
+
+---
+
+**CountDownLatch - Full Working Example:**
+
+```java
+import java.util.concurrent.CountDownLatch;
+
+class Worker extends Thread {
+    private final CountDownLatch startSignal;
+    private final CountDownLatch doneSignal;
+    private final int workerId;
+    
+    public Worker(CountDownLatch startSignal, CountDownLatch doneSignal, int workerId) {
+        super("Worker-" + workerId);
+        this.startSignal = startSignal;
+        this.doneSignal = doneSignal;
+        this.workerId = workerId;
+    }
+    
+    public void run() {
+        try {
+            System.out.println("[" + getName() + "] Waiting for start signal...");
+            startSignal.await();  // All wait for signal to start
+            
+            System.out.println("[" + getName() + "] Started work");
+            Thread.sleep(1000);  // Simulate work
+            System.out.println("[" + getName() + "] Finished work");
+            
+            doneSignal.countDown();  // Signal that this worker is done
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+public class CountDownLatchDemo {
+    public void run() throws InterruptedException {
+        System.out.println("=== CountDownLatch: Race Start Scenario ===\n");
+        
+        CountDownLatch startSignal = new CountDownLatch(1);  // 1 = start signal
+        CountDownLatch doneSignal = new CountDownLatch(5);   // 5 = number of workers
+        
+        // Create 5 worker threads
+        for (int i = 1; i <= 5; i++) {
+            new Worker(startSignal, doneSignal, i).start();
+        }
+        
+        System.out.println("All workers created, waiting for 2 seconds before starting...\n");
+        Thread.sleep(2000);
+        
+        System.out.println("[Main] START SIGNAL! All workers begin!\n");
+        startSignal.countDown();  // Signal all workers to start
+        
+        System.out.println("[Main] Waiting for all workers to finish...\n");
+        doneSignal.await();  // Wait for all workers to finish
+        
+        System.out.println("\n[Main] ✓ All workers done! Race is over!");
+    }
+    
+    public static void main(String[] args) throws InterruptedException {
+        new CountDownLatchDemo().run();
+    }
+}
+
+/* OUTPUT:
+=== CountDownLatch: Race Start Scenario ===
+
+All workers created, waiting for 2 seconds before starting...
+
+[Worker-1] Waiting for start signal...
+[Worker-2] Waiting for start signal...
+[Worker-3] Waiting for start signal...
+[Worker-4] Waiting for start signal...
+[Worker-5] Waiting for start signal...
+
+(2 second wait)
+
+[Main] START SIGNAL! All workers begin!
+
+[Main] Waiting for all workers to finish...
+
+[Worker-1] Started work
+[Worker-2] Started work
+[Worker-3] Started work
+[Worker-4] Started work
+[Worker-5] Started work
+
+(1 second work)
+
+[Worker-1] Finished work
+[Worker-2] Finished work
+[Worker-3] Finished work
+[Worker-4] Finished work
+[Worker-5] Finished work
+
+[Main] ✓ All workers done! Race is over!
+*/
+```
+
+---
+
+**CyclicBarrier - Full Working Example:**
+
+```java
+import java.util.concurrent.CyclicBarrier;
+
+class Traveler extends Thread {
+    private final CyclicBarrier barrier;
+    private final int travelerId;
+    
+    public Traveler(CyclicBarrier barrier, int travelerId) {
+        super("Traveler-" + travelerId);
+        this.barrier = barrier;
+        this.travelerId = travelerId;
+    }
+    
+    public void run() {
+        try {
+            for (int stage = 1; stage <= 3; stage++) {
+                System.out.println("[" + getName() + "] Stage " + stage + " - Working...");
+                Thread.sleep(1000);  // Simulate work at this stage
+                
+                System.out.println("[" + getName() + "] Stage " + stage + " - Done! Waiting at barrier...");
+                barrier.await();  // Wait for all travelers at this stage
+                
+                System.out.println("[" + getName() + "] All travelers ready! Moving to stage " + (stage + 1));
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+public class CyclicBarrierDemo {
+    public void run() throws InterruptedException {
+        System.out.println("=== CyclicBarrier: Multi-Stage Journey ===\n");
+        
+        // Barrier for 3 travelers + 1 action when all arrive
+        CyclicBarrier barrier = new CyclicBarrier(3, () -> {
+            System.out.println("[BARRIER] All travelers arrived! Stage complete!\n");
+        });
+        
+        // Create 3 traveler threads
+        for (int i = 1; i <= 3; i++) {
+            new Traveler(barrier, i).start();
+        }
+        
+        // Wait for all to complete
+        Thread.sleep(15000);
+        
+        System.out.println("✓ Journey complete!");
+    }
+    
+    public static void main(String[] args) throws InterruptedException {
+        new CyclicBarrierDemo().run();
+    }
+}
+
+/* OUTPUT:
+=== CyclicBarrier: Multi-Stage Journey ===
+
+[Traveler-1] Stage 1 - Working...
+[Traveler-2] Stage 1 - Working...
+[Traveler-3] Stage 1 - Working...
+
+(1 second work)
+
+[Traveler-1] Stage 1 - Done! Waiting at barrier...
+[Traveler-2] Stage 1 - Done! Waiting at barrier...
+[Traveler-3] Stage 1 - Done! Waiting at barrier...
+[BARRIER] All travelers arrived! Stage complete!
+
+[Traveler-1] All travelers ready! Moving to stage 2
+[Traveler-2] All travelers ready! Moving to stage 2
+[Traveler-3] All travelers ready! Moving to stage 2
+
+[Traveler-1] Stage 2 - Working...
+[Traveler-2] Stage 2 - Working...
+[Traveler-3] Stage 2 - Working...
+
+(1 second work)
+
+[Traveler-1] Stage 2 - Done! Waiting at barrier...
+[Traveler-2] Stage 2 - Done! Waiting at barrier...
+[Traveler-3] Stage 2 - Done! Waiting at barrier...
+[BARRIER] All travelers arrived! Stage complete!
+
+[Traveler-1] All travelers ready! Moving to stage 3
+[Traveler-2] All travelers ready! Moving to stage 3
+[Traveler-3] All travelers ready! Moving to stage 3
+
+(Continues for stage 3...)
+
+✓ Journey complete!
+*/
+```
+
+---
+
+**Comparison Table:**
+
 | Aspect | CountDownLatch | CyclicBarrier |
 |--------|----------------|---------------|
 | **Purpose** | One-shot countdown to 0 | Reusable barrier for N threads |
 | **Initialization** | Count set at creation | Party size set at creation |
 | **Reusability** | One-time use (counts down to 0) | Reusable (resets after barrier) |
-| **Typical Use** | Wait for initialization tasks | Synchronize threads at checkpoints |
+| **Typical Use** | Wait for initialization tasks to complete | Synchronize threads at checkpoints |
 | **API** | `countDown()`, `await()` | `await()`, automatic reset |
-
-**CountDownLatch Example:**
-```java
-CountDownLatch startSignal = new CountDownLatch(1);
-CountDownLatch doneSignal = new CountDownLatch(10);
-
-// 10 worker threads
-for (int i = 0; i < 10; i++) {
-    new Thread(() -> {
-        startSignal.await(); // All wait for start signal
-        doWork();
-        doneSignal.countDown(); // Signal completion
-    }).start();
-}
-
-startSignal.countDown(); // Signal all threads to start
-doneSignal.await(); // Wait for all threads to complete
-System.out.println("All workers done");
-```
-
-**CyclicBarrier Example:**
-```java
-CyclicBarrier barrier = new CyclicBarrier(3, () -> {
-    System.out.println("Phase completed"); // Action after barrier
-});
-
-for (int i = 0; i < 3; i++) {
-    new Thread(() -> {
-        for (int phase = 0; phase < 3; phase++) {
-            doPhaseWork(phase);
-            barrier.await(); // Wait for all threads at barrier
-        }
-    }).start();
-}
-// Output:
-// Phase completed (after first iteration)
-// Phase completed (after second iteration)
-// Phase completed (after third iteration)
-```
+| **Race Scenario** | Perfect for starting race (wait for signal) | Perfect for multi-stage races |
 
 ---
 
