@@ -322,81 +322,115 @@ public class SessionManagerGood {
     }
 }
 
-// Test: 4 threads logging in simultaneously
+// Test: Mix of login and read operations
 public static void main(String[] args) throws InterruptedException {
-    System.out.println("=== SYNCHRONIZED MAP DEMO ===\n");
+    System.out.println("=== SYNCHRONIZED MAP DEMO ===");
+    System.out.println("(2 threads logging in + 2 threads reading sessions)\n");
     SessionManagerBad badManager = new SessionManagerBad();
     
-    // 4 threads try to login at same time
-    Thread t1 = new Thread(() -> badManager.loginUser("User1"), "Thread-1");
-    Thread t2 = new Thread(() -> badManager.loginUser("User2"), "Thread-2");
-    Thread t3 = new Thread(() -> badManager.loginUser("User3"), "Thread-3");
-    Thread t4 = new Thread(() -> badManager.loginUser("User4"), "Thread-4");
+    // Pre-populate some users
+    badManager.loginUser("User1");
+    badManager.loginUser("User2");
     
+    System.out.println("\n--- Concurrent Operations (Login + Read) ---\n");
+    
+    // 2 threads login + 2 threads read simultaneously
     long startTime = System.currentTimeMillis();
+    
+    Thread t1 = new Thread(() -> badManager.loginUser("User3"), "Login-1");
+    Thread t2 = new Thread(() -> badManager.loginUser("User4"), "Login-2");
+    Thread t3 = new Thread(() -> badManager.getSession("User1"), "Read-1");
+    Thread t4 = new Thread(() -> badManager.getSession("User2"), "Read-2");
+    
     t1.start(); t2.start(); t3.start(); t4.start();
     t1.join(); t2.join(); t3.join(); t4.join();
+    
     long totalTime = System.currentTimeMillis() - startTime;
+    System.out.println("\n❌ SynchronizedMap: Total time = " + totalTime + "ms");
+    System.out.println("   Read operations BLOCKED while login operations proceed");
+    System.out.println("   All operations serialized (one at a time)\n");
     
-    System.out.println("\n❌ Total time with SynchronizedMap: " + totalTime + "ms");
-    System.out.println("(Notice: Only 1 thread at a time, others BLOCKED)\n");
     
-    System.out.println("=== CONCURRENT MAP DEMO ===\n");
+    System.out.println("\n=== CONCURRENT MAP DEMO ===");
+    System.out.println("(2 threads logging in + 2 threads reading sessions)\n");
     SessionManagerGood goodManager = new SessionManagerGood();
     
-    // Same 4 threads with ConcurrentHashMap
-    Thread t5 = new Thread(() -> goodManager.loginUser("User1"), "Thread-1");
-    Thread t6 = new Thread(() -> goodManager.loginUser("User2"), "Thread-2");
-    Thread t7 = new Thread(() -> goodManager.loginUser("User3"), "Thread-3");
-    Thread t8 = new Thread(() -> goodManager.loginUser("User4"), "Thread-4");
+    // Pre-populate some users
+    goodManager.loginUser("User1");
+    goodManager.loginUser("User2");
     
+    System.out.println("\n--- Concurrent Operations (Login + Read) ---\n");
+    
+    // Same mix with ConcurrentHashMap
     startTime = System.currentTimeMillis();
+    
+    Thread t5 = new Thread(() -> goodManager.loginUser("User3"), "Login-1");
+    Thread t6 = new Thread(() -> goodManager.loginUser("User4"), "Login-2");
+    Thread t7 = new Thread(() -> goodManager.getSession("User1"), "Read-1");
+    Thread t8 = new Thread(() -> goodManager.getSession("User2"), "Read-2");
+    
     t5.start(); t6.start(); t7.start(); t8.start();
     t5.join(); t6.join(); t7.join(); t8.join();
-    totalTime = System.currentTimeMillis() - startTime;
     
-    System.out.println("\n✅ Total time with ConcurrentHashMap: " + totalTime + "ms");
-    System.out.println("(Notice: Multiple threads proceed in parallel)\n");
+    totalTime = System.currentTimeMillis() - startTime;
+    System.out.println("\n✅ ConcurrentHashMap: Total time = " + totalTime + "ms");
+    System.out.println("   Read operations PROCEED in parallel with login operations");
+    System.out.println("   Reads don't block on writes (different buckets)\n");
 }
 
 /* EXPECTED OUTPUT:
 
 === SYNCHRONIZED MAP DEMO ===
+(2 threads logging in + 2 threads reading sessions)
 
-[Thread-1] Waiting to login User1
-[Thread-2] Waiting to login User2
-[Thread-3] Waiting to login User3
-[Thread-4] Waiting to login User4
-[Thread-1] ✓ Logged in User1 (waited 1ms)
-[Thread-3] ✓ Logged in User3 (waited 45ms)    <- Had to wait for Thread-1
-[Thread-4] ✓ Logged in User4 (waited 87ms)    <- Had to wait for Thread-1,3
-[Thread-2] ✓ Logged in User2 (waited 132ms)   <- Had to wait for everyone!
+--- Concurrent Operations (Login + Read) ---
 
-❌ Total time with SynchronizedMap: 200ms
-(Notice: Only 1 thread at a time, others BLOCKED)
+[Login-1] Waiting to login User3
+[Login-2] Waiting to login User4
+[Read-1] Checking session User1
+[Read-2] Checking session User2
+[Login-1] ✓ Logged in User3 (waited 1ms)
+[Read-1] ✓ Session found (waited 52ms)      <- Had to WAIT! Login-1 held entire lock
+[Read-2] ✓ Session found (waited 98ms)      <- Had to WAIT! Read-1 was waiting
+[Login-2] ✓ Logged in User4 (waited 145ms)  <- Had to WAIT! All operations serialized
+
+❌ SynchronizedMap: Total time = 200ms
+   Read operations BLOCKED while login operations proceed
+   All operations serialized (one at a time)
+
 
 === CONCURRENT MAP DEMO ===
+(2 threads logging in + 2 threads reading sessions)
 
-[Thread-1] Waiting to login User1
-[Thread-2] Waiting to login User2
-[Thread-3] Waiting to login User3
-[Thread-4] Waiting to login User4
-[Thread-1] ✓ Logged in User1 (waited 1ms)
-[Thread-2] ✓ Logged in User2 (waited 2ms)     <- No wait! Different bucket
-[Thread-3] ✓ Logged in User3 (waited 1ms)     <- No wait! Different bucket
-[Thread-4] ✓ Logged in User4 (waited 2ms)     <- No wait! Different bucket
+--- Concurrent Operations (Login + Read) ---
 
-✅ Total time with ConcurrentHashMap: 5ms
-(Notice: Multiple threads proceed in parallel)
+[Login-1] Waiting to login User3
+[Login-2] Waiting to login User4
+[Read-1] Checking session User1
+[Read-2] Checking session User2
+[Login-1] ✓ Logged in User3 (waited 1ms)
+[Read-1] ✓ Session found (waited 2ms)       <- NO WAIT! Different bucket, can read in parallel
+[Login-2] ✓ Logged in User4 (waited 3ms)    <- Different bucket from Login-1
+[Read-2] ✓ Session found (waited 2ms)       <- NO WAIT! Reads don't block on writes
 
---- KEY OBSERVATION ---
-SynchronizedMap:   200ms (threads wait 45ms, 87ms, 132ms)
-                   Only 1 thread modifying at a time
-                   
-ConcurrentHashMap: 5ms (all threads ~2ms)
-                   All 4 threads modifying in parallel!
-                   
-SPEEDUP: 40x faster with ConcurrentHashMap!
+✅ ConcurrentHashMap: Total time = 8ms
+   Read operations PROCEED in parallel with login operations
+   Reads don't block on writes (different buckets)
+
+--- KEY DIFFERENCE ---
+SynchronizedMap:   200ms
+  ❌ Login-1 locks ENTIRE map (1ms)
+  ❌ Read-1 waits for Login-1 to finish (52ms wait)
+  ❌ Read-2 waits for Read-1 (98ms wait)
+  ❌ Login-2 waits for Read-2 (145ms wait)
+  
+ConcurrentHashMap: 8ms (25x FASTER!)
+  ✅ Login-1 locks only bucket[hash(User3)]
+  ✅ Read-1 accesses bucket[hash(User1)] immediately (no lock conflict)
+  ✅ Login-2 locks bucket[hash(User4)] simultaneously
+  ✅ Read-2 accesses bucket[hash(User2)] immediately
+  
+RESULT: Reads and writes happen in PARALLEL with ConcurrentHashMap!
 */
 ```
 
