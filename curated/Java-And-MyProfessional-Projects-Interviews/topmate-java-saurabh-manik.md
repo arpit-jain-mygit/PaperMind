@@ -250,6 +250,76 @@ ConcurrentHashMap<String, Integer> concMap = new ConcurrentHashMap<>();
 - `ConcurrentHashMap.putIfAbsent()` for lazy initialization without double-locking
 - `ConcurrentHashMap.compute()` for atomic read-modify-write operations
 
+**Real Business Scenario: User Session Manager**
+
+```java
+// Business Requirement: Track active user sessions
+// 1000s of concurrent users logging in/out, checking session status
+
+// BAD: Using Synchronized Map (Blocks everyone!)
+public class SessionManagerBad {
+    private Map<String, UserSession> sessions = 
+        Collections.synchronizedMap(new HashMap<>());
+    
+    public void loginUser(String userId, UserSession session) {
+        sessions.put(userId, session);  // ❌ Entire map locked
+    }
+    
+    public UserSession getSession(String userId) {
+        return sessions.get(userId);    // ❌ Entire map locked
+    }
+    
+    public void checkAllActiveSessions() {
+        // ❌ SLOW: Full scan with single lock blocking all puts/gets
+        for (UserSession session : sessions.values()) {
+            if (session.isExpired()) {
+                sessions.remove(session.userId);
+            }
+        }
+    }
+}
+
+// Throughput: ~2000 login/logout operations per second
+// During peak hours: Users experience lag!
+
+
+// GOOD: Using ConcurrentHashMap (Parallel access!)
+public class SessionManagerGood {
+    private ConcurrentHashMap<String, UserSession> sessions = 
+        new ConcurrentHashMap<>();
+    
+    public void loginUser(String userId, UserSession session) {
+        sessions.put(userId, session);  // ✓ Only one bucket locked, others proceed
+    }
+    
+    public UserSession getSession(String userId) {
+        return sessions.get(userId);    // ✓ No lock if hash bucket free
+    }
+    
+    public void checkAllActiveSessions() {
+        // ✓ FAST: Uses internal iteration, other threads can still add/remove
+        sessions.forEach((userId, session) -> {
+            if (session.isExpired()) {
+                sessions.remove(userId);
+            }
+        });
+    }
+}
+
+// Throughput: ~50000 login/logout operations per second
+// During peak hours: Users get instant responses!
+
+
+// Real Performance Impact:
+// With 100 concurrent users logging in per second:
+// 
+// SynchronizedMap:     Each user waits ~100ms (blocked on lock)
+//                      Total wait time: 10 seconds (everyone waits!)
+// 
+// ConcurrentHashMap:   Each user takes ~2ms (bucket-level lock)
+//                      Total wait time: 0.2 seconds (minimal contention)
+```
+
 ---
 
 ### Q6: ReentrantLock vs Lock Interface - When to Use?
