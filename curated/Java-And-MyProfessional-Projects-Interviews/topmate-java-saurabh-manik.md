@@ -626,136 +626,274 @@ public class ProducerConsumer {
 **Solution 1: Using Volatile and Wait-Notify:**
 ```java
 public class EvenOddPrinter {
+    // volatile ensures both threads see the latest value (no caching)
+    // Counter starts at 1
     private volatile int counter = 1;
+    
+    // Tracks whose turn it is (not strictly necessary here, but good practice)
     private volatile boolean isEvenTurn = false;
+    
+    // Shared lock object - used for synchronization between threads
+    // Only one thread can be in synchronized(lock) block at a time
     private final Object lock = new Object();
     
+    // Even thread: prints 2, 4, 6, 8, 10
     public void printEven() {
+        // Keep looping until counter exceeds 10
         while (counter <= 10) {
+            // Acquire lock - ensure only one thread enters this block
+            // Other threads must wait outside
             synchronized (lock) {
+                // Check if current number is EVEN (divisible by 2)
                 if (counter % 2 == 0) {
+                    // It's our turn! Print the number
                     System.out.println("Even Thread: " + counter);
+                    // Increment counter to next number
                     counter++;
+                    // Update turn indicator (not really used here)
                     isEvenTurn = false;
+                    // Wake up ALL waiting threads (including odd thread)
+                    // They will compete to acquire the lock
                     lock.notifyAll();
                 } else {
+                    // Current number is ODD, not our turn yet
+                    // Go to sleep and wait for odd thread to wake us
                     try {
+                        // Release the lock and wait
+                        // When odd thread calls notifyAll(), we wake up
                         lock.wait();
+                        // After waking up, we loop back and re-check the condition
                     } catch (InterruptedException e) {
+                        // Handle thread interruption gracefully
                         Thread.currentThread().interrupt();
                     }
                 }
-            }
+            } // Release lock here - other threads can now enter
         }
     }
     
+    // Odd thread: prints 1, 3, 5, 7, 9
     public void printOdd() {
+        // Keep looping until counter exceeds 10
         while (counter <= 10) {
+            // Acquire lock - ensure only one thread enters this block
             synchronized (lock) {
+                // Check if current number is ODD (not divisible by 2)
                 if (counter % 2 == 1) {
+                    // It's our turn! Print the number
                     System.out.println("Odd Thread: " + counter);
+                    // Increment counter to next number
                     counter++;
+                    // Update turn indicator
                     isEvenTurn = true;
+                    // Wake up ALL waiting threads (including even thread)
                     lock.notifyAll();
                 } else {
+                    // Current number is EVEN, not our turn yet
+                    // Go to sleep and wait for even thread to wake us
                     try {
+                        // Release the lock and wait for notification
                         lock.wait();
                     } catch (InterruptedException e) {
+                        // Handle thread interruption
                         Thread.currentThread().interrupt();
                     }
                 }
-            }
+            } // Release lock here
         }
     }
     
     public static void main(String[] args) {
+        // Create single printer instance shared between both threads
         EvenOddPrinter printer = new EvenOddPrinter();
         
+        // Create odd number thread - calls printOdd() in a separate thread
         Thread odd = new Thread(printer::printOdd, "Odd");
+        // Create even number thread - calls printEven() in a separate thread
         Thread even = new Thread(printer::printEven, "Even");
         
+        // Start both threads - they execute concurrently
         odd.start();
         even.start();
     }
 }
 
 // Output:
-// Odd Thread: 1
-// Even Thread: 2
-// Odd Thread: 3
-// Even Thread: 4
+// Odd Thread: 1    (odd thread starts, counter=1 is odd, prints and increments to 2)
+// Even Thread: 2   (even thread wakes up, counter=2 is even, prints and increments to 3)
+// Odd Thread: 3    (odd thread wakes up, counter=3 is odd, prints and increments to 4)
+// Even Thread: 4   (even thread wakes up, counter=4 is even, prints and increments to 5)
 // ...
 ```
 
 **Solution 2: Using Semaphore (Cleaner):**
 ```java
 public class EvenOddWithSemaphore {
+    // Counter to track current number (1-10)
     private int counter = 1;
-    private Semaphore odd = new Semaphore(1);  // Odd thread starts
-    private Semaphore even = new Semaphore(0); // Even thread waits
     
+    // Semaphore for odd thread
+    // Initial value = 1, meaning odd thread can proceed immediately
+    // Think of it as: 1 permit available for odd thread
+    private Semaphore odd = new Semaphore(1);
+    
+    // Semaphore for even thread
+    // Initial value = 0, meaning even thread must wait
+    // Think of it as: 0 permits available, even thread cannot proceed
+    private Semaphore even = new Semaphore(0);
+    
+    // Odd thread: prints 1, 3, 5, 7, 9
     public void printOdd() throws InterruptedException {
+        // Loop while counter <= 10
         while (counter <= 10) {
+            // Acquire a permit from odd semaphore
+            // If permits available: immediately proceed, decrement permit count
+            // If no permits: block and wait until another thread releases a permit
             odd.acquire();
+            
+            // Check if counter is odd
             if (counter % 2 == 1) {
+                // It's an odd number, print it
                 System.out.println(counter);
+                // Increment counter for next iteration
                 counter++;
             }
+            
+            // Release a permit to even semaphore
+            // This wakes up the even thread (if waiting)
+            // Increment permit count for even semaphore
             even.release();
         }
     }
     
+    // Even thread: prints 2, 4, 6, 8, 10
     public void printEven() throws InterruptedException {
+        // Loop while counter <= 10
         while (counter <= 10) {
+            // Acquire a permit from even semaphore
+            // Initially 0, so even thread blocks here until odd thread releases
             even.acquire();
+            
+            // Check if counter is even
             if (counter % 2 == 0) {
+                // It's an even number, print it
                 System.out.println(counter);
+                // Increment counter for next iteration
                 counter++;
             }
+            
+            // Release a permit to odd semaphore
+            // This wakes up the odd thread (if waiting)
             odd.release();
         }
     }
 }
+
+// Execution Flow:
+// Start: odd_permits=1, even_permits=0
+// 1. Odd thread: acquire(1) -> succeeds (odd_permits=0), prints 1, release(even) -> even_permits=1
+// 2. Even thread: acquire(1) -> succeeds (even_permits=0), prints 2, release(odd) -> odd_permits=1
+// 3. Odd thread: acquire(1) -> succeeds (odd_permits=0), prints 3, release(even) -> even_permits=1
+// ... and so on
 ```
 
 **Solution 3: Using ReentrantLock with Conditions:**
 ```java
 public class EvenOddWithLock {
+    // Counter to track current number (1-10)
     private int counter = 1;
+    
+    // ReentrantLock: explicit lock object
+    // More flexible than synchronized keyword
+    // Allows multiple condition objects for different wait/signal scenarios
     private final ReentrantLock lock = new ReentrantLock();
+    
+    // Condition for odd thread: wait here when it's not odd thread's turn
+    // Signals only the odd thread to wake up
     private final Condition odd = lock.newCondition();
+    
+    // Condition for even thread: wait here when it's not even thread's turn
+    // Signals only the even thread to wake up
     private final Condition even = lock.newCondition();
     
+    // Odd thread: prints 1, 3, 5, 7, 9
     public void printOdd() throws InterruptedException {
+        // Loop while counter <= 10
         while (counter <= 10) {
+            // Acquire the lock - only one thread can be inside at a time
             lock.lock();
             try {
+                // Keep checking until counter is ODD
+                // This while loop handles spurious wakeups
+                // (thread might wake up even when condition is false)
                 while (counter % 2 == 0) {
+                    // It's even number, not our turn
+                    // Release lock and wait on odd condition
+                    // Thread sleeps until odd.signal() is called
                     odd.await();
+                    // After waking up, loop continues and re-checks the condition
                 }
+                
+                // Now counter is ODD, it's our turn!
+                // Print the number and increment counter
                 System.out.println(counter++);
+                
+                // Wake up only the even thread (not all threads like notifyAll())
+                // More efficient: signals only the relevant thread
                 even.signal();
             } finally {
+                // ALWAYS release the lock, even if exception occurs
+                // This is critical! Otherwise other threads will be stuck
                 lock.unlock();
             }
         }
     }
     
+    // Even thread: prints 2, 4, 6, 8, 10
     public void printEven() throws InterruptedException {
+        // Loop while counter <= 10
         while (counter <= 10) {
+            // Acquire the lock - wait if another thread holds it
             lock.lock();
             try {
+                // Keep checking until counter is EVEN
+                // While loop handles spurious wakeups
                 while (counter % 2 == 1) {
+                    // It's odd number, not our turn
+                    // Release lock and wait on even condition
+                    // Thread sleeps until even.signal() is called
                     even.await();
+                    // After waking up, loop continues and re-checks the condition
                 }
+                
+                // Now counter is EVEN, it's our turn!
+                // Print the number and increment counter
                 System.out.println(counter++);
+                
+                // Wake up only the odd thread
+                // Signals just the odd condition, not all waiting threads
                 odd.signal();
             } finally {
+                // ALWAYS release the lock
+                // Using finally ensures lock is released even on exceptions
                 lock.unlock();
             }
         }
     }
 }
+
+// Why while loop instead of if?
+// Example of spurious wakeup:
+//   1. Odd thread awaits on odd.condition
+//   2. Even thread signals odd.condition
+//   3. Odd thread wakes up
+//   4. But if condition is still false, odd thread should wait again
+//   5. Using while ensures we re-check after waking up
+
+// Comparison:
+// wait/notify:     Uses one wait queue, all threads compete
+// Conditions:      Multiple wait queues, thread-specific wake-ups
+// This is more efficient and prevents "thundering herd" problem
 ```
 
 **Architect Analysis:**
