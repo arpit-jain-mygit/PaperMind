@@ -1380,6 +1380,193 @@ Threads 5-8 don't idle; they steal from overloaded threads' work queues
 
 ### JWT Token
 
+#### What is JWT (JSON Web Token)?
+
+**Simple Explanation:**
+JWT is a secure token (a piece of data) that proves who you are. Think of it like a passport or ID card:
+- **Passport**: Shows your identity, nationality, expiration date → Can't be forged (has a security seal)
+- **JWT**: Shows your user ID, username, roles, expiration date → Can't be forged (has a cryptographic signature)
+
+**Real-World Analogy:**
+
+```
+Hotel Room Key Card Scenario:
+
+WITHOUT JWT (Traditional Session):
+1. Guest checks in at front desk
+2. Front desk asks: "Who are you?" 
+3. Guest provides ID
+4. Front desk creates a room key and stores guest info in a database
+5. Front desk gives guest the key card
+6. Guest swipes key card at room
+7. Hotel system must query the database: "Is this key card valid?"
+8. Database lookup confirms guest is allowed
+9. Door opens
+
+Problem: Every door swipe requires a database query. If hotel has 1000 guests, 1000 database lookups!
+
+WITH JWT:
+1. Guest checks in at front desk
+2. Front desk asks: "Who are you?"
+3. Guest provides ID
+4. Front desk creates a JWT: "This is John Smith, room 501, checkout date 12/25, SIGNED by front desk"
+5. Front desk gives guest the JWT
+6. Guest swipes JWT at room
+7. Hotel system reads JWT: "Says John Smith, room 501, checkout date 12/25, signed by front desk"
+8. System verifies signature: "Yes, this is really signed by front desk, not forged"
+9. Door opens
+
+Benefit: No database lookup needed! JWT contains all info + cryptographic proof it's real.
+```
+
+**When is JWT Used?**
+
+```
+✅ Authentication (proving who you are):
+   - Login: User provides username/password
+   - Server returns JWT token
+   - Client stores JWT (in memory, localStorage, cookie)
+   - Every API request includes JWT in Authorization header
+   - Server validates JWT signature (no DB query needed)
+
+✅ Authorization (proving what you're allowed to do):
+   - JWT contains "roles": ["USER", "ADMIN"]
+   - API reads roles from JWT
+   - Blocks if user doesn't have required role
+
+✅ Stateless Sessions (no server-side session storage):
+   - Traditional: User logs in → Server creates session → Stores in DB
+   - JWT way: User logs in → Server creates JWT → No storage needed!
+   - Multiple servers can validate the same JWT (no sync needed)
+
+✅ Mobile Apps & Microservices:
+   - Mobile app gets JWT → Sends with every API call
+   - Each microservice can validate JWT independently
+   - No need for shared session storage
+
+✅ Third-party APIs (OAuth 2.0):
+   - You sign in with Google/GitHub
+   - They return a JWT token
+   - You use JWT to access their APIs
+```
+
+**JWT vs Traditional Session-Based Auth:**
+
+| Aspect | Traditional Session | JWT |
+|--------|-------------------|-----|
+| **Storage** | Session stored in database | No server storage needed |
+| **Scalability** | Requires sticky sessions or session replication | Scales horizontally easily |
+| **API Calls** | Each request needs DB lookup | No DB lookup (verify signature only) |
+| **Mobile Apps** | Requires cookies (complex) | Simple: send in Authorization header |
+| **Microservices** | Needs centralized session store | Each service validates independently |
+| **CORS** | Requires cookie management | Easier with Authorization headers |
+| **Logout** | Delete session from DB (instant) | Token stays valid until expiration (harder to revoke) |
+
+**How JWT Works (Step-by-Step):**
+
+```
+STEP 1: User Logs In
+┌─────────────────────────────────────────┐
+│ Client (Browser/Mobile App)             │
+│ Sends: username=john, password=secret   │
+└────────────────────┬────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────┐
+│ Server (Backend)                        │
+│ 1. Verify username & password           │
+│ 2. Create JWT payload:                  │
+│    {                                    │
+│      "userId": "12345",                 │
+│      "username": "john",                │
+│      "roles": ["USER"],                 │
+│      "iat": 1234567890,  (issued at)    │
+│      "exp": 1234571490   (expires in)   │
+│    }                                    │
+│ 3. Sign with secret: HMAC-SHA256        │
+│ 4. Return JWT to client                 │
+└────────────────────┬────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────┐
+│ Client: Stores JWT in memory/localStorage
+│ JWT = "eyJhbGciOiJIUzI1NiJ9.eyJ..."     │
+└─────────────────────────────────────────┘
+
+STEP 2: Client Makes API Request
+┌─────────────────────────────────────────┐
+│ Client Sends:                           │
+│ GET /api/profile                        │
+│ Authorization: Bearer eyJhbGc...        │
+└────────────────────┬────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────┐
+│ Server:                                 │
+│ 1. Extract JWT from Authorization header│
+│ 2. Verify signature using secret        │
+│    (Proves JWT wasn't tampered with)    │
+│ 3. Check expiration time                │
+│ 4. Read user info from payload          │
+│ 5. Process request as authenticated user│
+│ 6. Return response                      │
+└────────────────────┬────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────┐
+│ Client: Receives response                │
+│ {                                       │
+│   "name": "John Doe",                   │
+│   "email": "john@example.com"           │
+│ }                                       │
+└─────────────────────────────────────────┘
+```
+
+**Advantages of JWT:**
+
+1. **Stateless**: No session storage on server
+2. **Scalable**: Easy to scale horizontally (no server affinity needed)
+3. **Mobile-Friendly**: Works great with mobile apps
+4. **Microservices**: Each service can validate independently
+5. **Performance**: No database lookup per request
+6. **Self-contained**: All info in the token itself
+
+**Disadvantages of JWT:**
+
+1. **Logout Problem**: Token stays valid until expiration (can't instantly revoke)
+   - Solution: Maintain a token blacklist in database
+2. **Token Size**: Larger than session ID (increases request size)
+3. **Refresh Needed**: Must refresh before expiration (need refresh tokens)
+4. **Secret Management**: Secret key must be secure (if leaked, all tokens compromised)
+5. **No Server Control**: Once issued, server can't modify token content
+
+**JWT Security Risks:**
+
+```
+❌ Risk 1: Token Theft
+   - Attacker steals JWT from localStorage via XSS
+   - Can use token to impersonate user
+   - Solution: Use HttpOnly cookies, not localStorage
+
+❌ Risk 2: Secret Key Exposed
+   - If secret key is compromised, attacker can create fake JWTs
+   - Solution: Store secret in secure vault (HashiCorp Vault, AWS Secrets Manager)
+
+❌ Risk 3: Token Expiration Too Long
+   - If token valid for 1 year, compromised token valid for 1 year
+   - Solution: Use short expiration (15 min) + refresh tokens (7 days)
+
+❌ Risk 4: "none" Algorithm Attack
+   - Attacker changes algorithm to "none" to bypass verification
+   - Solution: Explicitly check algorithm in server code
+
+❌ Risk 5: Weak Signature
+   - Using HS256 with weak secret allows brute force
+   - Solution: Use strong secrets, consider RS256 (asymmetric)
+```
+
+---
+
 #### Q13: JWT Structure and Security
 
 **JWT Format:**
