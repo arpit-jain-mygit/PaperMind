@@ -614,134 +614,130 @@ Why this matters for ConcurrentHashMap:
 6. **Interruptible locking** - A waiting thread can be told to stop waiting and do something else
 
 ```java
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
-class Producer implements Runnable {
-  private Lock lock;
-  private Condition spaceAvailable;
-  private Condition dataReady;
-  private String[] buffer;
-  private int count;
-  
-  public Producer(Lock lock, Condition spaceAvailable, Condition dataReady, String[] buffer) {
-    this.lock = lock;
-    this.spaceAvailable = spaceAvailable;
-    this.dataReady = dataReady;
-    this.buffer = buffer;
-    this.count = 0;
-  }
-  
-  public void run() {
-    lock.lock();  // Try to acquire lock. If available, continue to next line. If not, BLOCK and wait here.
-    try {
-      for (int i = 0; i < 5; i++) {
-        if (count == buffer.length) {  // If buffer is full (3 elements)
-          System.out.println("Producer: Buffer full, waiting for space...");
-          // await() = wait INDEFINITELY until consumer calls signal()
-          // How long? As long as needed - until consumer removes data
-          // When notified? Only when consumer calls spaceAvailable.signal()
-          spaceAvailable.await();  // Releases lock, waits in "space" waiting room
-        }
-        buffer[count] = "Data-" + i;
-        System.out.println("Producer: Added " + buffer[count] + " (count: " + (++count) + "/3)");
-        dataReady.signal();  // Wake up ONE waiting consumer
-      }
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-    } finally {
-      lock.unlock();  // Always release the lock
-    }
+public class ReentrantProducerConsumerExample {
+  public static void main(String[] args) throws InterruptedException {
+    ReentrantLock sharedLock = new ReentrantLock();
+    Condition sharedDataAvailableCondition = sharedLock.newCondition();
+    Condition sharedSpaceAvailableCondition = sharedLock.newCondition();
+    String[] sharedArray = new String[5];//Buffer can hold max at a time
+    AtomicInteger count = new AtomicInteger(0);
+    
+    Producer producerThread = new Producer(sharedLock, sharedDataAvailableCondition, sharedSpaceAvailableCondition, sharedArray, count);
+    Consumer consumerThread = new Consumer(sharedLock, sharedDataAvailableCondition, sharedSpaceAvailableCondition, sharedArray, count);
+
+    producerThread.start();
+    Thread.sleep(200);
+    consumerThread.start();
+
+    producerThread.join();
+    consumerThread.join();
   }
 }
 
-class Consumer implements Runnable {
-  private Lock lock;
-  private Condition spaceAvailable;
-  private Condition dataReady;
-  private String[] buffer;
-  private int count;
-  
-  public Consumer(Lock lock, Condition spaceAvailable, Condition dataReady, String[] buffer) {
-    this.lock = lock;
-    this.spaceAvailable = spaceAvailable;
-    this.dataReady = dataReady;
-    this.buffer = buffer;
-    this.count = 0;
+class Producer extends Thread {
+  private ReentrantLock sharedLock;
+  private Condition sharedDataAvailableCondition;//will signal condition
+  private Condition sharedSpaceAvailableCondition;//will await for this condition
+  private String[] sharedArray;
+  AtomicInteger count;
+
+  public Producer() {
+
   }
-  
-  public void setCount(int count) {
+
+  public Producer(ReentrantLock sharedLock, Condition sharedDataAvailableCondition, Condition sharedSpaceAvailableCondition, String[] sharedArray, AtomicInteger count) {
+    this.sharedLock = sharedLock;
+    this.sharedSpaceAvailableCondition = sharedSpaceAvailableCondition;
+    this.sharedDataAvailableCondition = sharedDataAvailableCondition;
+    this.sharedArray = sharedArray;
     this.count = count;
   }
-  
-  public int getCount() {
-    return count;
-  }
-  
+
   public void run() {
-    lock.lock();  // Try to acquire lock. If available, continue. If not, BLOCK and wait here.
+    sharedLock.lock();
     try {
-      for (int i = 0; i < 5; i++) {
-        if (count == 0) {  // If buffer is empty
-          System.out.println("Consumer: Buffer empty, waiting for data...");
-          // await() = wait INDEFINITELY until producer calls signal()
-          // How long? As long as needed - until producer adds data and calls signal()
-          // When notified? Only when producer calls dataReady.signal()
-          dataReady.await();  // Releases lock, waits in "data" waiting room
+      for (int i = 0; i < 100; i++) {
+        if (count.get() == sharedArray.length) {//check if count reached max to 5 limit
+          System.out.println("Array is not empty, wait for consumer to consume");
+          sharedSpaceAvailableCondition.await(); //wait for the space to be available, after consume consumes at least one Datapoint
+        } else {
+          sharedArray[count.get()] = "Data-" + i;
+          System.out.println("Data produced at " + count + "th position: " + sharedArray[count.get()] );
+          count.incrementAndGet();
+          sharedDataAvailableCondition.signal(); //Array has at least one DataPoint for Consumer to consume
         }
-        String data = buffer[count - 1];
-        System.out.println("Consumer: Got " + data + " (count: " + (--count) + "/3)");
-        spaceAvailable.signal();  // Wake up ONE waiting producer
       }
-    } catch (InterruptedException e) {
+    } catch (InterruptedException iex) {
       Thread.currentThread().interrupt();
+
     } finally {
-      lock.unlock();  // Always release the lock
+      sharedLock.unlock();
     }
+
   }
 }
 
-public class ReentrantLockExample {
-  public static void main(String[] args) throws InterruptedException {
-    Lock lock = new ReentrantLock();
-    Condition dataReady = lock.newCondition();
-    Condition spaceAvailable = lock.newCondition();
-    
-    String[] buffer = new String[3];  // Array of 3 elements
-    
-    System.out.println("=== Producer-Consumer with Array Buffer (3 elements) ===\n");
-    
-    Thread producer = new Thread(new Producer(lock, spaceAvailable, dataReady, buffer));
-    Thread consumer = new Thread(new Consumer(lock, spaceAvailable, dataReady, buffer));
-    
-    producer.start();
-    Thread.sleep(100);
-    consumer.start();
-    
-    producer.join();
-    consumer.join();
-    
-    System.out.println("\nDone");
+class Consumer extends Thread {
+  private ReentrantLock sharedLock;
+  private Condition sharedDataAvailableCondition;//will await for this condition
+  private Condition sharedSpaceAvailableCondition;//will signal condition
+  private String[] sharedArray;
+  AtomicInteger count;
+  
+  public Consumer() {
+
+  }
+
+  public Consumer(ReentrantLock sharedLock, Condition sharedDataAvailableCondition, Condition sharedSpaceAvailableCondition, String[] sharedArray, AtomicInteger count) {
+    this.sharedLock = sharedLock;
+    this.sharedSpaceAvailableCondition = sharedSpaceAvailableCondition;
+    this.sharedDataAvailableCondition = sharedDataAvailableCondition;
+    this.sharedArray = sharedArray;
+    this.count = count;
+  }
+
+  public void run() {
+    sharedLock.lock();
+    try {
+      for (int i = 0; i < 100; i++) {
+        if (count.get() == 0) {
+          System.out.println("Array is empty, signal to Producer");
+          sharedDataAvailableCondition.await(); //wait for the data to be available, after Producer produces at least one Datapoint
+        } else {
+          String data = sharedArray[count.get()-1];
+          count.decrementAndGet(); 
+          System.out.println("Data consumed at " + i + "th position: " + data);
+          sharedSpaceAvailableCondition.signal(); //Array has at least one DataPoint for Consumer to consume
+        }
+      }
+    } catch (InterruptedException iex) {
+      Thread.currentThread().interrupt();
+
+    } finally {
+      sharedLock.unlock();
+    }
+
   }
 }
 
 /* OUTPUT:
-=== Producer-Consumer with Array Buffer (3 elements) ===
-
-Producer: Added Data-0 (count: 1/3)
-Producer: Added Data-1 (count: 2/3)
-Producer: Added Data-2 (count: 3/3)
-Producer: Buffer full, waiting for space...
-Consumer: Got Data-2 (count: 2/3)
-Producer: Added Data-3 (count: 3/3)
-Producer: Buffer full, waiting for space...
-Consumer: Got Data-3 (count: 2/3)
-Consumer: Got Data-1 (count: 1/3)
-Consumer: Got Data-0 (count: 0/3)
-Consumer: Buffer empty, waiting for data...
-
-Done
+Data produced at 0th position: Data-0
+Data produced at 1th position: Data-1
+Data produced at 2th position: Data-2
+Data produced at 3th position: Data-3
+Data produced at 4th position: Data-4
+Array is not empty, wait for consumer to consume
+Data consumed at 0th position: Data-4
+Data produced at 5th position: Data-5
+Data consumed at 1th position: Data-3
+Data produced at 6th position: Data-6
+Data consumed at 2th position: Data-2
+Data produced at 7th position: Data-7
+...
+[Producer and Consumer interleave, showing coordination via await/signal]
 */
 ```
 
