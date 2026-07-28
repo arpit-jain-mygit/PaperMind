@@ -208,6 +208,13 @@ Comparator<Integer> good = Integer::compare;
 
 ### Q5: ConcurrentHashMap vs Synchronized Map - Deep Dive
 
+**Layman Explanation:**
+
+- **ConcurrentHashMap** - Like a restaurant with 16 tables (buckets); multiple servers can work on different tables at the same time (parallel)
+- **SynchronizedMap** - Like a restaurant with only 1 door; only one server can enter at a time, everyone else waits (sequential)
+
+---
+
 **ConcurrentHashMap (Enriched - Shows Parallel Execution):**
 
 ```java
