@@ -2392,6 +2392,69 @@ Threads 5-8 don't idle; they steal from overloaded threads' work queues
 
 ---
 
+## Multi-Threading Concepts Summary (Layman Terms)
+
+**Complete Threading Concepts - Quick Reference**
+
+| Concept | What It Does | Real-World Analogy | When to Use |
+|---------|-------------|-------------------|-----------|
+| **synchronized** | Lock a room (only 1 person at a time) | Bank teller room - one customer at a time | Simple sharing (1-2 threads) |
+| **ReentrantLock** | Smart lock (same person can re-lock) | VIP pass holder can enter same door multiple times | Complex locking patterns |
+| **Semaphore** | Permit system (N people allowed) | Restaurant: 10 tables, each seat holds 1 person | Limit concurrent access to N resources |
+| **CountDownLatch** | Start gun for race (waits for signal) | Teacher waits for all 30 students to arrive before starting class | Wait for N tasks to complete |
+| **volatile** | Megaphone (shout so everyone hears) | Loudspeaker: announcement visible to all immediately | Simple flag shared between threads |
+| **CyclicBarrier** | Meeting point (all wait for each other) | 5 friends at movie theater - all wait until everyone arrives | Sync threads at checkpoints (repeating) |
+| **AtomicInteger** | Safe counter (no lost updates) | Turnstile: click button, counter +1 (always accurate) | Atomic mutations (increment, decrement) |
+| **ExecutorService** | Receptionist (takes tasks, assigns to workers) | Hotel: front desk takes requests, assigns to staff | Execute many tasks with worker threads |
+| **ThreadPool** | Team of workers waiting for jobs | Construction crew: 10 workers wait for tasks, work, repeat | Reuse threads instead of creating new |
+| **ForkJoinPool** | Divide-and-conquer team (split work, merge) | Swarm: split large task into subtasks, workers tackle, combine | Parallel divide-and-conquer problems |
+
+---
+
+**Quick Decision Guide:**
+
+```
+Q: Lock shared resource?
+├─ Simple case → synchronized
+└─ Complex case → ReentrantLock
+
+Q: Limit to N concurrent?
+└─ Semaphore
+
+Q: Wait for N tasks to complete?
+└─ CountDownLatch
+
+Q: Threads sync at checkpoint (repeating)?
+└─ CyclicBarrier
+
+Q: Execute many tasks in parallel?
+├─ Regular tasks → ExecutorService + ThreadPool
+└─ Divide-and-conquer → ForkJoinPool
+
+Q: Safe counter mutations?
+└─ AtomicInteger
+
+Q: Just visibility (read-heavy)?
+└─ volatile
+```
+
+---
+
+**One-Liner Cheat Sheet:**
+
+- **synchronized** = "One person in room at a time"
+- **ReentrantLock** = "Smart lock, same person can re-lock"
+- **Semaphore** = "10 parking spots for anyone"
+- **CountDownLatch** = "Teacher waits for all students"
+- **volatile** = "Megaphone announcement"
+- **CyclicBarrier** = "Friends wait for each other"
+- **AtomicInteger** = "Accurate turnstile counter"
+- **ExecutorService** = "Receptionist + worker team"
+- **ThreadPool** = "Team of workers reused"
+- **ForkJoinPool** = "Divide big problem, merge results"
+
+---
+
 ## Other Topics
 
 ### JWT Token
