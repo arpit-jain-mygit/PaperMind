@@ -622,28 +622,32 @@ class Producer implements Runnable {
   private Lock lock;
   private Condition spaceAvailable;
   private Condition dataReady;
-  private StringBuilder buffer;
+  private String[] buffer;
+  private int count;
   
-  public Producer(Lock lock, Condition spaceAvailable, Condition dataReady, StringBuilder buffer) {
+  public Producer(Lock lock, Condition spaceAvailable, Condition dataReady, String[] buffer) {
     this.lock = lock;
     this.spaceAvailable = spaceAvailable;
     this.dataReady = dataReady;
     this.buffer = buffer;
+    this.count = 0;
   }
   
   public void run() {
     lock.lock();  // Try to acquire lock. If available, continue to next line. If not, BLOCK and wait here.
     try {
-      while (buffer.length() > 0) {
-        System.out.println("Producer: Buffer full, waiting for space...");
-        // await() = wait INDEFINITELY until consumer calls signal()
-        // How long? As long as needed - could be 1 sec, 1 min, or forever
-        // When notified? Only when consumer calls spaceAvailable.signal()
-        spaceAvailable.await();  // Releases lock, waits in "space" waiting room
+      for (int i = 0; i < 5; i++) {
+        while (count == buffer.length) {  // Buffer is full (3 elements)
+          System.out.println("Producer: Buffer full, waiting for space...");
+          // await() = wait INDEFINITELY until consumer calls signal()
+          // How long? As long as needed - until consumer removes data
+          // When notified? Only when consumer calls spaceAvailable.signal()
+          spaceAvailable.await();  // Releases lock, waits in "space" waiting room
+        }
+        buffer[count] = "Data-" + i;
+        System.out.println("Producer: Added " + buffer[count] + " (count: " + (++count) + "/3)");
+        dataReady.signal();  // Wake up ONE waiting consumer
       }
-      buffer.append("Data");
-      System.out.println("Producer: Added data to buffer");
-      dataReady.signal();  // Wake up ONE waiting consumer
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
     } finally {
@@ -656,28 +660,40 @@ class Consumer implements Runnable {
   private Lock lock;
   private Condition spaceAvailable;
   private Condition dataReady;
-  private StringBuilder buffer;
+  private String[] buffer;
+  private int count;
   
-  public Consumer(Lock lock, Condition spaceAvailable, Condition dataReady, StringBuilder buffer) {
+  public Consumer(Lock lock, Condition spaceAvailable, Condition dataReady, String[] buffer) {
     this.lock = lock;
     this.spaceAvailable = spaceAvailable;
     this.dataReady = dataReady;
     this.buffer = buffer;
+    this.count = 0;
+  }
+  
+  public void setCount(int count) {
+    this.count = count;
+  }
+  
+  public int getCount() {
+    return count;
   }
   
   public void run() {
     lock.lock();  // Try to acquire lock. If available, continue. If not, BLOCK and wait here.
     try {
-      while (buffer.length() == 0) {
-        System.out.println("Consumer: Buffer empty, waiting for data...");
-        // await() = wait INDEFINITELY until producer calls signal()
-        // How long? As long as needed - until producer adds data and calls signal()
-        // When notified? Only when producer calls dataReady.signal()
-        dataReady.await();  // Releases lock, waits in "data" waiting room
+      for (int i = 0; i < 5; i++) {
+        while (count == 0) {  // Buffer is empty
+          System.out.println("Consumer: Buffer empty, waiting for data...");
+          // await() = wait INDEFINITELY until producer calls signal()
+          // How long? As long as needed - until producer adds data and calls signal()
+          // When notified? Only when producer calls dataReady.signal()
+          dataReady.await();  // Releases lock, waits in "data" waiting room
+        }
+        String data = buffer[count - 1];
+        System.out.println("Consumer: Got " + data + " (count: " + (--count) + "/3)");
+        spaceAvailable.signal();  // Wake up ONE waiting producer
       }
-      System.out.println("Consumer: Got data: " + buffer.toString());
-      buffer.setLength(0);
-      spaceAvailable.signal();  // Wake up ONE waiting producer
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
     } finally {
@@ -692,9 +708,9 @@ public class ReentrantLockExample {
     Condition dataReady = lock.newCondition();
     Condition spaceAvailable = lock.newCondition();
     
-    StringBuilder buffer = new StringBuilder();
+    String[] buffer = new String[3];  // Array of 3 elements
     
-    System.out.println("=== Producer-Consumer with Conditions ===\n");
+    System.out.println("=== Producer-Consumer with Array Buffer (3 elements) ===\n");
     
     Thread producer = new Thread(new Producer(lock, spaceAvailable, dataReady, buffer));
     Thread consumer = new Thread(new Consumer(lock, spaceAvailable, dataReady, buffer));
@@ -711,10 +727,18 @@ public class ReentrantLockExample {
 }
 
 /* OUTPUT:
-=== Producer-Consumer with Conditions ===
+=== Producer-Consumer with Array Buffer (3 elements) ===
 
-Producer: Added data to buffer
-Consumer: Got data: Data
+Producer: Added Data-0 (count: 1/3)
+Producer: Added Data-1 (count: 2/3)
+Producer: Added Data-2 (count: 3/3)
+Producer: Buffer full, waiting for space...
+Consumer: Got Data-2 (count: 2/3)
+Producer: Added Data-3 (count: 3/3)
+Producer: Buffer full, waiting for space...
+Consumer: Got Data-3 (count: 2/3)
+Consumer: Got Data-1 (count: 1/3)
+Consumer: Got Data-0 (count: 0/3)
 Consumer: Buffer empty, waiting for data...
 
 Done
