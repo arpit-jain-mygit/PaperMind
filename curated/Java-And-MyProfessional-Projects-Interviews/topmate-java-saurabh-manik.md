@@ -618,21 +618,32 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.Condition;
 
-class WaitingThread implements Runnable {
+class Producer implements Runnable {
   private Lock lock;
-  private Condition condition;
+  private Condition spaceAvailable;
+  private Condition dataReady;
+  private StringBuilder buffer;
   
-  public WaitingThread(Lock lock, Condition condition) {
+  public Producer(Lock lock, Condition spaceAvailable, Condition dataReady, StringBuilder buffer) {
     this.lock = lock;
-    this.condition = condition;
+    this.spaceAvailable = spaceAvailable;
+    this.dataReady = dataReady;
+    this.buffer = buffer;
   }
   
   public void run() {
     lock.lock();  // Try to acquire lock. If available, continue to next line. If not, BLOCK and wait here.
     try {
-      System.out.println("Thread 1: Waiting for signal...");
-      condition.await();  // Release lock, wait in the "waiting room" for signal
-      System.out.println("Thread 1: Got signal! Continuing...");
+      while (buffer.length() > 0) {
+        System.out.println("Producer: Buffer full, waiting for space...");
+        // await() = wait INDEFINITELY until consumer calls signal()
+        // How long? As long as needed - could be 1 sec, 1 min, or forever
+        // When notified? Only when consumer calls spaceAvailable.signal()
+        spaceAvailable.await();  // Releases lock, waits in "space" waiting room
+      }
+      buffer.append("Data");
+      System.out.println("Producer: Added data to buffer");
+      dataReady.signal();  // Wake up ONE waiting consumer
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
     } finally {
@@ -641,26 +652,34 @@ class WaitingThread implements Runnable {
   }
 }
 
-class SignalingThread implements Runnable {
+class Consumer implements Runnable {
   private Lock lock;
-  private Condition condition;
+  private Condition spaceAvailable;
+  private Condition dataReady;
+  private StringBuilder buffer;
   
-  public SignalingThread(Lock lock, Condition condition) {
+  public Consumer(Lock lock, Condition spaceAvailable, Condition dataReady, StringBuilder buffer) {
     this.lock = lock;
-    this.condition = condition;
+    this.spaceAvailable = spaceAvailable;
+    this.dataReady = dataReady;
+    this.buffer = buffer;
   }
   
   public void run() {
-    try {
-      Thread.sleep(1000);  // Wait 1 second (give Thread 1 time to wait)
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-    }
-    
     lock.lock();  // Try to acquire lock. If available, continue. If not, BLOCK and wait here.
     try {
-      System.out.println("Thread 2: Sending signal...");
-      condition.signal();  // Wake up Thread 1 from waiting room
+      while (buffer.length() == 0) {
+        System.out.println("Consumer: Buffer empty, waiting for data...");
+        // await() = wait INDEFINITELY until producer calls signal()
+        // How long? As long as needed - until producer adds data and calls signal()
+        // When notified? Only when producer calls dataReady.signal()
+        dataReady.await();  // Releases lock, waits in "data" waiting room
+      }
+      System.out.println("Consumer: Got data: " + buffer.toString());
+      buffer.setLength(0);
+      spaceAvailable.signal();  // Wake up ONE waiting producer
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
     } finally {
       lock.unlock();  // Always release the lock
     }
@@ -670,28 +689,33 @@ class SignalingThread implements Runnable {
 public class ReentrantLockExample {
   public static void main(String[] args) throws InterruptedException {
     Lock lock = new ReentrantLock();
-    Condition condition = lock.newCondition();
+    Condition dataReady = lock.newCondition();
+    Condition spaceAvailable = lock.newCondition();
     
-    System.out.println("=== Conditions Example ===\n");
+    StringBuilder buffer = new StringBuilder();
     
-    Thread t1 = new Thread(new WaitingThread(lock, condition));
-    Thread t2 = new Thread(new SignalingThread(lock, condition));
+    System.out.println("=== Producer-Consumer with Conditions ===\n");
     
-    t1.start();
-    t2.start();
-    t1.join();
-    t2.join();
+    Thread producer = new Thread(new Producer(lock, spaceAvailable, dataReady, buffer));
+    Thread consumer = new Thread(new Consumer(lock, spaceAvailable, dataReady, buffer));
+    
+    producer.start();
+    Thread.sleep(100);
+    consumer.start();
+    
+    producer.join();
+    consumer.join();
     
     System.out.println("\nDone");
   }
 }
 
 /* OUTPUT:
-=== Conditions Example ===
+=== Producer-Consumer with Conditions ===
 
-Thread 1: Waiting for signal...
-Thread 2: Sending signal...
-Thread 1: Got signal! Continuing...
+Producer: Added data to buffer
+Consumer: Got data: Data
+Consumer: Buffer empty, waiting for data...
 
 Done
 */
