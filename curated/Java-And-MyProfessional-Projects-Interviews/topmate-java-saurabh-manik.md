@@ -601,35 +601,35 @@ Why this matters for ConcurrentHashMap:
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+class LockTask implements Runnable {
+  private String taskName;
+  private Lock lock;
+  
+  public LockTask(String taskName, Lock lock) {
+    this.taskName = taskName;
+    this.lock = lock;
+  }
+  
+  public void run() {
+    lock.lock();
+    try {
+      System.out.println(taskName + ": Acquired lock");
+      Thread.sleep(500);
+      System.out.println(taskName + ": Releasing lock");
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+    } finally {
+      lock.unlock();
+    }
+  }
+}
+
 public class ReentrantLockExample {
   public static void main(String[] args) throws InterruptedException {
     Lock lock = new ReentrantLock();
     
-    Thread t1 = new Thread(() -> {
-      lock.lock();
-      try {
-        System.out.println("Thread 1: Acquired lock");
-        Thread.sleep(500);
-        System.out.println("Thread 1: Releasing lock");
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-      } finally {
-        lock.unlock();
-      }
-    });
-    
-    Thread t2 = new Thread(() -> {
-      lock.lock();
-      try {
-        System.out.println("Thread 2: Acquired lock");
-        Thread.sleep(500);
-        System.out.println("Thread 2: Releasing lock");
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-      } finally {
-        lock.unlock();
-      }
-    });
+    Thread t1 = new Thread(new LockTask("Thread 1", lock));
+    Thread t2 = new Thread(new LockTask("Thread 2", lock));
     
     t1.start();
     t2.start();
