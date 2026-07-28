@@ -1448,103 +1448,145 @@ public class ProducerConsumer {
 
 ---
 
-### Q12: Even-Odd Printing with 2 Threads (Volatile & Synchronization)
+### Q12: Even-Odd Printing with 2 Threads (ReentrantLock & Conditions)
 
-**Problem:** 2 threads print 1-10 alternately (1, 2, 3, ... 10) using volatile.
-
-**Solution 1: Using Volatile and Wait-Notify**
+**Problem:** 2 threads print 1-10 alternately (1, 2, 3, ... 10) using ReentrantLock and Conditions.
 
 ```java
-public class EvenOddPrinter{
-    private volatile int cnt = 1;
-    private Object lock = new Object();
-    
-    public void printEven(){
-        while(cnt<=10){
-            synchronized(lock){
-                if(cnt%2==0){
-                    System.out.println(cnt);
-                    cnt++;
-                    lock.notifyAll();
-                }else{
-                    try{
-                        lock.wait();    
-                    }catch(InterruptedException iex){
-                        Thread.currentThread().interrupt();
-                    }
-                }
-            }
-        }
-    }
-    
-    public void printOdd(){
-        while(cnt<=10){
-            synchronized(lock){
-                if(cnt%2!=0){
-                    System.out.println(cnt);
-                    cnt++;
-                    lock.notifyAll();
-                }else{
-                    try{
-                        lock.wait();    
-                    }catch(InterruptedException iex){
-                        Thread.currentThread().interrupt();
-                    }
-                }
-            }
-        }
-        
-    }
-    
-    public static void main(String[] args){
-        EvenOddPrinter evenOddPrinter = new EvenOddPrinter();
-        Thread oddThread = new Thread(evenOddPrinter::printOdd, "oddThread");
-        Thread evenThread = new Thread(evenOddPrinter::printEven, "evenThread");
-        oddThread.start();
-        evenThread.start();
-    }
+import java.util.concurrent.locks.*;
+import java.util.concurrent.atomic.AtomicInteger;
+
+public class EvenOddPrintingThreadExample {
+  public static void main(String[] args) throws InterruptedException {
+    AtomicInteger count = new AtomicInteger(1);
+    ReentrantLock sharedLock = new ReentrantLock();
+
+    Condition sharedEvenCondition = sharedLock.newCondition();
+    Condition sharedOddCondition = sharedLock.newCondition();
+
+    Thread evenPrinterThread = new EvenPrinterThread(count, sharedLock, sharedEvenCondition, sharedOddCondition);
+    Thread oddPrinterThread = new OddPrinterThread(count, sharedLock, sharedEvenCondition, sharedOddCondition);
+
+    evenPrinterThread.start();
+    oddPrinterThread.start();
+
+    evenPrinterThread.join();
+    oddPrinterThread.join();
+  }
 }
+
+class EvenPrinterThread extends Thread {
+  private AtomicInteger sharedCount;
+  private ReentrantLock sharedLock;
+  private Condition sharedEvenCondition;
+  private Condition sharedOddCondition;
+
+  public EvenPrinterThread() {}
+
+  public EvenPrinterThread(AtomicInteger sharedCount, ReentrantLock sharedLock, Condition sharedEvenCondition, Condition sharedOddCondition) {
+    this.sharedCount = sharedCount;
+    this.sharedLock = sharedLock;
+    this.sharedEvenCondition = sharedEvenCondition;
+    this.sharedOddCondition = sharedOddCondition;
+  }
+
+  public void run() {
+    sharedLock.lock();
+    try {
+      printEven();
+    } catch (InterruptedException iex) {
+      Thread.currentThread().interrupt();
+    } finally {
+      sharedLock.unlock();
+    }
+  }
+
+  private void printEven() throws InterruptedException{
+    for (int i = 0; i < 10; i++) {
+      if (this.sharedCount.get() % 2 == 0) {
+        System.out.println("Even Printing Thread:" + sharedCount.get());
+        sharedCount.incrementAndGet();
+        sharedOddCondition.signalAll();
+      } else {
+        sharedEvenCondition.await();
+      }
+    }
+  }
+}
+
+class OddPrinterThread extends Thread {
+  private AtomicInteger sharedCount;
+  private ReentrantLock sharedLock;
+  private Condition sharedEvenCondition;
+  private Condition sharedOddCondition;
+
+  public OddPrinterThread() {}
+
+  public OddPrinterThread(AtomicInteger sharedCount, ReentrantLock sharedLock, Condition sharedEvenCondition, Condition sharedOddCondition) {
+    this.sharedCount = sharedCount;
+    this.sharedLock = sharedLock;
+    this.sharedEvenCondition = sharedEvenCondition;
+    this.sharedOddCondition = sharedOddCondition;
+  }
+
+  public void run() {
+    sharedLock.lock();
+    try {
+      printOdd();
+    } catch (InterruptedException iex) {
+      Thread.currentThread().interrupt();
+    } finally {
+      sharedLock.unlock();
+    }
+  }
+
+  private void printOdd() throws InterruptedException{
+    for (int i = 0; i < 10; i++) {
+      if (this.sharedCount.get() % 2 != 0) {
+        System.out.println("Odd Printing Thread:" + sharedCount.get());
+        sharedCount.incrementAndGet();
+        sharedEvenCondition.signalAll();
+      } else {
+        sharedOddCondition.await();
+      }
+    }
+  }
+}
+
+/* OUTPUT:
+Odd Printing Thread:1
+Even Printing Thread:2
+Odd Printing Thread:3
+Even Printing Thread:4
+Odd Printing Thread:5
+Even Printing Thread:6
+Odd Printing Thread:7
+Even Printing Thread:8
+Odd Printing Thread:9
+Even Printing Thread:10
+*/
 ```
 
 **How It Works:**
-- `volatile int cnt`: Ensures both threads see the latest counter value
-- `synchronized(lock)`: Only one thread can enter the critical section at a time
-- `if(cnt%2==0)`: Check if it's our turn (even thread checks for even, odd thread checks for odd)
-- `lock.wait()`: If not our turn, sleep and wait for the other thread to notify
-- `lock.notifyAll()`: After printing, wake up the other thread waiting on this lock
-
-**Output:**
-```
-1
-2
-3
-4
-5
-6
-7
-8
-9
-10
-```
+- `AtomicInteger sharedCount`: Shared counter, starts at 1 (odd)
+- `ReentrantLock sharedLock`: Ensures only one thread in critical section at a time
+- `Condition sharedEvenCondition`: Even thread waits on this condition
+- `Condition sharedOddCondition`: Odd thread waits on this condition
+- `if (count % 2 == 0)`: Even thread checks if it's even, odd thread checks if it's odd
+- `await()`: If not your turn, wait (releases lock internally)
+- `signalAll()`: After printing, wake up the other thread
 
 **Execution Flow:**
-1. Odd thread starts first, cnt=1 (odd) → prints 1, cnt becomes 2, notifies
-2. Even thread wakes up, cnt=2 (even) → prints 2, cnt becomes 3, notifies
-3. Odd thread wakes up, cnt=3 (odd) → prints 3, cnt becomes 4, notifies
-4. Continues alternating until cnt > 10
-```
+1. OddThread acquires lock, count=1 (odd) → prints 1, increments to 2, signals EvenThread
+2. EvenThread acquires lock, count=2 (even) → prints 2, increments to 3, signals OddThread
+3. OddThread acquires lock, count=3 (odd) → prints 3, increments to 4, signals EvenThread
+4. Continues alternating: 4, 5, 6, 7, 8, 9, 10
 
----
-
-## Summary
-
-This solution demonstrates the fundamental thread synchronization pattern using:
-- **volatile** for visibility of shared counter across threads
-- **synchronized** for mutual exclusion (only one thread in critical section)
-- **wait()** to put thread to sleep until condition changes
-- **notifyAll()** to wake up sleeping threads when condition changes
-
-Perfect for interview discussions on thread coordination and inter-thread communication!
+**Key Differences from Synchronized:**
+- **ReentrantLock** allows same thread to acquire lock multiple times (reentrant)
+- **Condition** is more flexible than wait/notify (multiple conditions)
+- **AtomicInteger** ensures visibility without volatile
+- Better for complex thread coordination scenarios
 
 ---
 
