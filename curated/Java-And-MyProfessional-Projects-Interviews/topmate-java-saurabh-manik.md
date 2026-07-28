@@ -637,7 +637,7 @@ class Producer implements Runnable {
     lock.lock();  // Try to acquire lock. If available, continue to next line. If not, BLOCK and wait here.
     try {
       for (int i = 0; i < 5; i++) {
-        while (count == buffer.length) {  // Buffer is full (3 elements)
+        if (count == buffer.length) {  // If buffer is full (3 elements)
           System.out.println("Producer: Buffer full, waiting for space...");
           // await() = wait INDEFINITELY until consumer calls signal()
           // How long? As long as needed - until consumer removes data
@@ -683,7 +683,7 @@ class Consumer implements Runnable {
     lock.lock();  // Try to acquire lock. If available, continue. If not, BLOCK and wait here.
     try {
       for (int i = 0; i < 5; i++) {
-        while (count == 0) {  // Buffer is empty
+        if (count == 0) {  // If buffer is empty
           System.out.println("Consumer: Buffer empty, waiting for data...");
           // await() = wait INDEFINITELY until producer calls signal()
           // How long? As long as needed - until producer adds data and calls signal()
