@@ -628,15 +628,15 @@ class WaitingThread implements Runnable {
   }
   
   public void run() {
-    lock.lock();
+    lock.lock();  // Try to acquire lock. If available, continue to next line. If not, BLOCK and wait here.
     try {
       System.out.println("Thread 1: Waiting for signal...");
-      condition.await();  // Wait in the "waiting room"
+      condition.await();  // Release lock, wait in the "waiting room" for signal
       System.out.println("Thread 1: Got signal! Continuing...");
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
     } finally {
-      lock.unlock();
+      lock.unlock();  // Always release the lock
     }
   }
 }
@@ -652,17 +652,17 @@ class SignalingThread implements Runnable {
   
   public void run() {
     try {
-      Thread.sleep(1000);  // Wait 1 second
+      Thread.sleep(1000);  // Wait 1 second (give Thread 1 time to wait)
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
     }
     
-    lock.lock();
+    lock.lock();  // Try to acquire lock. If available, continue. If not, BLOCK and wait here.
     try {
       System.out.println("Thread 2: Sending signal...");
-      condition.signal();  // Wake up Thread 1
+      condition.signal();  // Wake up Thread 1 from waiting room
     } finally {
-      lock.unlock();
+      lock.unlock();  // Always release the lock
     }
   }
 }
