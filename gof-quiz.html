@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GoF Design Patterns Quiz</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 30px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .instructions {
+            background: #f0f4ff;
+            padding: 15px;
+            border-left: 4px solid #667eea;
+            margin-bottom: 30px;
+            border-radius: 4px;
+            color: #555;
+            font-size: 14px;
+        }
+
+        .question-block {
+            margin-bottom: 35px;
+            padding-bottom: 25px;
+            border-bottom: 2px solid #eee;
+        }
+
+        .question-block:last-child {
+            border-bottom: none;
+        }
+
+        .question-number {
+            color: #667eea;
+            font-weight: bold;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+
+        .question-text {
+            font-size: 16px;
+            color: #222;
+            margin-bottom: 15px;
+            font-weight: 500;
+        }
+
+        .option {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 12px;
+            padding: 10px;
+            border-radius: 4px;
+            background: #f9f9f9;
+            transition: background 0.3s;
+        }
+
+        .option:hover {
+            background: #f0f4ff;
+        }
+
+        .option input[type="checkbox"] {
+            margin-top: 3px;
+            margin-right: 12px;
+            cursor: pointer;
+            width: 18px;
+            height: 18px;
+        }
+
+        .option label {
+            cursor: pointer;
+            flex: 1;
+            color: #444;
+            font-size: 15px;
+        }
+
+        .submit-section {
+            margin-top: 40px;
+            text-align: center;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 14px 40px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            font-weight: 600;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .progress {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 14px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 Gang of Four Design Patterns Quiz</h1>
+        <div class="instructions">
+            <strong>Instructions:</strong> Select all correct answers for each question. Multiple answers can be correct. Review your answers and click "Submit" to see the detailed answer sheet.
+        </div>
+
+        <form id="quizForm">
+            <!-- Question 1 -->
+            <div class="question-block">
+                <div class="question-number">Question 1 of 15</div>
+                <div class="question-text">Which patterns are CREATIONAL patterns (used to create objects)?</div>
+                <div class="option">
+                    <input type="checkbox" id="q1a" name="q1" value="a">
+                    <label for="q1a"><strong>A)</strong> Singleton and Factory</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q1b" name="q1" value="b">
+                    <label for="q1b"><strong>B)</strong> Observer and Strategy</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q1c" name="q1" value="c">
+                    <label for="q1c"><strong>C)</strong> Builder and Prototype</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q1d" name="q1" value="d">
+                    <label for="q1d"><strong>D)</strong> Adapter and Facade</label>
+                </div>
+            </div>
+
+            <!-- Question 2 -->
+            <div class="question-block">
+                <div class="question-number">Question 2 of 15</div>
+                <div class="question-text">Which of these scenarios best use the SINGLETON pattern?</div>
+                <div class="option">
+                    <input type="checkbox" id="q2a" name="q2" value="a">
+                    <label for="q2a"><strong>A)</strong> A database connection pool - only one connection should exist</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q2b" name="q2" value="b">
+                    <label for="q2b"><strong>B)</strong> Creating multiple user accounts - each user needs a separate instance</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q2c" name="q2" value="c">
+                    <label for="q2c"><strong>C)</strong> A logging system used by the entire application</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q2d" name="q2" value="d">
+                    <label for="q2d"><strong>D)</strong> A file manager that handles multiple file operations</label>
+                </div>
+            </div>
+
+            <!-- Question 3 -->
+            <div class="question-block">
+                <div class="question-number">Question 3 of 15</div>
+                <div class="question-text">The BUILDER pattern is useful when:</div>
+                <div class="option">
+                    <input type="checkbox" id="q3a" name="q3" value="a">
+                    <label for="q3a"><strong>A)</strong> Creating objects with many optional parameters</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q3b" name="q3" value="b">
+                    <label for="q3b"><strong>B)</strong> You want to construct complex objects step-by-step</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q3c" name="q3" value="c">
+                    <label for="q3c"><strong>C)</strong> Copying an existing object and modifying it slightly</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q3d" name="q3" value="d">
+                    <label for="q3d"><strong>D)</strong> Avoiding massive constructors with many parameters</label>
+                </div>
+            </div>
+
+            <!-- Question 4 -->
+            <div class="question-block">
+                <div class="question-number">Question 4 of 15</div>
+                <div class="question-text">Which STRUCTURAL patterns are about hiding or managing complexity?</div>
+                <div class="option">
+                    <input type="checkbox" id="q4a" name="q4" value="a">
+                    <label for="q4a"><strong>A)</strong> Facade - hides complex subsystems behind simple interface</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q4b" name="q4" value="b">
+                    <label for="q4b"><strong>B)</strong> Proxy - acts as a stand-in for the real object</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q4c" name="q4" value="c">
+                    <label for="q4c"><strong>C)</strong> Decorator - adds features without changing the original object</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q4d" name="q4" value="d">
+                    <label for="q4d"><strong>D)</strong> Command - wraps actions as objects</label>
+                </div>
+            </div>
+
+            <!-- Question 5 -->
+            <div class="question-block">
+                <div class="question-number">Question 5 of 15</div>
+                <div class="question-text">The ADAPTER pattern is used when:</div>
+                <div class="option">
+                    <input type="checkbox" id="q5a" name="q5" value="a">
+                    <label for="q5a"><strong>A)</strong> You have incompatible interfaces that need to work together</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q5b" name="q5" value="b">
+                    <label for="q5b"><strong>B)</strong> You want to add new features to an object dynamically</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q5c" name="q5" value="c">
+                    <label for="q5c"><strong>C)</strong> You need a USB adapter to connect old devices to new ports</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q5d" name="q5" value="d">
+                    <label for="q5d"><strong>D)</strong> Old code expects one interface but you have a different one</label>
+                </div>
+            </div>
+
+            <!-- Question 6 -->
+            <div class="question-block">
+                <div class="question-number">Question 6 of 15</div>
+                <div class="question-text">Which BEHAVIORAL patterns help with communication between objects?</div>
+                <div class="option">
+                    <input type="checkbox" id="q6a" name="q6" value="a">
+                    <label for="q6a"><strong>A)</strong> Observer - notifies multiple listeners when something changes</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q6b" name="q6" value="b">
+                    <label for="q6b"><strong>B)</strong> Mediator - central hub for object communication</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q6c" name="q6" value="c">
+                    <label for="q6c"><strong>C)</strong> Chain of Responsibility - passes requests through handlers</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q6d" name="q6" value="d">
+                    <label for="q6d"><strong>D)</strong> Visitor - adds operations to objects without changing them</label>
+                </div>
+            </div>
+
+            <!-- Question 7 -->
+            <div class="question-block">
+                <div class="question-number">Question 7 of 15</div>
+                <div class="question-text">The DECORATOR pattern differs from inheritance because it:</div>
+                <div class="option">
+                    <input type="checkbox" id="q7a" name="q7" value="a">
+                    <label for="q7a"><strong>A)</strong> Allows adding features dynamically at runtime</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q7b" name="q7" value="b">
+                    <label for="q7b"><strong>B)</strong> Wraps the original object instead of creating subclasses</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q7c" name="q7" value="c">
+                    <label for="q7c"><strong>C)</strong> Avoids creating explosion of subclass combinations</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q7d" name="q7" value="d">
+                    <label for="q7d"><strong>D)</strong> Makes the code more readable and maintainable</label>
+                </div>
+            </div>
+
+            <!-- Question 8 -->
+            <div class="question-block">
+                <div class="question-number">Question 8 of 15</div>
+                <div class="question-text">Which scenario best uses the STRATEGY pattern?</div>
+                <div class="option">
+                    <input type="checkbox" id="q8a" name="q8" value="a">
+                    <label for="q8a"><strong>A)</strong> Multiple sorting algorithms that can be chosen at runtime</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q8b" name="q8" value="b">
+                    <label for="q8b"><strong>B)</strong> Different payment methods (credit card, PayPal, Bitcoin)</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q8c" name="q8" value="c">
+                    <label for="q8c"><strong>C)</strong> Selecting a route on Google Maps (fastest, scenic, cheapest)</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q8d" name="q8" value="d">
+                    <label for="q8d"><strong>D)</strong> Ensuring only one instance of a class exists</label>
+                </div>
+            </div>
+
+            <!-- Question 9 -->
+            <div class="question-block">
+                <div class="question-number">Question 9 of 15</div>
+                <div class="question-text">The COMPOSITE pattern is useful for:</div>
+                <div class="option">
+                    <input type="checkbox" id="q9a" name="q9" value="a">
+                    <label for="q9a"><strong>A)</strong> Treating individual items and groups of items the same way</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q9b" name="q9" value="b">
+                    <label for="q9b"><strong>B)</strong> Representing tree-like structures (file systems, UI components)</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q9c" name="q9" value="c">
+                    <label for="q9c"><strong>C)</strong> File folders containing files and subfolders</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q9d" name="q9" value="d">
+                    <label for="q9d"><strong>D)</strong> Saving and restoring object states</label>
+                </div>
+            </div>
+
+            <!-- Question 10 -->
+            <div class="question-block">
+                <div class="question-number">Question 10 of 15</div>
+                <div class="question-text">Which statement about the STATE pattern is correct?</div>
+                <div class="option">
+                    <input type="checkbox" id="q10a" name="q10" value="a">
+                    <label for="q10a"><strong>A)</strong> An object changes its behavior based on its internal state</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q10b" name="q10" value="b">
+                    <label for="q10b"><strong>B)</strong> Avoids large if-else chains checking state</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q10c" name="q10" value="c">
+                    <label for="q10c"><strong>C)</strong> Example: Traffic light (red stops, green goes)</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q10d" name="q10" value="d">
+                    <label for="q10d"><strong>D)</strong> Used to implement undo/redo functionality</label>
+                </div>
+            </div>
+
+            <!-- Question 11 -->
+            <div class="question-block">
+                <div class="question-number">Question 11 of 15</div>
+                <div class="question-text">The COMMAND pattern is used for:</div>
+                <div class="option">
+                    <input type="checkbox" id="q11a" name="q11" value="a">
+                    <label for="q11a"><strong>A)</strong> Wrapping actions as objects (undo/redo functionality)</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q11b" name="q11" value="b">
+                    <label for="q11b"><strong>B)</strong> Queueing and scheduling tasks</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q11c" name="q11" value="c">
+                    <label for="q11c"><strong>C)</strong> Logging and auditing operations</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q11d" name="q11" value="d">
+                    <label for="q11d"><strong>D)</strong> Handling multiple types of requests</label>
+                </div>
+            </div>
+
+            <!-- Question 12 -->
+            <div class="question-block">
+                <div class="question-number">Question 12 of 15</div>
+                <div class="question-text">Which patterns are related to creating families or groups of related objects?</div>
+                <div class="option">
+                    <input type="checkbox" id="q12a" name="q12" value="a">
+                    <label for="q12a"><strong>A)</strong> Abstract Factory - creates families of related objects</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q12b" name="q12" value="b">
+                    <label for="q12b"><strong>B)</strong> Factory - creates individual objects</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q12c" name="q12" value="c">
+                    <label for="q12c"><strong>C)</strong> Prototype - copies existing objects</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q12d" name="q12" value="d">
+                    <label for="q12d"><strong>D)</strong> Builder - step-by-step construction</label>
+                </div>
+            </div>
+
+            <!-- Question 13 -->
+            <div class="question-block">
+                <div class="question-number">Question 13 of 15</div>
+                <div class="question-text">The FLYWEIGHT pattern's main benefit is:</div>
+                <div class="option">
+                    <input type="checkbox" id="q13a" name="q13" value="a">
+                    <label for="q13a"><strong>A)</strong> Saving memory by sharing common data across many objects</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q13b" name="q13" value="b">
+                    <label for="q13b"><strong>B)</strong> Storing one object and reusing it many times</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q13c" name="q13" value="c">
+                    <label for="q13c"><strong>C)</strong> Useful for games with thousands of similar objects</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q13d" name="q13" value="d">
+                    <label for="q13d"><strong>D)</strong> Ensuring an object can only be created once</label>
+                </div>
+            </div>
+
+            <!-- Question 14 -->
+            <div class="question-block">
+                <div class="question-number">Question 14 of 15</div>
+                <div class="question-text">Which BEHAVIORAL patterns help with decision-making or control flow?</div>
+                <div class="option">
+                    <input type="checkbox" id="q14a" name="q14" value="a">
+                    <label for="q14a"><strong>A)</strong> Strategy - choose algorithm at runtime</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q14b" name="q14" value="b">
+                    <label for="q14b"><strong>B)</strong> State - change behavior based on state</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q14c" name="q14" value="c">
+                    <label for="q14c"><strong>C)</strong> Chain of Responsibility - pass through handlers</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q14d" name="q14" value="d">
+                    <label for="q14d"><strong>D)</strong> Template Method - define skeleton, vary details</label>
+                </div>
+            </div>
+
+            <!-- Question 15 -->
+            <div class="question-block">
+                <div class="question-number">Question 15 of 15</div>
+                <div class="question-text">Which patterns help with traversing or iterating through collections?</div>
+                <div class="option">
+                    <input type="checkbox" id="q15a" name="q15" value="a">
+                    <label for="q15a"><strong>A)</strong> Iterator - access elements without knowing internal structure</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q15b" name="q15" value="b">
+                    <label for="q15b"><strong>B)</strong> Visitor - add operations to objects</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q15c" name="q15" value="c">
+                    <label for="q15c"><strong>C)</strong> Composite - treat items and groups uniformly</label>
+                </div>
+                <div class="option">
+                    <input type="checkbox" id="q15d" name="q15" value="d">
+                    <label for="q15d"><strong>D)</strong> Observer - notify multiple listeners</label>
+                </div>
+            </div>
+
+            <div class="submit-section">
+                <button type="submit">Submit and Check Answers</button>
+                <div class="progress">Answer all 15 questions and submit to see your score</div>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        document.getElementById('quizForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const answers = {
+                q1: ['a', 'c'],
+                q2: ['a', 'c'],
+                q3: ['a', 'b', 'd'],
+                q4: ['a', 'b', 'c'],
+                q5: ['a', 'c', 'd'],
+                q6: ['a', 'b', 'c'],
+                q7: ['a', 'b', 'c'],
+                q8: ['a', 'b', 'c'],
+                q9: ['a', 'b', 'c'],
+                q10: ['a', 'b', 'c'],
+                q11: ['a', 'b', 'c'],
+                q12: ['a', 'b'],
+                q13: ['a', 'b', 'c'],
+                q14: ['a', 'b', 'c', 'd'],
+                q15: ['a', 'b', 'c']
+            };
+
+            let score = 0;
+            let totalQuestions = 15;
+
+            for (let q = 1; q <= totalQuestions; q++) {
+                const questionId = 'q' + q;
+                const userAnswers = Array.from(document.querySelectorAll(`input[name="${questionId}"]:checked`))
+                    .map(el => el.value);
+                const correctAnswers = answers[questionId];
+
+                const isCorrect =
+                    userAnswers.length === correctAnswers.length &&
+                    userAnswers.every(ans => correctAnswers.includes(ans));
+
+                if (isCorrect) {
+                    score++;
+                }
+            }
+
+            const percentage = Math.round((score / totalQuestions) * 100);
+
+            localStorage.setItem('quizScore', score);
+            localStorage.setItem('quizTotal', totalQuestions);
+            localStorage.setItem('userAnswers', JSON.stringify(
+                Array.from({ length: totalQuestions }, (_, i) => {
+                    const q = 'q' + (i + 1);
+                    return Array.from(document.querySelectorAll(`input[name="${q}"]:checked`))
+                        .map(el => el.value);
+                })
+            ));
+
+            window.location.href = 'gof-answers.html';
+        });
+    </script>
+</body>
+</html>

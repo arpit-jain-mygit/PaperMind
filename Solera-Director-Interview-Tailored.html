@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Solera Director Interview — Tailored for Furminger & Moubarak</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { background: #f5f5f3; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  color: #3d3d3a;
+  background: #f5f5f3;
+  padding: 20px;
+}
+.wrapper { max-width: 1000px; margin: 0 auto; background: white; border-radius: 12px; padding: 40px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+h1 { font-size: 28px; font-weight: 600; margin-bottom: 8px; color: #1a1a1a; }
+.subtitle { font-size: 14px; color: #666; margin-bottom: 24px; }
+.intro { padding: 16px 18px; background: #f0f0ed; border-radius: 8px; margin-bottom: 24px; }
+.interviewer-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.interviewer-card {
+  background: #f9f9f7;
+  border: 1px solid #e5e5e0;
+  border-radius: 8px;
+  padding: 14px;
+}
+.interviewer-name { font-weight: 600; color: #1a1a1a; font-size: 14px; }
+.interviewer-role { font-size: 12px; color: #666; margin: 4px 0; }
+.interviewer-focus { font-size: 12px; color: #999; margin-top: 8px; line-height: 1.4; }
+.badge {
+  display: inline-block;
+  background: #e0f2e0;
+  color: #2d6b2d;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+.tabs { display: flex; gap: 0; border-bottom: 1px solid #e5e5e0; margin-bottom: 24px; overflow-x: auto; }
+.tab {
+  padding: 12px 16px;
+  cursor: pointer;
+  color: #999;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+}
+.tab.active { color: #1a1a1a; border-bottom-color: #185fa5; }
+.tab:hover { color: #1a1a1a; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+.tab-content h2 { font-size: 18px; font-weight: 600; margin-bottom: 16px; color: #1a1a1a; }
+.qa-section { margin-bottom: 14px; }
+.question {
+  padding: 12px 14px;
+  background: #e6f1fb;
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.2s;
+  border: 1px solid #c5d9f1;
+}
+.question:hover { background: #d9e8f8; }
+.question-text { font-weight: 500; color: #1a1a1a; flex: 1; font-size: 14px; }
+.question-tag { font-size: 11px; color: #666; margin-left: 8px; background: white; padding: 2px 8px; border-radius: 4px; }
+.toggle-icon { color: #666; font-size: 12px; transition: transform 0.2s; margin-left: 12px; }
+.answer {
+  display: none;
+  padding: 14px 16px;
+  background: #fafaf8;
+  border-radius: 0 0 8px 8px;
+  border-left: 3px solid #185fa5;
+  border-bottom: 1px solid #e5e5e0;
+  border-right: 1px solid #e5e5e0;
+  margin-top: -1px;
+  color: #3d3d3a;
+  line-height: 1.6;
+  font-size: 13px;
+}
+.answer.open { display: block; }
+.answer h3 { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: #1a1a1a; }
+.answer p { margin-bottom: 10px; line-height: 1.6; }
+.answer ul { margin-left: 20px; margin-bottom: 10px; }
+.answer ol { margin-left: 20px; margin-bottom: 10px; }
+.answer li { margin-bottom: 6px; line-height: 1.5; }
+.metric { font-weight: 600; color: #185fa5; }
+.highlight-furminger {
+  background: #e6f1fb;
+  border-left: 3px solid #185fa5;
+  padding: 10px 12px;
+  border-radius: 4px;
+  margin: 10px 0;
+  font-size: 13px;
+  color: #3d3d3a;
+}
+.highlight-moubarak {
+  background: #e8f5e9;
+  border-left: 3px solid #2d6b2d;
+  padding: 10px 12px;
+  border-radius: 4px;
+  margin: 10px 0;
+  font-size: 13px;
+  color: #3d3d3a;
+}
+.print-btn {
+  display: inline-block;
+  padding: 10px 18px;
+  background: #185fa5;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 14px;
+  margin-top: 16px;
+  transition: background 0.2s;
+}
+.print-btn:hover { background: #0c447c; }
+@media (max-width: 768px) {
+  .wrapper { padding: 20px; }
+  h1 { font-size: 24px; }
+  .interviewer-section { grid-template-columns: 1fr; }
+  .tabs { overflow-x: auto; }
+  .tab { padding: 10px 12px; font-size: 12px; }
+  .question-text { font-size: 13px; }
+}
+@media print {
+  html { background: white; }
+  .wrapper { box-shadow: none; padding: 0; }
+  .print-btn { display: none; }
+  .tab-content { display: block !important; page-break-inside: avoid; }
+  .qa-section { page-break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+
+<div class="wrapper">
+<h1>Solera Director Interview Prep</h1>
+<p class="subtitle">Tailored for Steve Furminger & Gerard Moubarak — 2nd Round</p>
+
+<div class="intro">
+  <div style="margin-bottom: 12px;">
+    <span class="badge">Java/J2EE Expert</span>
+    <span class="badge">Global Leadership</span>
+    <span class="badge">SAFe & Agile</span>
+    <span class="badge">Enterprise Architecture</span>
+    <span class="badge">Cloud & Microservices</span>
+  </div>
+  <p style="font-size: 13px; color: #666; margin-bottom: 8px;">
+    <strong>Your Interviewers:</strong>
+  </p>
+</div>
+
+<div class="interviewer-section">
+  <div class="interviewer-card">
+    <div class="interviewer-name">Steve Furminger</div>
+    <div class="interviewer-role">VP Software Engineering International</div>
+    <div class="interviewer-focus">
+      Focus: SAFe implementation, global team transformation, centers of excellence, delivery operations, scaling 200+ teams across EMEA/Iberia/Latam
+    </div>
+  </div>
+  <div class="interviewer-card">
+    <div class="interviewer-name">Gerard Moubarak</div>
+    <div class="interviewer-role">Director of Software Engineering (Spain)</div>
+    <div class="interviewer-focus">
+      Focus: Enterprise microservices, Spring Boot/Cloud architecture, CI/CD/BDD practices, multinational team leadership, distributed systems
+    </div>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="showTab('leadership', this)">Leadership</div>
+  <div class="tab" onclick="showTab('technical', this)">Architecture</div>
+  <div class="tab" onclick="showTab('safe', this)">SAFe & Delivery</div>
+  <div class="tab" onclick="showTab('global', this)">Global Ops</div>
+  <div class="tab" onclick="showTab('technical-depth', this)">Technical Depth</div>
+  <div class="tab" onclick="showTab('situational', this)">Situational</div>
+</div>
+
+<!-- LEADERSHIP TAB -->
+<div id="leadership" class="tab-content active">
+<h2>Leadership & Team Management</h2>
+
+<div class="qa-section">
+<div class="question" onclick="toggleAnswer(this)">
+<span class="question-text">Q1: Tell us about managing global engineering teams. Scales? Regions? Structure?</span>
+<span class="question-tag">Furminger interest</span>
+<span class="toggle-icon">▼</span>
+</div>
+<div class="answer">
+<h3>Answer</h3>
+<p>I've led 80–120 engineers across APAC, EMEA, and Americas, including multinational teams in 3+ countries. The key was establishing clear async communication, empowering local leads, and creating consistency across regions without homogenizing them.</p>
+<div class="highlight-furminger">
+<strong>Structure:</strong> Hub-and-spoke model—each region had a technical lead reporting to me, with daily async standups. Weekly rotating syncs ensured cross-zone participation. Regional onboarding programs reduced friction.
+</div>
+<ul>
+<li><strong>Shared OKRs with region-specific KPIs:</strong> Drove alignment without forcing one-size-fits-all approaches</li>
+<li><strong>Centers of excellence thinking:</strong> Identified pockets of deep expertise and made them available to other regions via documentation and mentorship</li>
+<li><strong>Recruitment and structure:</strong> Built local capability rather than pure outsourcing—invested in career development to retain talent</li>
+</ul>
+<p><strong>Result:</strong> <span class="metric">40% faster onboarding</span>, <span class="metric">50% fewer cross-timezone incidents</span>, <span class="metric">85%+ engagement scores</span>, <span class="metric">8% attrition</span> even during high-pressure periods.</p>
+</div>
+</div>
+
+<div class="qa-section">
+<div class="question" onclick="toggleAnswer(this)">
+<span class="question-text">Q2: How do you build psychological safety and navigate dysfunction in global teams?</span>
+<span class="question-tag">Both</span>
+<span class="toggle-icon">▼</span>
+</div>
+<div class="answer">
+<h3>Answer</h3>
+<p>Psychological safety requires transparency about the 'why,' autonomy in implementation, and visibly rewarding people who challenge assumptions.</p>
+<ul>
+<li><strong>Transparency first:</strong> Share business context, goals, and even challenges. Removes ambiguity</li>
+<li><strong>Autonomy + accountability:</strong> Teams own implementation details; we're crystal clear on outcomes</li>
+<li><strong>Learning-focused retrospectives:</strong> Root-cause analysis, not blame. I visibly reward dissenting opinions</li>
+<li><strong>Low morale response:</strong> During a critical J2EE migration that slipped 3 months, I held bi-weekly all-hands celebrating small wins, openly sharing recovery plans, and reconnecting work to impact. Also reduced scope to prevent burnout</li>
+</ul>
+<p><strong>Conflict example:</strong> Two senior architects disagreed publicly on microservices vs. monolith. Their teams began siloing. I facilitated a design session focused on business constraints, and they co-authored a hybrid architecture that satisfied both concerns. Documented in an ADR (Architecture Decision Record) for future reference.</p>
+<p><strong>Result:</strong> <span class="metric">88% psychological safety scores</span>, teams felt empowered to make decisions.</p>
+</div>
+</div>
+
+<div class="qa-section">
+<div class="question" onclick="toggleAnswer(this)">
+<span class="question-text">Q3: How do you think about EMEA/Spain context? Cultural differences in leadership?</span>
+<span class="question-tag">Moubarak interest</span>
+<span class="toggle-icon">▼</span>
+</div>
+<div class="answer">
+<h3>Answer</h3>
+<p>I've led EMEA teams with direct Madrid/Barcelona experience. Europeans value transparency, consensus-building, and work-life balance differently than other cultures.</p>
+<ul>
+<li><strong>Clarity upfront:</strong> Be clear about decisions early and involve people in discussions</li>
+<li><strong>Respect boundaries:</strong> Work-life balance is non-negotiable—no heroic crunch culture</li>
+<li><strong>Engineering talent:</strong> Spain's talent is world-class but competitive. Growth requires career development, remote flexibility, and advancement paths</li>
+<li><strong>Compliance-first:</strong> GDPR, data residency, and regulatory constraints shape architecture from day one</li>
+</ul>
+<p>I'm excited to build Solera's Madrid presence as a center of technical excellence, not just a delivery hub. This means investing in local capability, giving engineers autonomy, and recognizing that the best ideas often come from understanding local context.</p>
+</div>
+</div>
+</div>
+
+<!-- ARCHITECTURE TAB -->
+<div id="technical" class="tab-content">
+<h2>Enterprise Architecture & Technical Leadership</h2>
+
+<div class="qa-section">
+<div class="question" onclick="toggleAnswer(this)">
+<span class="question-text">Q4: Experience with enterprise platforms, microservices, Spring Boot/Cloud? DDD approach?</span>
+<span class="question-tag">Moubarak interest</span>
+<span class="toggle-icon">▼</span>
+</div>
+<div class="answer">
+<h3>Answer</h3>
+<p>I've shipped production systems across Java/J2EE (Spring, Hibernate, enterprise platforms), .Net/C#, and Node.js. I maintain technical credibility by code reviews, participating in design decisions, and staying hands-on via side projects.</p>
+<div class="highlight-moubarak">
+<strong>Spring Boot/Microservices:</strong> Led Spring/Hibernate migrations, designed data access layers with JPA, managed transaction boundaries in high-throughput systems. Decomposed monoliths into domain-aligned services using DDD principles.
+</div>
+<ul>
+<li><strong>DDD & team structure:</strong> Microservices aren't just architecture—they're a team structure decision. Domain-aligned teams ship faster, own their services end-to-end, and reduce handoff delays</li>
+<li><strong>Integration patterns:</strong> API contracts, event-driven communication, saga patterns for distributed transactions</li>
+<li><strong>Performance at scale:</strong> Database optimization, caching strategies (Redis), message brokers (Kafka, RabbitMQ) for async processing</li>
+</ul>
+<p>Key lesson: A well-designed microservices architecture requires strong governance—shared libraries, observability standards, and clear API contracts. Otherwise, you just have distributed monoliths.</p>
+</div>
+</div>
+
+<div class="qa-section">
+<div class="question" onclick="toggleAnswer(this)">
+<span class="question-text">Q5: Legacy modernization case study. Business case, approach, timeline, outcome?</span>
+<span class="question-tag">Both</span>
+<span class="toggle-icon">▼</span>
+</div>
+<div class="answer">
+<h3>Answer</h3>
+<p><strong>The Project:</strong> 18-month modernization of a 15-year-old J2EE billing system serving millions of transactions. Every change required weeks of regression testing. Deployments were risky.</p>
+
+<p><strong>Business Case:</strong></p>
+<ul>
+<li>Product wanted quarterly pricing models; we delivered yearly</li>
+<li>Support costs ~8% of revenue due to core system bugs</li>
+<li>ROI: 24 months if we reduced release cycles and incident rates</li>
+</ul>
+
+<p><strong>Approach (Strangler Pattern):</strong></p>
+<ul>
+<li>Didn't rewrite—too risky. Wrapped the legacy system and gradually extracted services (pricing, reconciliation, reporting)</li>
+<li>Ran old and new in parallel for 6 months to build confidence</li>
+<li>Heavy investment in automated testing (unit, integration, contract tests)</li>
+<li>Cross-trained teams on both old and new to prevent knowledge silos</li>
+</ul>
+
+<div class="highlight-moubarak">
+<strong>Implementation:</strong> Feature toggles to route requests between old/new systems. Contract tests ensured new services matched legacy behavior. Spring Boot microservices communicated with legacy via well-defined APIs.
+</div>
+
+<p><strong>Result:</strong> <span class="metric">3x faster feature delivery</span>, <span class="metric">60% fewer incidents</span>, <span class="metric">40% velocity increase</span>, under budget by deferring non-critical work. Most importantly, the team went from fearing deployments to shipping weekly.</p>
+</div>
+</div>
+
+<div class="qa-section">
+<div class="question" onclick="toggleAnswer(this)">
+<span class="question-text">Q6: How do you maintain technical depth while managing 80+ engineers?</span>
+<span class="question-tag">Moubarak interest</span>
+<span class="toggle-icon">▼</span>
+</div>
+<div class="answer">
+<h3>Answer</h3>
+<p>I don't code daily as a director, but I stay technically sharp and maintain credibility with engineers:</p>
+<ul>
+<li><strong>Weekly code reviews:</strong> Read architectural decisions and PRs from senior engineers</li>
+<li><strong>One personal project:</strong> Maintain a small DevOps/infrastructure side project to stay hands-on</li>
+<li><strong>Design reviews:</strong> Participate in technical deep-dives on legacy vs. modern systems</li>
+<li><strong>Continuous learning:</strong> Blogs, conferences, lunch-and-learns with the team</li>
+</ul>
+
+<div class="highlight-moubarak">
+<strong>For multinational teams:</strong> I make sure senior engineers in each region get visibility, share their knowledge, and aren't bottlenecks. I hire for leadership potential, not just technical depth.
+</div>
+
+<p>This credibility is essential. Teams trust my architectural decisions because I've lived through the trade-offs. When I push back on poorly designed roadmaps, engineers know it's informed by experience, not politics.</p>
+</div>
+</div>
+</div>
+
+<!-- SAFE & DELIVERY TAB -->
+<div id="safe" class="tab-content">
+<h2>SAFe, Agile & Delivery Operations</h2>
+
+<div class="qa-section">
+<div class="question" onclick="toggleAnswer(this)">
+<span class="question-text">Q7: SAFe implementation experience. Scale? Challenges? How do you drive adoption?</span>
+<span class="question-tag">Furminger interest</span>
+<span class="toggle-icon">▼</span>
+</div>
+<div class="answer">
+<h3>Answer</h3>
+<p>I've led SAFe (Scaled Agile Framework) implementations across multiple organizations, scaling from single teams to 100+ engineers. SAFe works well when done thoughtfully—it's not a one-size-fits-all framework.</p>
+
+<div class="highlight-furminger">
+<strong>Key lessons:</strong> SAFe shines when you have multiple dependent teams (portfolio, program, team levels). The ART (Agile Release Train) cadence forces alignment and dependency resolution. But without strong technical practices (CI/CD, automated testing), SAFe becomes a ceremony machine.
+</div>
+
+<ul>
+<li><strong>Program Increment (PI) planning:</strong> Brings visibility, surfaces dependencies early, creates team commitment. The first PI is always messy; by PI-3, teams internalize the rhythm</li>
+<li><strong>Metrics that matter:</strong> Velocity (trended over 6-sprint windows), deployment frequency, MTTR, bug escape rate. Share these openly—they show whether SAFe is working</li>
+<li><strong>Challenges I've faced:</strong>
+  <ul>
+  <li>Teams treating SAFe as waterfall-with-sprints (planning at the top, no autonomy at the team level)</li>
+  <li>Insufficient CI/CD maturity—you can't do scaled agile without automated deployment</li>
+  <li>Resistance to the cadence—some argue sprints are artificial. True, but synchronization is necessary for scaling</li>
+  </ul>
+</li>
+<li><strong>My approach:</strong> Start with team-level Scrum, add program-level coordination gradually. Invest heavily in CI/CD and automated testing first. SAFe is a container for good practices, not a replacement for them</li>
+</ul>
+
+<p><strong>Result:</strong> Teams shipping incrementally every 2 weeks instead of quarterly. Visibility into cross-team dependencies prevented integration disasters. Engineering leadership went from reactive to strategic.</p>
+</div>
+</div>
+
+<div class="qa-section">
+<div class="question" onclick="toggleAnswer(this)">
+<span class="question-text">Q8: How do you measure delivery effectiveness and report upward?</span>
+<span class="question-tag">Furminger interest</span>
+<span class="toggle-icon">▼</span>
+</div>
+<div class="answer">
+<h3>Answer</h3>
+<p>I track KPIs that matter to the business and share them openly with leadership monthly. This creates a data-driven culture and removes emotion from discussions.</p>
+
+<div class="highlight-furminger">
+<strong>My KPI dashboard:</strong>
+</div>
+<ul>
+<li><strong>Velocity:</strong> Story points completed per sprint, trended over 6 sprints—predicts capacity</li>
+<li><strong>Cycle time:</strong> Average days from 'ready' to 'done'—proxy for team efficiency</li>
+<li><strong>Deployment frequency:</strong> How often we ship to production (higher = better risk management)</li>
+<li><strong>Lead time for changes:</strong> Commit to production (DORA metric)</li>
+<li><strong>MTTR:</strong> Mean time to recover from incidents—shows resilience</li>
+<li><strong>Bug escape rate:</strong> Bugs found in production vs. QA—shows quality</li>
+</ul>
+
+<p>Teams use these in retrospectives to identify bottlenecks. Example: When cycle time hit 35 days, we discovered every feature needed a lengthy security review. Partnered with security on a lightweight checklist for low-risk changes → reduced to 12 days without sacrificing safety.</p>
+
+<p><strong>Reporting cadence:</strong> Monthly executive summary with a 6-month trend. Highlight: what improved, what's slipping, what we're doing about it. This prevents surprises and builds trust.</p>
+</div>
+</div>
+
+<div class="qa-section">
+<div class="question" onclick="toggleAnswer(this)">
+<span class="question-text">Q9: Balancing shipping features with tech debt and quality?</span>
+<span class="question-tag">Both</span>
+<span class="toggle-icon">▼</span>
+</div>
+<div class="answer">
+<h3>Answer</h3>
+<p>Make technical debt visible and quantify its cost to leadership.</p>
+
+<ul>
+<li><strong>Track unplanned work:</strong> Time spent firefighting bugs, outages, rework. If it exceeds 30% of capacity, we have a serious debt problem</li>
+<li><strong>Allocate time explicitly:</strong> Typically 20% of each sprint to tech debt/refactoring. Prevents it from becoming critical</li>
+<li><strong>Report the cost:</strong> 'If we continue shipping without addressing this debt, we'll spend 6 months next year in crisis mode.' Makes the business case clear</li>
+<li><strong>Empower engineers:</strong> If a team says a feature takes 3 weeks without refactoring but 6 weeks with quality, trust their judgment</li>
+</ul>
+
+<div class="highlight-moubarak">
+<strong>For legacy systems:</strong> Tech debt isn't abstract—it's concrete: slow CI/CD pipelines, brittle tests, poor code organization. Each adds days/weeks to every feature. The cost is visible in delivery metrics.
+</div>
+
+<p><strong>Result:</strong> <span class="metric">Incident rates dropped 50%</span>, unplanned work decreased from 45% to <span class="metric">22% of capacity</span> within 12 months. Teams regained velocity because they weren't constantly putting out fires.</p>
+</div>
+</div>
+</div>
+
+<!-- GLOBAL OPS TAB -->
+<div id="global" class="tab-content">
+<h2>Global Operations & Transformation</h2>
+
+<div class="qa-section">
+<div class="question" onclick="toggleAnswer(this)">
+<span class="question-text">Q10: Building centers of excellence across regions. How do you ensure consistency without stifling local innovation?</span>
+<span class="question-tag">Furminger interest</span>
+<span class="toggle-icon">▼</span>
+</div>
+<div class="answer">
+<h3>Answer</h3>
+<p>Centers of excellence work when they're communities of practice, not ivory towers. The goal: share knowledge and best practices, not dictate solutions.</p>
+
+<div class="highlight-furminger">
+<strong>Structure I've used:</strong>
+</div>
+<ul>
+<li><strong>Shared practices:</strong> Define standards for CI/CD, testing, code reviews, architecture ADRs. Make them available, not mandatory initially</li>
+<li><strong>Cross-regional tech leads:</strong> Monthly sync where leads from each region discuss challenges, solutions, learnings</li>
+<li><strong>Shared libraries and tools:</strong> Maven/Gradle plugins, Spring Boot starters, terraform modules—reduce duplication</li>
+<li><strong>Mentorship programs:</strong> Senior engineers from the center coach teams in regions, building local capability</li>
+<li><strong>Local autonomy:</strong> Each region owns hiring, team structure, and tech choices—as long as they meet standards for integration and compliance</li>
+</ul>
+
+<p>The key: Consistency in outcomes (reliability, performance, security), not processes. How each region gets there can vary based on local context.</p>
+
+<p><strong>Result:</strong> Faster onboarding for new engineers. Incidents decreased because teams were applying the same battle-tested patterns. Also, local teams felt ownership, not resentment of imposed standards.</p>
+</div>
+</div>
+
+<div class="qa-section">
+<div class="question" onclick="toggleAnswer(this)">
+<span class="question-text">Q11: Design a single global development target organization for Solera. Approach?</span>
+<span class="question-tag">Furminger interest</span>
+<span class="toggle-icon">▼</span>
+</div>
+<div class="answer">
+<h3>Answer</h3>
+<p>This is a major strategic effort. My approach balances global consistency with regional autonomy:</p>
+
+<p><strong>Phase 1: Understand (6 weeks)</strong></p>
+<ul>
+<li>Map existing teams, products, dependencies across all regions</li>
+<li>Identify pain points: duplicate efforts, knowledge silos, context-switching delays</li>
+<li>Talk to leads and engineers—understand culture and ways of working</li>
+</ul>
+
+<p><strong>Phase 2: Design (4 weeks)</strong></p>
+<ul>
+<li>Organize by business domain, not geography. Domain-aligned teams ship faster</li>
+<li>Define roles and responsibilities clearly—who owns what</li>
+<li>Plan collaboration using async-first practices for cross-zone coordination</li>
+<li>Design centers of excellence for shared practices (CI/CD, security, performance)</li>
+</ul>
+
+<div class="highlight-furminger">
+<strong>Key insight:</strong> Geography doesn't determine performance—mission clarity does. A product domain (e.g., "billing platform") owned by a distributed team across Madrid/London/Bangalore will outperform siloed regional teams working on disconnected projects.
+</div>
+
+<p><strong>Phase 3: Pilot (8 weeks)</strong></p>
+<ul>
+<li>Run a pilot with one business unit</li>
+<li>Measure: velocity, cycle time, employee engagement, incident rates</li>
+<li>Gather feedback and refine</li>
+</ul>
+
+<p><strong>Phase 4: Roll out (ongoing)</strong></p>
+<ul>
+<li>Implement phase by phase, supporting teams through transition</li>
+<li>Leadership support is critical—this is a cultural shift, not just an org chart change</li>
+</ul>
+</div>
+</div>
+
+<div class="qa-section">
+<div class="question" onclick="toggleAnswer(this)">
+<span class="question-text">Q12: Scaling from 100 engineers to 200+. What breaks? How do you fix it?</span>
+<span class="question-tag">Furminger interest</span>
+<span class="toggle-icon">▼</span>
+</div>
+<div class="answer">
+<h3>Answer</h3>
+<p>I've managed the transition to 200+ engineers. Scaling doesn't just add more of the same—it requires structural changes.</p>
+
+<p><strong>What breaks:</strong></p>
+<ul>
+<li><strong>Communication:</strong> At 50 people, town halls work. At 200, they don't. You need structured communication channels</li>
+<li><strong>Decision-making:</strong> Bottlenecks form—every decision can't go through one person. You need clear decision-making authority at each level</li>
+<li><strong>Onboarding:</strong> Ad-hoc mentorship doesn't scale. You need structured programs</li>
+<li><strong>Code quality:</strong> Without strong code review practices and CI/CD, merge conflicts and integration issues explode</li>
+<li><strong>Career growth:</strong> Engineers want to see advancement paths. At 200, you need formal levels, promotion criteria, and leadership development programs</li>
+</ul>
+
+<p><strong>My fixes:</strong></p>
+<ul>
+<li>Introduce management layers—technical leads report to staff engineers or managers, who report to directors</li>
+<li>Implement SAFe or similar to create synchronization points</li>
+<li>Invest in infrastructure and tooling—CI/CD becomes non-negotiable</li>
+<li>Build career ladders (IC track and management track) so engineers see advancement options</li>
+<li>Document decision-making authority in a RACI matrix—clears up ambiguity</li>
+</ul>
+
+<p><strong>Lesson:</strong> Scaling is a different job than leading a startup. It requires discipline, systems thinking, and accepting that you'll lose some of the intimacy. But you gain leverage—the decisions you make affect hundreds of engineers.</p>
+</div>
+</div>
+</div>
+
+<!-- TECHNICAL DEPTH TAB -->
+<div id="technical-depth" class="tab-content">
+<h2>Technical Depth & Engineering Practices</h2>
+
+<div class="qa-section">
+<div class="question" onclick="toggleAnswer(this)">
+<span class="question-text">Q13: CI/CD, Docker, Kubernetes, cloud adoption (AWS/Azure). How would you drive it?</span>
+<span class="question-tag">Moubarak interest</span>
+<span class="toggle-icon">▼</span>
+</div>
+<div class="answer">
+<h3>Answer</h3>
+<p>I'm obsessed with CI/CD—it's the foundation for everything: faster deployments, faster feedback, lower risk. Built pipelines for Java, .Net, and Node.js on AWS and Azure.</p>
+
+<p><strong>Key wins:</strong></p>
+<ul>
+<li><strong>Automated testing:</strong> Unit (60%), integration (30%), E2E (10%). Deployment confidence 60% → 95%</li>
+<li><strong>Infrastructure as Code:</strong> Terraform for Azure/AWS. Environment setup: weeks → hours</li>
+<li><strong>Containerization:</strong> Docker for Java services. Kubernetes orchestration. <span class="metric">40% resource efficiency</span></li>
+<li><strong>Multi-stage pipelines:</strong> build → test → staging → production with automated rollbacks. <span class="metric">Deployment time: 4 hours → 15 minutes</span></li>
+</ul>
+
+<div class="highlight-moubarak">
+<strong>Java-specific:</strong> Maven/Gradle caching, Spring Boot containerization, Kubernetes secrets for configuration. Shift from monolithic deployments to independently deployable microservices.
+</div>
+
+<p><strong>Driving adoption across global org:</strong></p>
+<ol style="margin-left: 20px; margin-bottom: 10px;">
+<li>Start with a pilot team—choose one motivated group, build momentum</li>
+<li>Invest in tooling—provide CI/CD platforms and self-service (teams shouldn't need Kubernetes expertise)</li>
+<li>Train and support—workshops on cloud best practices, pair platform engineers with product teams</li>
+<li>Make it visible—share metrics (deployment frequency, MTTR, cost per deployment)</li>
+</ol>
+
+<p><strong>Azure vs. AWS:</strong> Both are strong. For a global org like Solera, multi-cloud strategy avoids vendor lock-in.</p>
+</div>
+</div>
+
+<div class="qa-section">
+<div class="question" onclick="toggleAnswer(this)">
+<span class="question-text">Q14: Quality automation and performance frameworks. BDD, testing strategies?</span>
+<span class="question-tag">Moubarak interest</span>
+<span class="toggle-icon">▼</span>
+</div>
+<div class="answer">
+<h3>Answer</h3>
+<p>Quality automation isn't just testing—it's embedding quality into the development process. For enterprise systems, this is non-negotiable.</p>
+
+<p><strong>My framework:</strong></p>
+<ul>
+<li><strong>Test pyramid:</strong> Unit tests (60%), integration (30%), E2E (10%)</li>
+<li><strong>Continuous performance testing:</strong> Load tests on staging in the pipeline—catch regressions before production</li>
+<li><strong>SLA-driven monitoring:</strong> Define SLOs (99.9% uptime, p99 latency < 200ms). Missing SLOs? Interrupt roadmap and fix</li>
+<li><strong>Chaos engineering:</strong> For critical services, inject failures to test resilience</li>
+</ul>
+
+<div class="highlight-moubarak">
+<strong>BDD & CI/CD for Java:</strong> JUnit/TestNG for units, Spring Boot TestContainers for integration tests, Gatling for load testing. Cucumber for acceptance tests. Use Spring's Actuator for metrics collection. Feature toggles allow safe deployments even if a feature isn't ready.
+</div>
+
+<p><strong>For global products:</strong> Test regional variations (latency, compliance, data residency). Performance is also a compliance issue—slow systems violate SLAs.</p>
+</div>
+</div>
+
+<div class="qa-section">
+<div class="question" onclick="toggleAnswer(this)">
+<span class="question-text">Q15: Distributed systems & transaction patterns in microservices. Challenges?</span>
+<span class="question-tag">Moubarak interest</span>
+<span class="toggle-icon">▼</span>
+</div>
+<div class="answer">
+<h3>Answer</h3>
+<p>Distributed systems are fundamentally harder than monoliths. Once you decompose into microservices, transactions become complex.</p>
+
+<p><strong>Patterns I've used:</strong></p>
+<ul>
+<li><strong>Saga pattern:</strong> Orchestrate transactions across services using events or orchestrators. Compensation transactions handle rollbacks</li>
+<li><strong>Event sourcing:</strong> Every state change is an immutable event. Rebuild state by replaying events. Great for audit trails</li>
+<li><strong>Database per service:</strong> No shared database. Use APIs or events for communication. Trade consistency for scalability and autonomy</li>
+<li><strong>Eventual consistency:</strong> Accept that data isn't instantly consistent across services. This is the cost of scalability</li>
+</ul>
+
+<div class="highlight-moubarak">
+<strong>Challenges I've faced:</strong>
+</div>
+<ul>
+<li>Debugging across service boundaries is hard. You need excellent logging, tracing (Jaeger, Datadog), and monitoring</li>
+<li>Network is unreliable—services go down, responses timeout. Design for failure (circuit breakers, retries, timeouts)</li>
+<li>Testing distributed systems is complex. Contract tests ensure API compatibility; chaos engineering tests resilience</li>
+</ul>
+
+<p><strong>Key lesson:</strong> Microservices aren't a free lunch. The distributed systems complexity is real. Only decompose when you have strong DevOps practices (CI/CD, observability, automated testing) in place. Otherwise, you just have distributed monoliths.</p>
+</div>
+</div>
+</div>
+
+<!-- SITUATIONAL TAB -->
+<div id="situational" class="tab-content">
+<h2>Situational & Problem-Solving</h2>
+
+<div class="qa-section">
+<div class="question" onclick="toggleAnswer(this)">
+<span class="question-text">Q16: Critical production incident on Friday. 5% of customers affected. Your response?</span>
+<span class="question-tag">Both</span>
+<span class="toggle-icon">▼</span>
+</div>
+<div class="answer">
+<h3>Answer</h3>
+<p><strong>First 5 minutes: Situational awareness</strong></p>
+<ul>
+<li>Who's on call? Are they mobilizing the right team?</li>
+<li>Incident classified? (Critical, Major, Minor)</li>
+<li>War room created? If not, I create one</li>
+</ul>
+
+<p><strong>Next 15 minutes: Stabilize and communicate</strong></p>
+<ul>
+<li>Can we roll back? Often the fastest fix</li>
+<li>Is there a kill switch or feature flag to disable the feature?</li>
+<li>Notify VP Engineering and customer success—transparency prevents surprises</li>
+</ul>
+
+<p><strong>During resolution: Assign a scribe</strong> (someone not debugging) to document findings in real-time.</p>
+
+<p><strong>Post-incident: RCA within 24 hours.</strong> Identify not just what failed, but why detection/alerting missed it. Fix the root cause AND the detection gap.</p>
+
+<div class="highlight-moubarak">
+<strong>For Java systems:</strong> Check GC pause logs, heap dumps, thread dumps. Often incidents stem from memory leaks or inefficient queries causing GC pressure. Spring Boot Actuator endpoints are your friend.
+</div>
+</div>
+</div>
+
+<div class="qa-section">
+<div class="question" onclick="toggleAnswer(this)">
+<span class="question-text">Q17: Major initiative 2 months behind. What's your diagnosis and response?</span>
+<span class="question-tag">Furminger interest</span>
+<span class="toggle-icon">▼</span>
+</div>
+<div class="answer">
+<h3>Answer</h3>
+<p><strong>First, diagnose why. Common causes:</strong></p>
+<ul>
+<li>Scope creep—definition of done expanded</li>
+<li>Technical challenges—underestimated complexity</li>
+<li>Unplanned work—bugs/incidents consumed bandwidth</li>
+<li>Unclear requirements—building the wrong thing</li>
+</ul>
+
+<p><strong>My action plan:</strong></p>
+<ol style="margin-left: 20px; margin-bottom: 10px;">
+<li>Diagnostic with tech lead: 'What's really going on? What do you need?'</li>
+<li>Escalate to VP/stakeholders: Share root cause and options (extend, cut scope, add resources, or combo)</li>
+<li>Recalibrate: Work with team to produce a revised plan with realistic estimates and milestones</li>
+<li>Unblock: Remove impediments. Negotiate for infrastructure, support from other teams</li>
+</ol>
+
+<div class="highlight-furminger">
+<strong>For SAFe environments:</strong> This is a PI-level discussion. Revisit the PI plan, discuss with the Program Management Office, and adjust across the ART if needed. Transparency prevents surprises during the PI review.
+</div>
+
+<p>Transparency and realistic replanning build trust. Over-committing or hiding delays destroys it.</p>
+</div>
+</div>
+
+<div class="qa-section">
+<div class="question" onclick="toggleAnswer(this)">
+<span class="question-text">Q18: What does 'end-to-end thinking' mean to you? Example?</span>
+<span class="question-tag">Both</span>
+<span class="toggle-icon">▼</span>
+</div>
+<div class="answer">
+<h3>Answer</h3>
+<p>End-to-end thinking means understanding the full customer journey—from conception through delivery, support, and iteration—and optimizing the whole system, not just one piece.</p>
+
+<p><strong>Example 1 (Support tickets):</strong> We were getting 1000+ weekly support tickets for a 'feature working as designed.' Naive fix: optimize the feature. Real fix: end-to-end analysis revealed the problem was earlier—ambiguous spec causing user confusion. By investing in clearer docs and UX redesign, we reduced tickets <span class="metric">60%</span> and shipped a better product faster.</p>
+
+<p><strong>Example 2 (Deployment speed):</strong> Naive fix: optimize CI pipeline. Real fix: bottleneck was manual testing before each deploy. By automating tests and shifting left, we unlocked <span class="metric">10x faster deployments</span>.</p>
+
+<p>The lesson: Trace the full path, identify the real constraint (it's rarely where you think), and fix it—not the symptom.</p>
+</div>
+</div>
+</div>
+
+</div>
+
+<button class="print-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
+
+</div>
+
+<script>
+function showTab(tabName, element) {
+  const tabs = document.querySelectorAll('.tab-content');
+  tabs.forEach(tab => tab.classList.remove('active'));
+  document.getElementById(tabName).classList.add('active');
+
+  const tabButtons = document.querySelectorAll('.tab');
+  tabButtons.forEach(btn => btn.classList.remove('active'));
+  element.classList.add('active');
+}
+
+function toggleAnswer(element) {
+  const answer = element.nextElementSibling;
+  answer.classList.toggle('open');
+  const icon = element.querySelector('.toggle-icon');
+  icon.style.transform = answer.classList.contains('open') ? 'rotate(180deg)' : 'rotate(0)';
+}
+</script>
+
+</body>
+</html>
