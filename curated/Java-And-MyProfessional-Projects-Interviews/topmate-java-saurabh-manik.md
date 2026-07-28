@@ -660,9 +660,9 @@ class Producer extends Thread {
     sharedLock.lock();
     try {
       for (int i = 0; i < 100; i++) {
-        if (count.get() == sharedArray.length) {//check if count reached max to 5 limit
-          System.out.println("Array is not empty, wait for consumer to consume");
-          sharedSpaceAvailableCondition.await(); //wait for the space to be available, after consume consumes at least one Datapoint
+        if (count.get() == sharedArray.length) {//check if array is FULL (count reached max 5 limit)
+          System.out.println("Array is full, wait for consumer to consume at least 1 message");
+          sharedSpaceAvailableCondition.await(); //wait for the space to be available, after consumer consumes at least one Datapoint
         } else {
           sharedArray[count.get()] = "Data-" + i;
           System.out.println("Data produced at " + count + "th position: " + sharedArray[count.get()] );
