@@ -248,55 +248,94 @@ class Worker extends Thread {
     }
 }
 
-public class CHMEnriched {
-    public static void main(String[] args) throws InterruptedException {
-        ConcurrentHashMap<String, String> sharedMap = new ConcurrentHashMap<>();
-        
-        System.out.println("=== ConcurrentHashMap (Bucket-level Locking) ===\n");
-        long startTime = System.currentTimeMillis();
-        
-        // 2 Put threads
-        Thread t1 = new Worker("Put-1", sharedMap, "greeting", "Hello");
-        Thread t2 = new Worker("Put-2", sharedMap, "target", "World");
-        
-        // 3 Get threads
-        Thread t3 = new Worker("Get-1", sharedMap);
-        Thread t4 = new Worker("Get-2", sharedMap);
-        Thread t5 = new Worker("Get-3", sharedMap);
-        
-        t1.start();
-        t2.start();
-        t3.start();
-        t4.start();
-        t5.start();
-        
-        t1.join();
-        t2.join();
-        t3.join();
-        t4.join();
-        t5.join();
-        
-        long totalTime = System.currentTimeMillis() - startTime;
-        
-        System.out.println("\n✓ Total time: " + totalTime + "ms");
-        System.out.println("✓ Threads ran in PARALLEL (different buckets)");
-        System.out.println("✓ Get operations proceeded while Put operations happened\n");
+import java.util.concurrent.*;
+import java.util.*;
+
+public class ConcurrentHashMapExample {
+  public static void main(String[] args) throws InterruptedException {
+    ConcurrentHashMap < String, String > sharedMap = new ConcurrentHashMap < > ();
+    System.out.println("=== SynchronizedMap (Entire Map Locking) ===\n");
+    long startTime = System.currentTimeMillis();
+    // Create 1000 put threads
+    Worker[] putThreads = new Worker[10000];
+    for (int i = 0; i < 10000; i++) {
+      putThreads[i] = new Worker("putThread" + i, sharedMap, "key" + i, i);
     }
+
+    // Create 1000 get threads
+    Worker[] getThreads = new Worker[10000];
+    for (int i = 0; i < 10000; i++) {
+      getThreads[i] = new Worker("getThread" + i, sharedMap, "key" + i);
+    }
+
+    // Start all put threads
+    for (Worker t: putThreads) {
+      t.start();
+    }
+
+    // Start all get threads
+    for (Worker t: getThreads) {
+      t.start();
+    }
+
+    // Join all put threads
+    for (Worker t: putThreads) {
+      t.join();
+    }
+
+    // Join all get threads
+    for (Worker t: getThreads) {
+      t.join();
+    }
+
+    long totalTime = System.currentTimeMillis() - startTime;
+
+    System.out.println("\n⚠ Total time: " + totalTime + "ms");
+    System.out.println("✓ Threads ran in PARALLEL (different buckets)");
+    System.out.println("✓ Get operations proceeded while Put operations happened\n");
+  }
 }
 
-/* OUTPUT:
-=== ConcurrentHashMap (Bucket-level Locking) ===
+class Worker extends Thread {
+  private String workerName;
+  private Map < String, Integer > sharedMap;
+  private boolean isPut;
+  private String key;
+  private Integer value;
 
-[Put-1] Put greeting=Hello (took 1ms)
-[Put-2] Put target=World (took 1ms)
-[Get-1] Get: Hello World (took 0ms)
-[Get-2] Get: Hello World (took 0ms)
-[Get-3] Get: Hello World (took 0ms)
+  public Worker() {
 
-✓ Total time: 5ms
-✓ Threads ran in PARALLEL (different buckets)
-✓ Get operations proceeded while Put operations happened
-*/
+  }
+
+  //Put Thread
+  public Worker(String workerName, Map map, String key, Integer value) {
+    this.workerName = workerName;
+    this.sharedMap = map;
+    this.isPut = true;
+    this.key = key;
+    this.value = value;
+  }
+
+  //Get Thread
+  public Worker(String workerName, Map map, String key) {
+    this.workerName = workerName;
+    this.sharedMap = map;
+    this.isPut = false;
+    this.key = key;
+  }
+
+  public void run() {
+    if (isPut) {
+      long start = System.currentTimeMillis();
+      sharedMap.put(this.key, this.value);
+      System.out.println("Time taken for put:" + "Key:" + this.key + " Value:" + this.value + " " + (System.currentTimeMillis() - start) + " ms");
+    } else {
+      long start = System.currentTimeMillis();
+      Integer value = sharedMap.get(this.key);
+      System.out.println("Time taken for get:" + value + " Time taken for put:" + (System.currentTimeMillis() - start) + " ms");
+    }
+  }
+}
 ```
 
 ---
