@@ -703,8 +703,8 @@ class Consumer extends Thread {
     sharedLock.lock();
     try {
       for (int i = 0; i < 100; i++) {
-        if (count.get() == 0) {
-          System.out.println("Array is empty, signal to Producer");
+        if (count.get() == 0) {//check if array is EMPTY (count is 0)
+          System.out.println("Array is empty, wait for Producer to produce at least 1 message");
           sharedDataAvailableCondition.await(); //wait for the data to be available, after Producer produces at least one Datapoint
         } else {
           String data = sharedArray[count.get()-1];
