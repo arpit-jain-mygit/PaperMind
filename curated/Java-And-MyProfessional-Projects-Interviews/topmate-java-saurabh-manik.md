@@ -595,70 +595,59 @@ Why this matters for ConcurrentHashMap:
 
 ---
 
-### Q6: ReentrantLock vs Lock Interface - When to Use?
+### Q6: ReentrantLock vs Lock Interface
 
-**Lock Interface (java.util.concurrent.locks.Lock):**
 ```java
-public interface Lock {
-    void lock();           // Blocks indefinitely
-    void lockInterruptibly() throws InterruptedException; // Can be interrupted
-    boolean tryLock();     // Non-blocking, returns immediately
-    boolean tryLock(long time, TimeUnit unit) throws InterruptedException;
-    Condition newCondition();
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class ReentrantLockExample {
+  public static void main(String[] args) throws InterruptedException {
+    Lock lock = new ReentrantLock();
+    
+    Thread t1 = new Thread(() -> {
+      lock.lock();
+      try {
+        System.out.println("Thread 1: Acquired lock");
+        Thread.sleep(500);
+        System.out.println("Thread 1: Releasing lock");
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      } finally {
+        lock.unlock();
+      }
+    });
+    
+    Thread t2 = new Thread(() -> {
+      lock.lock();
+      try {
+        System.out.println("Thread 2: Acquired lock");
+        Thread.sleep(500);
+        System.out.println("Thread 2: Releasing lock");
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      } finally {
+        lock.unlock();
+      }
+    });
+    
+    t1.start();
+    t2.start();
+    t1.join();
+    t2.join();
+    
+    System.out.println("Done");
+  }
 }
+
+/* OUTPUT:
+Thread 1: Acquired lock
+Thread 1: Releasing lock
+Thread 2: Acquired lock
+Thread 2: Releasing lock
+Done
+*/
 ```
-
-**ReentrantLock Implementation:**
-```java
-Lock lock = new ReentrantLock();
-Lock fairLock = new ReentrantLock(true); // Fair lock - FIFO ordering
-
-try {
-    lock.lock();
-    // Critical section
-} finally {
-    lock.unlock(); // MUST unlock in finally block
-}
-
-// Or with try-with-resources (Java 7+)
-try (var ignored = new LockGuard(lock)) {
-    // Critical section
-}
-```
-
-**When to Use Lock over synchronized:**
-
-| Use Case | Example |
-|----------|---------|
-| **Timeout-based locking** | `tryLock(1, TimeUnit.SECONDS)` - Avoid deadlocks |
-| **Interruptible locking** | `lockInterruptibly()` - Thread cancellation |
-| **Multiple conditions** | Different wait/notify per condition |
-| **Fair scheduling** | Prevent thread starvation |
-| **Biased locking avoidance** | Explicit control over lock behavior |
-
-**Real-world Example - Fair Scheduling:**
-```java
-// Thread starvation scenario - some threads never get lock
-synchronized void criticalSection() { }
-
-// Solution: Fair lock ensures all threads eventually acquire lock
-private final Lock fairLock = new ReentrantLock(true);
-
-void criticalSection() {
-    fairLock.lock();
-    try {
-        // Critical section
-    } finally {
-        fairLock.unlock();
-    }
-}
-```
-
-**Architect Considerations:**
-- `synchronized` is simpler and has JVM optimizations (biased locking, escape analysis)
-- `Lock` provides more control for complex scenarios
-- Prefer `synchronized` unless you need specific Lock features
-- Always use try-finally with Lock to ensure unlock
 
 ---
 
