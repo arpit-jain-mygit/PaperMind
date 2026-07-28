@@ -1590,6 +1590,104 @@ Even Printing Thread:10
 
 ---
 
+### Q12.5: Volatile vs AtomicInteger - Visibility vs Atomicity
+
+**Key Differences:**
+
+| Feature | `volatile` | `AtomicInteger` |
+|---------|-----------|-----------------|
+| **What it is** | Keyword | Class |
+| **Guarantees** | Visibility only | Atomicity + Visibility |
+| **Atomic ops** | ❌ No | ✅ Yes |
+| **Compound ops** | ❌ Unsafe | ✅ Safe |
+| **Performance** | Faster (no lock) | Slightly slower (CAS) |
+| **Use case** | Read-heavy | Read-write mixed |
+
+**Problem with `volatile`:**
+```java
+volatile int count = 0;
+
+// Thread 1 & 2 both do this:
+count++;  // ❌ NOT atomic! Read + Increment + Write (3 steps)
+
+// Race condition:
+Thread 1 reads: count = 5
+Thread 2 reads: count = 5
+Thread 1 increments: count = 6, writes
+Thread 2 increments: count = 6, writes
+// Result: count = 6 (should be 7!) - LOST UPDATE
+```
+
+**Solution with `AtomicInteger`:**
+```java
+AtomicInteger count = new AtomicInteger(0);
+
+// Thread 1 & 2 both do this:
+count.incrementAndGet();  // ✅ Atomic operation
+
+// Safe even with concurrent access:
+Thread 1: atomically reads 5, increments to 6, writes
+Thread 2: waits, then reads 6, increments to 7, writes
+// Result: count = 7 ✅ Correct
+```
+
+**When to Use Each:**
+
+**Use `volatile`:**
+```java
+volatile boolean flag = false;  // Simple boolean flag
+volatile int status = 0;        // Read-heavy, rarely written
+// No mutations - just read the value
+```
+
+**Use `AtomicInteger`:**
+```java
+AtomicInteger counter = new AtomicInteger(0);
+counter.incrementAndGet();      // ✅ Safe mutations
+counter.decrementAndGet();
+counter.compareAndSet(5, 10);   // Atomic compare-and-set
+```
+
+**Use `ReentrantLock` + `Condition`:**
+```java
+// Complex coordination between threads (like Q6, Q12)
+lock.lock();
+try {
+  if (condition) {
+    doSomething();
+    otherCondition.signal();
+  } else {
+    myCondition.await();
+  }
+} finally {
+  lock.unlock();
+}
+```
+
+**Real Example - Race Condition:**
+```java
+// ❌ WRONG - Race condition with volatile
+volatile int count = 0;
+for (int i = 0; i < 1000; i++) {
+  new Thread(() -> count++).start();  // Lost updates!
+}
+// Result: count < 1000 (unpredictable!)
+
+// ✅ CORRECT - Atomic operation
+AtomicInteger count = new AtomicInteger(0);
+for (int i = 0; i < 1000; i++) {
+  new Thread(() -> count.incrementAndGet()).start();  // Safe
+}
+// Result: count = 1000 (guaranteed)
+```
+
+**Bottom Line:**
+- **`volatile`** = Visibility only (fast, simple reads)
+- **`AtomicInteger`** = Visibility + Atomicity (safe for mutations)
+- **`ReentrantLock`** = Full synchronization (complex coordination)
+
+---
+
 ### Q13: ExecutorService - Thread Pool Abstraction
 
 **What is ExecutorService?**
