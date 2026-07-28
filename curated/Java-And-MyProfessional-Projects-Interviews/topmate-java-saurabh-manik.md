@@ -609,7 +609,7 @@ Why this matters for ConcurrentHashMap:
 1. **Non-blocking tryLock()** - Try to grab the lock instantly; if available take it, else move on (don't wait)
 2. **Timeout-based locking** - Try to grab the lock for max 2 seconds, then give up if still waiting
 3. **Fair lock** - Threads get the lock in the order they asked for it (like a queue at a shop)
-4. **Multiple conditions** - Different waiting rooms; producer waits in one, consumer in another
+4. **Multiple conditions** - Different waiting rooms; producer waits for space, consumer waits for data
 5. **Lock queries** - Ask "is someone using the lock?" or "how many are waiting?"
 6. **Interruptible locking** - A waiting thread can be told to stop waiting and do something else
 
@@ -617,113 +617,99 @@ Why this matters for ConcurrentHashMap:
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.Condition;
-import java.util.concurrent.TimeUnit;
 
-class ReentrantLockFeatures implements Runnable {
-  private String taskName;
+class Producer implements Runnable {
   private Lock lock;
-  private Condition condition;
+  private Condition spaceAvailable;  // Producer waits on this
+  private Condition dataReady;       // Producer signals this
+  private StringBuilder buffer;
   
-  public ReentrantLockFeatures(String taskName, Lock lock, Condition condition) {
-    this.taskName = taskName;
+  public Producer(Lock lock, Condition spaceAvailable, Condition dataReady, StringBuilder buffer) {
     this.lock = lock;
-    this.condition = condition;
+    this.spaceAvailable = spaceAvailable;
+    this.dataReady = dataReady;
+    this.buffer = buffer;
   }
   
   public void run() {
-    // Feature 1: Non-blocking tryLock()
-    if (lock.tryLock()) {
-      try {
-        System.out.println(taskName + ": Acquired lock immediately");
-        Thread.sleep(300);
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-      } finally {
-        lock.unlock();
-      }
-    } else {
-      System.out.println(taskName + ": Lock not available, skipping");
-    }
-    
-    // Feature 2: Timeout-based locking
+    lock.lock();
     try {
-      if (lock.tryLock(2, TimeUnit.SECONDS)) {
-        try {
-          System.out.println(taskName + ": Acquired lock with timeout");
-          Thread.sleep(200);
-        } finally {
-          lock.unlock();
-        }
-      } else {
-        System.out.println(taskName + ": Timeout - couldn't acquire lock");
+      while (buffer.length() > 0) {
+        System.out.println("Producer: Buffer full, waiting for space...");
+        spaceAvailable.await();  // Wait in the "space" waiting room
       }
+      buffer.append("Data");
+      System.out.println("Producer: Added data to buffer");
+      dataReady.signal();  // Signal consumer: "Data is ready!"
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
+    } finally {
+      lock.unlock();
+    }
+  }
+}
+
+class Consumer implements Runnable {
+  private Lock lock;
+  private Condition spaceAvailable;  // Consumer signals this
+  private Condition dataReady;       // Consumer waits on this
+  private StringBuilder buffer;
+  
+  public Consumer(Lock lock, Condition spaceAvailable, Condition dataReady, StringBuilder buffer) {
+    this.lock = lock;
+    this.spaceAvailable = spaceAvailable;
+    this.dataReady = dataReady;
+    this.buffer = buffer;
+  }
+  
+  public void run() {
+    lock.lock();
+    try {
+      while (buffer.length() == 0) {
+        System.out.println("Consumer: Buffer empty, waiting for data...");
+        dataReady.await();  // Wait in the "data" waiting room
+      }
+      System.out.println("Consumer: Got data: " + buffer.toString());
+      buffer.setLength(0);  // Clear buffer
+      spaceAvailable.signal();  // Signal producer: "Space is available!"
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+    } finally {
+      lock.unlock();
     }
   }
 }
 
 public class ReentrantLockExample {
   public static void main(String[] args) throws InterruptedException {
-    // Feature 3: Fair lock (FIFO ordering)
-    Lock fairLock = new ReentrantLock(true);
-    Condition condition = fairLock.newCondition();  // Feature 4: Multiple conditions
+    Lock lock = new ReentrantLock(true);  // Fair lock
+    Condition dataReady = lock.newCondition();      // Condition 1: for data
+    Condition spaceAvailable = lock.newCondition(); // Condition 2: for space
     
-    System.out.println("=== ReentrantLock Features Demo ===\n");
+    StringBuilder buffer = new StringBuilder();
     
-    // Feature 5: Lock queries
-    System.out.println("Initial state:");
-    System.out.println("  isLocked: " + ((ReentrantLock)fairLock).isLocked());
-    System.out.println("  getQueueLength: " + ((ReentrantLock)fairLock).getQueueLength() + "\n");
+    System.out.println("=== Producer-Consumer with Conditions ===\n");
     
-    Thread t1 = new Thread(new ReentrantLockFeatures("Thread-1", fairLock, condition));
-    Thread t2 = new Thread(new ReentrantLockFeatures("Thread-2", fairLock, condition));
+    Thread producer = new Thread(new Producer(lock, spaceAvailable, dataReady, buffer));
+    Thread consumer = new Thread(new Consumer(lock, spaceAvailable, dataReady, buffer));
     
-    t1.start();
-    t2.start();
-    t1.join();
-    t2.join();
+    producer.start();
+    Thread.sleep(100);
+    consumer.start();
     
-    // Feature 6: Interruptible locking demo
-    System.out.println("\n--- Interruptible Locking Demo ---");
-    Thread t3 = new Thread(() -> {
-      try {
-        fairLock.lockInterruptibly();
-        try {
-          System.out.println("Thread-3: Acquired lock via lockInterruptibly");
-          Thread.sleep(100);
-        } finally {
-          fairLock.unlock();
-        }
-      } catch (InterruptedException e) {
-        System.out.println("Thread-3: Was interrupted while waiting");
-        Thread.currentThread().interrupt();
-      }
-    });
-    
-    t3.start();
-    Thread.sleep(50);
-    t3.interrupt();  // Interrupt the thread
-    t3.join();
+    producer.join();
+    consumer.join();
     
     System.out.println("\nDone");
   }
 }
 
 /* OUTPUT:
-=== ReentrantLock Features Demo ===
+=== Producer-Consumer with Conditions ===
 
-Initial state:
-  isLocked: false
-  getQueueLength: 0
-
-Thread-1: Acquired lock immediately
-Thread-2: Lock not available, skipping
-Thread-1: Acquired lock with timeout
-Thread-2: Acquired lock with timeout
-
---- Interruptible Locking Demo ---
-Thread-3: Was interrupted while waiting
+Producer: Added data to buffer
+Consumer: Got data: Data
+Consumer: Buffer empty, waiting for data...
 
 Done
 */
