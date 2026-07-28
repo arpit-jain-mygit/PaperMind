@@ -597,6 +597,15 @@ Why this matters for ConcurrentHashMap:
 
 ### Q6: ReentrantLock vs Lock Interface
 
+**6 Key Features (Layman Explanation):**
+
+1. **Non-blocking tryLock()** - Try to grab the lock instantly; if available take it, else move on (don't wait)
+2. **Timeout-based locking** - Try to grab the lock for max 2 seconds, then give up if still waiting
+3. **Fair lock** - Threads get the lock in the order they asked for it (like a queue at a shop)
+4. **Multiple conditions** - Different waiting rooms; producer waits in one, consumer in another
+5. **Lock queries** - Ask "is someone using the lock?" or "how many are waiting?"
+6. **Interruptible locking** - A waiting thread can be told to stop waiting and do something else
+
 ```java
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
