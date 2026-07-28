@@ -1033,6 +1033,187 @@ Final counter value: 3
 
 ---
 
+**Semaphore Implementation 1: Using `synchronized`**
+
+```java
+class SynchronizedSemaphore {
+  private int permits;
+  
+  public SynchronizedSemaphore(int permits) {
+    this.permits = permits;
+  }
+  
+  public synchronized void acquire() throws InterruptedException {
+    while (permits == 0) {  // No permits available
+      System.out.println(Thread.currentThread().getName() + ": No permits, waiting...");
+      wait();               // Wait for permit
+    }
+    permits--;              // Take a permit
+    System.out.println(Thread.currentThread().getName() + ": Acquired permit (remaining: " + permits + ")");
+  }
+  
+  public synchronized void release() {
+    permits++;              // Release permit
+    System.out.println(Thread.currentThread().getName() + ": Released permit (available: " + permits + ")");
+    notifyAll();            // Wake up waiting threads
+  }
+}
+
+class SyncWorker extends Thread {
+  private SynchronizedSemaphore semaphore;
+  
+  public SyncWorker(SynchronizedSemaphore semaphore, String taskName) {
+    super(taskName);
+    this.semaphore = semaphore;
+  }
+  
+  public void run() {
+    try {
+      System.out.println(getName() + ": Trying to acquire semaphore...");
+      semaphore.acquire();
+      
+      System.out.println(getName() + ": USING RESOURCE (doing work for 500ms)");
+      Thread.sleep(500);
+      
+      System.out.println(getName() + ": DONE, releasing...");
+      semaphore.release();
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+    }
+  }
+}
+
+public class SynchronizedSemaphoreDemo {
+  public static void main(String[] args) throws InterruptedException {
+    SynchronizedSemaphore semaphore = new SynchronizedSemaphore(2);  // Max 2
+    
+    System.out.println("=== Semaphore using synchronized (Max 2 concurrent) ===\n");
+    
+    Thread t1 = new SyncWorker(semaphore, "Task-1");
+    Thread t2 = new SyncWorker(semaphore, "Task-2");
+    Thread t3 = new SyncWorker(semaphore, "Task-3");
+    Thread t4 = new SyncWorker(semaphore, "Task-4");
+    
+    t1.start(); t2.start(); t3.start(); t4.start();
+    t1.join(); t2.join(); t3.join(); t4.join();
+    
+    System.out.println("\nDone");
+  }
+}
+```
+
+---
+
+**Semaphore Implementation 2: Using `ReentrantLock + Condition`**
+
+```java
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.Condition;
+
+class LockSemaphore {
+  private int permits;
+  private ReentrantLock lock = new ReentrantLock();
+  private Condition condition = lock.newCondition();
+  
+  public LockSemaphore(int permits) {
+    this.permits = permits;
+  }
+  
+  public void acquire() throws InterruptedException {
+    lock.lock();
+    try {
+      while (permits == 0) {  // No permits available
+        System.out.println(Thread.currentThread().getName() + ": No permits, waiting...");
+        condition.await();    // Wait for permit
+      }
+      permits--;              // Take a permit
+      System.out.println(Thread.currentThread().getName() + ": Acquired permit (remaining: " + permits + ")");
+    } finally {
+      lock.unlock();
+    }
+  }
+  
+  public void release() {
+    lock.lock();
+    try {
+      permits++;              // Release permit
+      System.out.println(Thread.currentThread().getName() + ": Released permit (available: " + permits + ")");
+      condition.signalAll();  // Wake up waiting threads
+    } finally {
+      lock.unlock();
+    }
+  }
+}
+
+class LockWorker extends Thread {
+  private LockSemaphore semaphore;
+  
+  public LockWorker(LockSemaphore semaphore, String taskName) {
+    super(taskName);
+    this.semaphore = semaphore;
+  }
+  
+  public void run() {
+    try {
+      System.out.println(getName() + ": Trying to acquire semaphore...");
+      semaphore.acquire();
+      
+      System.out.println(getName() + ": USING RESOURCE (doing work for 500ms)");
+      Thread.sleep(500);
+      
+      System.out.println(getName() + ": DONE, releasing...");
+      semaphore.release();
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+    }
+  }
+}
+
+public class LockSemaphoreDemo {
+  public static void main(String[] args) throws InterruptedException {
+    LockSemaphore semaphore = new LockSemaphore(2);  // Max 2
+    
+    System.out.println("=== Semaphore using ReentrantLock (Max 2 concurrent) ===\n");
+    
+    Thread t1 = new LockWorker(semaphore, "Task-1");
+    Thread t2 = new LockWorker(semaphore, "Task-2");
+    Thread t3 = new LockWorker(semaphore, "Task-3");
+    Thread t4 = new LockWorker(semaphore, "Task-4");
+    
+    t1.start(); t2.start(); t3.start(); t4.start();
+    t1.join(); t2.join(); t3.join(); t4.join();
+    
+    System.out.println("\nDone");
+  }
+}
+```
+
+---
+
+**Comparison: All 3 Semaphore Implementations**
+
+| Feature | Built-in Semaphore | synchronized | ReentrantLock |
+|---------|-------------------|--------------|---------------|
+| **Code Complexity** | ✅ Simple (built-in) | ⚠️ Medium (manual counting) | ⚠️ Medium (manual counting) |
+| **Lines of Code** | ✅ 5 lines | ⚠️ 30+ lines | ⚠️ 40+ lines |
+| **Fairness** | ✅ Fair (configurable) | ❌ Unfair | ✅ Fair (configurable) |
+| **Flexibility** | ✅ Simple acquire/release | ⚠️ Basic | ✅ Multiple conditions |
+| **Performance** | ✅ Optimized | ⚠️ Slower | ⚠️ Slower (CAS) |
+| **Readability** | ✅ Clear intent | ⚠️ Confusing (why counting?) | ⚠️ Verbose |
+| **Production Use** | ✅ BEST | ⚠️ Acceptable | ⚠️ Acceptable |
+| **When to Use** | ✅ Resource limiting, rate limiting | Basic synchronization only | Complex coordination |
+
+**Key Takeaway:**
+```java
+// ✅ ALWAYS use built-in Semaphore for semaphore-like behavior
+Semaphore sem = new Semaphore(2);  // Clear, optimized, battle-tested
+
+// ⚠️ Use synchronized/ReentrantLock only if you MUST implement it manually
+// (e.g., in an interview or educational setting)
+```
+
+---
+
 ### Q8: CountDownLatch vs CyclicBarrier - The Difference
 
 **CountDownLatch - Real Business Scenario:**
