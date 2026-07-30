@@ -2173,153 +2173,46 @@ ref.compareAndSet("initial", "updated"); // Atomic reference update
 
 ---
 
-## CAS (Compare-And-Swap) - Deep Dive
+## CAS (Compare-And-Swap) - What Problem Does It Solve?
 
-**What Problem Does CAS Solve?**
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ WITHOUT CAS/LOCKING (Race Condition - Lost Update)             │
-├─────────────────────────────────────────────────────────────────┤
-│ Counter = 5                                                     │
-│                                                                 │
-│ Thread 1: Read counter → 5                                     │
-│ Thread 2: Read counter → 5                                     │
-│ Thread 1: Increment to 6, Write back → counter = 6             │
-│ Thread 2: Increment to 6, Write back → counter = 6 ❌ WRONG!   │
-│                                                                 │
-│ Result: counter = 6 (LOST one increment!)                      │
-│         Expected: 7                                            │
-└─────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────┐
-│ WITH CAS (Safe - No Lost Updates)                              │
-├─────────────────────────────────────────────────────────────────┤
-│ Counter = 5                                                     │
-│                                                                 │
-│ Thread 1: Read counter → 5                                     │
-│ Thread 2: Read counter → 5                                     │
-│ Thread 1: CAS(5 → 6)? YES ✅ counter = 6                       │
-│ Thread 2: CAS(5 → 6)? NO ❌ (counter is 6, not 5, retry)      │
-│ Thread 2: Read counter → 6                                     │
-│ Thread 2: CAS(6 → 7)? YES ✅ counter = 7                       │
-│                                                                 │
-│ Result: counter = 7 ✅ CORRECT!                                │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**CAS Operation Breakdown:**
+**Problem & Solution in One Table:**
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│ compareAndSet(expectedValue, newValue)                         │
-├─────────────────────────────────────────────────────────────────┤
-│ Step 1: READ current value                                     │
-│ Step 2: COMPARE: current == expected?                          │
-│         ├─ YES → Swap with newValue (ATOMIC) → return true ✅  │
-│         └─ NO  → Don't change, return false ❌                 │
-│                                                                 │
-│ ALL STEPS ARE ATOMIC (cannot be interrupted)                  │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────┬──────────────────────────────┬──────────────────────────┐
+│ Aspect              │ WITHOUT CAS (Race Condition) │ WITH CAS (Safe)          │
+├─────────────────────┼──────────────────────────────┼──────────────────────────┤
+│ counter = 5         │                              │                          │
+│ Thread 1            │ Read: 5 → Increment: 6      │ CAS(5→6)? YES ✅ (c=6)   │
+│ Thread 2            │ Read: 5 → Increment: 6      │ CAS(5→6)? NO ❌ Retry   │
+│ Result              │ counter = 6 ❌ LOST UPDATE! │ counter = 7 ✅ CORRECT  │
+│                     │ (should be 7)               │ (no lost updates)        │
+├─────────────────────┼──────────────────────────────┼──────────────────────────┤
+│ Method              │ Lock entire section         │ Atomic check-then-swap   │
+│ Blocking            │ ✅ YES (sequential)         │ ❌ NO (lock-free)        │
+│ Speed               │ 🐢 Slow (waits)            │ ⚡ Fast (retries)       │
+│ Use When            │ High contention             │ Low contention           │
+└─────────────────────┴──────────────────────────────┴──────────────────────────┘
 ```
 
-**CAS Methods Available:**
+**CAS in Practice:**
 
 ```
-┌────────────────────────────────────────┬──────────────────────────┐
-│ Method                                 │ What It Does             │
-├────────────────────────────────────────┼──────────────────────────┤
-│ compareAndSet(expect, update)          │ If == expect, set to     │
-│                                        │ update, return true      │
-├────────────────────────────────────────┼──────────────────────────┤
-│ incrementAndGet()                      │ Uses CAS internally to   │
-│                                        │ safely increment         │
-├────────────────────────────────────────┼──────────────────────────┤
-│ getAndSet(newValue)                    │ Set atomically, return   │
-│                                        │ old value                │
-├────────────────────────────────────────┼──────────────────────────┤
-│ getAndAdd(delta)                       │ Add delta atomically     │
-│                                        │ return old value         │
-├────────────────────────────────────────┼──────────────────────────┤
-│ weakCompareAndSet(e, u)                │ Like CAS but may fail    │
-│                                        │ spuriously (faster)      │
-└────────────────────────────────────────┴──────────────────────────┘
+┌────────────────────────────────────────┬──────────────────────────────────┐
+│ ❌ Synchronized (Blocking)             │ ✅ AtomicInteger (CAS, Lock-Free)│
+├────────────────────────────────────────┼──────────────────────────────────┤
+│ synchronized void increment() {        │ private AtomicInteger count =    │
+│   counter++;  // One thread at a time  │   new AtomicInteger(0);         │
+│   // Others BLOCKED waiting for lock   │                                  │
+│ }                                      │ void increment() {               │
+│                                        │   count.incrementAndGet();       │
+│ Problem: Sequential, slow              │   // CAS used internally         │
+│                                        │ }                                │
+│                                        │                                  │
+│                                        │ Benefit: Parallel retries, fast  │
+└────────────────────────────────────────┴──────────────────────────────────┘
 ```
 
-**CAS vs Locks Comparison:**
-
-```
-┌──────────────────────┬──────────────────────────┬──────────────────────────┐
-│ Aspect               │ CAS (Lock-Free)          │ Locks (Synchronized)     │
-├──────────────────────┼──────────────────────────┼──────────────────────────┤
-│ Mechanism            │ Atomic read-compare-swap │ Mutual exclusion lock    │
-│ Blocking             │ ❌ NO (retry loop)      │ ✅ YES (thread blocked)  │
-│ CPU Usage            │ ⚡ Spinning (active)    │ 🐢 Sleeping (passive)    │
-│ Parallelism          │ ⚡ Multiple threads     │ 🐢 One thread at a time  │
-│                      │ try simultaneously       │                          │
-│ Contention           │ Low: retry loop fast     │ High: context switch      │
-│ Fairness             │ ❌ NO (random wins)    │ ⚠️ Depends on JVM       │
-│ Code Complexity      │ ⚠️ While loops needed  │ ✅ Simple                │
-│ When to Use          │ Low contention          │ High contention          │
-└──────────────────────┴──────────────────────────┴──────────────────────────┘
-```
-
-**When to Use CAS vs Locks:**
-
-```
-┌────────────────────────────────────────┬──────────────────────────────┐
-│ Scenario                               │ Best Choice                  │
-├────────────────────────────────────────┼──────────────────────────────┤
-│ Simple counter (2 threads, low update) │ ✅ CAS (AtomicInteger)       │
-│ Simple counter (100 threads, update)   │ ✅ CAS (AtomicInteger)       │
-│ Complex locking logic                  │ ✅ ReentrantLock             │
-│ Many threads competing for same data   │ ✅ Depends on contention     │
-│  - Light contention                    │ ✅ CAS (lock-free)           │
-│  - Heavy contention                    │ ✅ Lock (avoid spinning)     │
-│ Need fairness guarantee                │ ✅ ReentrantLock(true)       │
-│ Need timeout-based locking             │ ✅ ReentrantLock.tryLock()   │
-│ Increment-only counter                 │ ✅ AtomicInteger (simplest)  │
-└────────────────────────────────────────┴──────────────────────────────┘
-```
-
-**Performance: CAS vs Locks**
-
-```
-┌────────────────────┬───────────────────┬───────────────────┬───────────┐
-│ Threads            │ CAS Time          │ Lock Time         │ Winner    │
-├────────────────────┼───────────────────┼───────────────────┼───────────┤
-│ 1 thread           │ ~10 cycles        │ ~15 cycles        │ ⚡ CAS    │
-│ 2 threads (low)    │ ~50 cycles        │ ~100 cycles       │ ⚡ CAS    │
-│ 4 threads (medium) │ ~200 cycles       │ ~500 cycles       │ ⚡ CAS    │
-│ 16 threads (high)  │ ~10K cycles       │ ~5K cycles        │ 🔒 Lock   │
-│                    │ (many retries)    │ (efficient queue) │           │
-└────────────────────┴───────────────────┴───────────────────┴───────────┘
-```
-
-**CAS Real-World Example:**
-
-```java
-// ❌ Without CAS (Buggy):
-private int count = 0;
-
-void increment() {
-    count++;  // NOT atomic, race condition!
-}
-
-// ✅ With CAS (Safe):
-private AtomicInteger count = new AtomicInteger(0);
-
-void increment() {
-    while (!count.compareAndSet(count.get(), count.get() + 1)) {
-        // Retry if CAS failed (another thread changed it)
-    }
-}
-
-// ✅ Simplified (using built-in):
-void increment() {
-    count.incrementAndGet();  // CAS done internally!
-}
-```
+**One-Liner:** CAS = "If value is what I expect, atomically swap it" → prevents lost updates without locks (lock-free).
 
 ---
 
