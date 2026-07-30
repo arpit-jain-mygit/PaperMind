@@ -9,6 +9,7 @@
    - [Q1-Q12: Core threading concepts](#core-java---collections)
    - [Q13-Q16: ExecutorService & ThreadPoolExecutor](#q13-executorservice---thread-pool-abstraction)
    - [Multi-Threading Summary](#multi-threading-concepts-summary-layman-terms)
+   - [Deep Dive: How synchronized Works Internally](#deep-dive-how-synchronized-works-internally)
 3. [Other Topics](#other-topics)
    - [JWT Token](#jwt-token)
    - [Design Patterns](#design-patterns)
@@ -2454,6 +2455,346 @@ Q: Just visibility (read-heavy)?
 - **ExecutorService** = "Receptionist + worker team"
 - **ThreadPool** = "Team of workers reused"
 - **ForkJoinPool** = "Divide big problem, merge results"
+
+---
+
+## Deep Dive: How `synchronized` Works Internally
+
+### Simple Analogy: Bathroom Lock
+
+```
+Thread A: "I want to use synchronized block"
+  ↓
+Object Lock: "Do you have the key? No? Wait in queue"
+  ↓
+Thread A: Waits
+Thread B: Has the key, inside the block
+  ↓
+Thread B: Done, releases key
+  ↓
+Object Lock: "Wake up Thread A, here's the key"
+  ↓
+Thread A: Gets key, executes the block
+  ↓
+Thread A: Done, releases key for next thread
+```
+
+---
+
+### Object Header: The Lock Storage
+
+Every Java object has a **12-16 byte header** that stores lock information:
+
+```
+Java Object in Memory:
+┌──────────────────────────┐
+│ Mark Word                │ ← Stores lock status + owner thread ID
+│ (8 bytes on 64-bit JVM)  │
+├──────────────────────────┤
+│ Class Pointer            │ ← Points to class definition
+├──────────────────────────┤
+│ Instance Data            │ ← Actual object fields
+└──────────────────────────┘
+
+Mark Word Contents:
+- Lock state: Unlocked? Locked by who?
+- Thread ID: Which thread owns this lock?
+- Lock count: How many times locked (for re-entrancy)?
+- Hash code and GC age
+```
+
+---
+
+### Three Lock States (HotSpot JVM)
+
+#### State 1: Biased Locking (Fast Path - Most Common)
+
+```
+Initial state: Object is unlocked
+
+Thread A enters synchronized:
+  ├─ Mark Word stores Thread A's ID
+  ├─ Future accesses by Thread A: NO actual locking needed!
+  └─ Cost: Almost FREE (one atomic operation)
+
+Thread B arrives:
+  ├─ Bias is revoked
+  └─ Escalate to next state
+```
+
+**Why biased?** The JVM bets the lock will be used by the same thread repeatedly. Usually correct!
+
+---
+
+#### State 2: Lightweight Locking (Spin Lock)
+
+```
+Thread A has the lock, Thread B arrives:
+  ├─ Thread B starts SPINNING (busy-waiting)
+  ├─ "Is lock free yet? Is it free yet? Is it free yet?"
+  ├─ Checking thousands of times per second
+  ├─ If Thread A releases quickly → Thread B grabs it
+  └─ Cost: CPU busy, but NO OS context switch
+
+Example:
+  Thread A: [Released lock after 10ms]
+  Thread B: [Noticed after 2ms of spinning]
+  Result: ⚡ FAST (no sleep/wake overhead)
+```
+
+---
+
+#### State 3: Heavyweight Locking (Blocking)
+
+```
+If threads contend for too long:
+  ├─ JVM stops spinning (wastes CPU)
+  ├─ Thread goes to SLEEP (parked by OS)
+  ├─ Waits in queue for lock to be released
+  ├─ When lock available: OS wakes one thread
+  └─ Cost: 🐢 SLOW (context switch overhead)
+
+Queue visualization:
+  ┌─────────────────┐
+  │ Lock Owner: T1  │ (running)
+  └────────┬────────┘
+           │
+  ┌────────▼──────────┐
+  │ Waiting Queue:    │
+  │ T2 (sleeping)     │
+  │ T3 (sleeping)     │
+  │ T4 (spinning)     │
+  └───────────────────┘
+```
+
+---
+
+### Lock Acquisition Process
+
+```
+Thread wants to enter synchronized block:
+
+1. Check Mark Word (lock status)
+   ↓
+2. Is it unlocked?
+   ├─ YES → Mark it as locked, continue ✓
+   └─ NO → Go to step 3
+   ↓
+3. Is it biased to me (same thread)?
+   ├─ YES → Increment lock count, continue ✓
+   └─ NO → Go to step 4
+   ↓
+4. Try lightweight lock (spinning)
+   ├─ Spin for N iterations (~100-1000)
+   ├─ Success? Continue ✓
+   └─ Still locked? Go to step 5
+   ↓
+5. Escalate to heavyweight lock
+   ├─ Park thread (OS sleep)
+   ├─ Wait in queue
+   ├─ OS wakes one thread when lock free
+   └─ Continue ✓
+```
+
+---
+
+### Lock Release Process
+
+```
+Thread leaving synchronized block:
+
+1. Decrement lock count
+   ↓
+2. Is count == 0? (Fully unlocked?)
+   ├─ NO → Still holding it, done
+   └─ YES → Go to step 3
+   ↓
+3. Release Mark Word (unlock)
+   ├─ Update Mark Word: "Unlocked"
+   └─ Go to step 4
+   ↓
+4. Are there waiting threads?
+   ├─ NO → Done ✓
+   └─ YES → Wake ONE thread from queue
+      (Not necessarily first! → NOT FIFO)
+      
+5. Woken thread acquires lock + continues
+   Others still waiting
+```
+
+---
+
+### Memory Barriers (Visibility Guarantee)
+
+`synchronized` provides **both mutual exclusion AND visibility**:
+
+```java
+class Example {
+    private int value = 0;
+    
+    synchronized void write() {
+        value = 10;  // Write
+    }
+    
+    synchronized int read() {
+        return value;  // Read
+    }
+}
+```
+
+**What happens internally:**
+
+```
+Thread A entering synchronized (acquiring lock):
+  ├─ LoadLoad barrier
+  ├─ LoadStore barrier
+  └─ Flush CPU cache → See latest values from main memory
+
+Thread A exiting synchronized (releasing lock):
+  ├─ StoreStore barrier
+  ├─ LoadStore barrier
+  └─ Publish changes → Write back to main memory
+
+Result: Thread B always sees Thread A's writes!
+```
+
+---
+
+### Re-entrancy (Same Thread Can Lock Again)
+
+```java
+synchronized void methodA() {
+    // Lock count = 1
+    synchronized(this) {
+        // Lock count = 2 (same lock, same thread)
+        methodB();
+    }
+    // Lock count = 1
+}
+
+synchronized void methodB() {
+    // Lock count = 2 (already holds it, just increment)
+    // ... work ...
+    // Unlock: count = 1
+}
+// Unlock: count = 0 (fully released)
+```
+
+**Why it works:**
+- Mark Word stores **lock count**, not just boolean
+- Same thread checking own ID can increment count
+- Each exit decrements count
+- Only when count reaches 0 is lock actually released
+
+---
+
+### Performance: Lock States Comparison
+
+| Scenario | Lock Type | Cost | Example |
+|----------|-----------|------|---------|
+| **Single thread** | Biased | ~0 cycles 🚀 | Thread T reuses lock many times |
+| **2 threads, low contention** | Lightweight (spin) | 10-100 cycles ⚡ | Thread A releases, Thread B grabs quickly |
+| **Many threads, high contention** | Heavyweight (queue) | 10,000+ cycles 🐢 | Thread goes to sleep, OS wakes later |
+| **Uncontended object** | Biased | Always free | Lock never escalates |
+
+---
+
+### synchronized vs ReentrantLock
+
+| Feature | `synchronized` | `ReentrantLock` |
+|---------|---|---|
+| **Fair?** | NO (random thread wins) | YES (if fairness=true) |
+| **Effort** | Auto-optimized by JVM | Manual lock/unlock |
+| **Lock States** | 3 (biased→lightweight→heavy) | 1 (queue-based) |
+| **Speed (low contention)** | Very fast ⚡ | Slower (always queue) |
+| **Speed (high contention)** | Slower | Comparable |
+| **Try-lock with timeout** | ❌ Not supported | ✓ Supported |
+| **Multiple conditions** | wait/notify (clunky) | Condition (clean) |
+
+---
+
+### When Lock Escalates (Biased → Lightweight → Heavyweight)
+
+```
+Scenario 1: Single-threaded code
+Thread T always uses synchronized block alone
+  └─ Stays BIASED forever
+     (No contention, no escalation)
+
+Scenario 2: Two threads, low contention
+Thread A has lock, Thread B arrives
+  ├─ Revoke bias → Lightweight lock
+  ├─ Thread B spins (busy-wait)
+  ├─ Thread A releases quickly
+  ├─ Thread B grabs it
+  └─ Stays LIGHTWEIGHT (no need to escalate)
+
+Scenario 3: High contention (many threads)
+Many threads wanting same lock
+  ├─ Lightweight escalates after N spins
+  ├─ Threads move to queue (sleep)
+  ├─ OS scheduler wakes one at a time
+  └─ Becomes HEAVYWEIGHT
+```
+
+---
+
+### Thread Notification (Not Always Fair)
+
+```
+Lock is released!
+
+Waiting threads:
+  Thread B: Sleeping (in queue)
+  Thread C: Sleeping (in queue)
+  Thread D: Spinning (still trying)
+
+Who gets it?
+  └─ Thread D (spinning, awake) often wins!
+     OR one random thread from queue wakes up
+  
+NOT FIFO! 🎲
+```
+
+**Why not fair?**
+- Spinning threads are "awake", grab lock before OS can wake sleepers
+- Maintaining FIFO order = expensive bookkeeping
+- `synchronized` prioritizes SPEED, not fairness
+- For fairness, use `ReentrantLock(true)`
+
+---
+
+### Summary: Internal Execution Flow
+
+```
+Code:
+    synchronized(object) {
+        doWork();
+    }
+
+Internal Execution:
+
+1. ACQUIRE PHASE:
+   ├─ Check object's Mark Word
+   ├─ If unlocked → Mark as locked
+   ├─ If biased to me → Increment count
+   ├─ If locked by other → Spin/Wait
+   └─ Continue when lock acquired
+
+2. EXECUTE PHASE:
+   ├─ Memory barrier: Load latest values
+   ├─ Run doWork()
+   └─ Memory barrier: Publish changes
+
+3. RELEASE PHASE:
+   ├─ Decrement lock count
+   ├─ If count > 0 → Still locked, done
+   ├─ If count == 0 → Fully release
+   └─ Wake one waiting thread
+
+4. NEXT THREAD:
+   └─ Woken thread acquires lock + repeats
+```
 
 ---
 
