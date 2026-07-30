@@ -364,14 +364,18 @@ Thread Birth → Execution → Waiting → Death
 
 **6 Thread States (Simple Explanation):**
 
-| State | Meaning | Example | Can Run Code? |
-|-------|---------|---------|---|
-| **NEW** | Thread created, but `start()` not called yet | `Thread t = new Thread();` | ❌ NO |
-| **RUNNABLE** | Thread is running OR ready to run (waiting for CPU) | `t.start()` called, executing code | ✅ YES |
-| **BLOCKED** | Thread waiting for a lock (trying to enter `synchronized` block) | `synchronized(obj) { }` locked by another thread | ❌ NO |
-| **WAITING** | Thread waiting forever for another thread's signal | `obj.wait()`, `Thread.join()`, `CountDownLatch.await()` | ❌ NO |
-| **TIMED_WAITING** | Thread waiting for max N seconds | `Thread.sleep(2000)`, `lock.tryLock(1, TimeUnit.SECONDS)` | ❌ NO |
-| **TERMINATED** | Thread finished execution (dead) | `run()` method completed | ❌ NO |
+```
+┌──────────────────┬───────────────────────────────────┬──────────────────────────┬──────────┐
+│ State            │ Meaning                           │ Example                  │ Running? │
+├──────────────────┼───────────────────────────────────┼──────────────────────────┼──────────┤
+│ NEW              │ Created, start() not called       │ Thread t = new Thread(); │ ❌ NO    │
+│ RUNNABLE         │ Running OR ready for CPU          │ t.start() called         │ ✅ YES   │
+│ BLOCKED          │ Waiting for lock (synchronized)   │ synchronized(obj) locked │ ❌ NO    │
+│ WAITING          │ Waiting forever for signal        │ obj.wait(), join()       │ ❌ NO    │
+│ TIMED_WAITING    │ Waiting for N seconds max         │ Thread.sleep(2000)       │ ❌ NO    │
+│ TERMINATED       │ Finished (dead)                   │ run() completed          │ ❌ NO    │
+└──────────────────┴───────────────────────────────────┴──────────────────────────┴──────────┘
+```
 
 ---
 
@@ -580,34 +584,68 @@ T3: TERMINATED
 
 **State Transitions (When Does State Change?):**
 
-| From | To | Reason | Code |
-|------|----|---------|----|
-| NEW | RUNNABLE | `start()` called | `t.start()` |
-| RUNNABLE | BLOCKED | Trying to enter locked `synchronized` block | `synchronized(obj) { }` (obj locked) |
-| RUNNABLE | WAITING | Calling `wait()` (waits forever) | `obj.wait()` |
-| RUNNABLE | TIMED_WAITING | Calling `sleep()` or `wait(timeout)` | `Thread.sleep(1000)` |
-| BLOCKED | RUNNABLE | Got the lock | Lock released by other thread |
-| WAITING | RUNNABLE | `notify()` or `notifyAll()` called | `obj.notify()` |
-| TIMED_WAITING | RUNNABLE | Time elapsed OR `interrupt()` | Timer expired |
-| RUNNABLE | TERMINATED | `run()` method returns | Code finishes |
+```
+┌──────────────────┬──────────────────┬─────────────────────────────┬──────────────────────┐
+│ From             │ To               │ Reason                      │ Code Example         │
+├──────────────────┼──────────────────┼─────────────────────────────┼──────────────────────┤
+│ NEW              │ RUNNABLE         │ start() called              │ t.start()            │
+│ RUNNABLE         │ BLOCKED          │ Waiting for lock            │ synchronized(obj){} │
+│ RUNNABLE         │ WAITING          │ Waits forever for signal    │ obj.wait()           │
+│ RUNNABLE         │ TIMED_WAITING    │ Sleeps for N seconds        │ Thread.sleep(1000)   │
+│ BLOCKED          │ RUNNABLE         │ Lock acquired               │ Lock released        │
+│ WAITING          │ RUNNABLE         │ Signal received             │ obj.notify()         │
+│ TIMED_WAITING    │ RUNNABLE         │ Time expired                │ Timer ends           │
+│ RUNNABLE         │ TERMINATED       │ run() method finishes       │ return from run()    │
+└──────────────────┴──────────────────┴─────────────────────────────┴──────────────────────┘
+```
+
+---
+
+**Methods That Cause State Changes:**
+
+```
+┌──────────────────────────────┬──────────────────┬─────────────────────────┐
+│ Method Call                  │ Current → New    │ Notes                   │
+├──────────────────────────────┼──────────────────┼─────────────────────────┤
+│ t.start()                    │ NEW → RUNNABLE   │ Starts thread           │
+│ Enter synchronized block     │ RUNNABLE → ...   │ BLOCKED if locked       │
+│ obj.wait()                   │ RUNNABLE → WAIT  │ Waits forever           │
+│ obj.wait(1000)               │ RUNNABLE → TIMED │ Waits 1 sec max         │
+│ Thread.sleep(2000)           │ RUNNABLE → TIMED │ Sleeps 2 sec            │
+│ obj.notify()                 │ WAITING → RUNNABLE   │ Wakes one thread   │
+│ obj.notifyAll()              │ WAITING → RUNNABLE   │ Wakes all threads  │
+│ Lock released                │ BLOCKED → RUNNABLE   │ Can now run        │
+│ Timer expired                │ TIMED_WAITING → RUNNABLE │ Time's up     │
+│ t.interrupt()                │ WAITING/TIMED → RUNNABLE │ Force wake up  │
+│ run() method returns         │ RUNNABLE → TERMINATED    │ Thread dies    │
+└──────────────────────────────┴──────────────────┴─────────────────────────┘
+```
 
 ---
 
 **Common Mistakes:**
 
-❌ **"RUNNABLE = thread is running right now"**
-- ❌ Wrong! RUNNABLE = "running OR ready to run" (waiting for CPU scheduler)
-- ✅ Only ONE thread runs at a time (on single core)
-- ✅ Other RUNNABLE threads wait for their turn
-
-❌ **"Calling start() makes thread RUNNING"**
-- ❌ Wrong! Thread goes to RUNNABLE (might not run immediately)
-- ✅ Thread runs when OS scheduler gives it CPU time
-
-❌ **"BLOCKED vs WAITING are the same"**
-- ❌ Wrong! 
-- ✅ BLOCKED = waiting for LOCK
-- ✅ WAITING = waiting for SIGNAL (notify/notifyAll)
+```
+┌────────────────────────────────────┬────────────────────────────────┐
+│ ❌ Wrong Assumption                │ ✅ Correct Understanding       │
+├────────────────────────────────────┼────────────────────────────────┤
+│ RUNNABLE = actively running now    │ RUNNABLE = running OR waiting  │
+│                                    │ for CPU (many threads, 1 CPU)  │
+├────────────────────────────────────┼────────────────────────────────┤
+│ start() = thread immediately runs  │ start() = thread goes to       │
+│                                    │ RUNNABLE (might not run yet)   │
+├────────────────────────────────────┼────────────────────────────────┤
+│ BLOCKED = same as WAITING          │ BLOCKED = waiting for LOCK     │
+│                                    │ WAITING = waiting for SIGNAL   │
+│                                    │ (obj.notify/notifyAll)         │
+├────────────────────────────────────┼────────────────────────────────┤
+│ WAITING = thread will wait forever │ WAITING = waits until signaled │
+│                                    │ (thread can sleep indefinitely)│
+├────────────────────────────────────┼────────────────────────────────┤
+│ TERMINATED = same as BLOCKED       │ TERMINATED = final, cannot     │
+│                                    │ restart (one-way only)         │
+└────────────────────────────────────┴────────────────────────────────┘
+```
 
 ---
 
