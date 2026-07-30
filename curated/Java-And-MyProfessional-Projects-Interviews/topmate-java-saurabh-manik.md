@@ -6,6 +6,7 @@
 ## Table of Contents
 1. [Core Java - Collections](#core-java---collections)
 2. [Core Java - Multi-Threading](#core-java---multi-threading)
+   - [Thread States (Lifecycle)](#thread-states-lifecycle)
    - [Q1-Q12: Core threading concepts](#core-java---collections)
    - [Q13-Q16: ExecutorService & ThreadPoolExecutor](#q13-executorservice---thread-pool-abstraction)
    - [Multi-Threading Summary](#multi-threading-concepts-summary-layman-terms)
@@ -348,6 +349,206 @@ Comparator<Integer> good = Integer::compare;
 ---
 
 ## Core Java - Multi-Threading
+
+### Thread States (Lifecycle)
+
+**What is a Thread State?**
+
+A thread's state is where it currently is in its lifecycle:
+
+```
+Thread Birth → Execution → Waiting → Death
+```
+
+---
+
+**6 Thread States (Simple Explanation):**
+
+| State | Meaning | Example | Can Run Code? |
+|-------|---------|---------|---|
+| **NEW** | Thread created, but `start()` not called yet | `Thread t = new Thread();` | ❌ NO |
+| **RUNNABLE** | Thread is running OR ready to run (waiting for CPU) | `t.start()` called, executing code | ✅ YES |
+| **BLOCKED** | Thread waiting for a lock (trying to enter `synchronized` block) | `synchronized(obj) { }` locked by another thread | ❌ NO |
+| **WAITING** | Thread waiting forever for another thread's signal | `obj.wait()`, `Thread.join()`, `CountDownLatch.await()` | ❌ NO |
+| **TIMED_WAITING** | Thread waiting for max N seconds | `Thread.sleep(2000)`, `lock.tryLock(1, TimeUnit.SECONDS)` | ❌ NO |
+| **TERMINATED** | Thread finished execution (dead) | `run()` method completed | ❌ NO |
+
+---
+
+**Visual Timeline:**
+
+```
+Thread t = new Thread(() -> System.out.println("Hello"));
+                      ↓
+                    [NEW] ← Created, not started
+
+t.start();
+                      ↓
+                  [RUNNABLE] ← Running (or waiting for CPU)
+                      ↓
+            (needs lock? → BLOCKED)
+            (calls wait()? → WAITING)
+            (sleeps? → TIMED_WAITING)
+                      ↓
+                  [TERMINATED] ← Done
+```
+
+---
+
+**Real Code Example:**
+
+```java
+public class ThreadStateDemo {
+    public static void main(String[] args) throws InterruptedException {
+        Object lock = new Object();
+        
+        // Thread 1: Will be BLOCKED waiting for lock
+        Thread t1 = new Thread(() -> {
+            System.out.println("T1: NEW → RUNNABLE (starting)");
+            synchronized(lock) {
+                System.out.println("T1: Got lock!");
+                try {
+                    Thread.sleep(1000);  // → TIMED_WAITING for 1 second
+                    System.out.println("T1: Woke up from sleep");
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+            System.out.println("T1: TERMINATED (done)");
+        });
+        
+        // Thread 2: Will be BLOCKED trying to get lock
+        Thread t2 = new Thread(() -> {
+            System.out.println("T2: RUNNABLE (trying to get lock)");
+            synchronized(lock) {  // → BLOCKED here (T1 has it)
+                System.out.println("T2: Finally got lock!");
+            }
+            System.out.println("T2: TERMINATED");
+        });
+        
+        // Thread 3: Will WAIT for signal
+        Thread t3 = new Thread(() -> {
+            synchronized(lock) {
+                try {
+                    System.out.println("T3: WAITING for signal...");
+                    lock.wait();  // → WAITING (indefinite)
+                    System.out.println("T3: Got signal!");
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
+        
+        System.out.println("Initial state of t1: " + t1.getState());  // NEW
+        
+        t1.start();  // t1: NEW → RUNNABLE
+        t2.start();  // t2: NEW → RUNNABLE → BLOCKED (waiting for lock)
+        t3.start();  // t3: NEW → RUNNABLE → WAITING
+        
+        Thread.sleep(100);
+        System.out.println("\nStates after 100ms:");
+        System.out.println("t1 state: " + t1.getState());  // TIMED_WAITING (sleeping)
+        System.out.println("t2 state: " + t2.getState());  // BLOCKED (waiting for t1's lock)
+        System.out.println("t3 state: " + t3.getState());  // WAITING (waiting for signal)
+        
+        t1.join();  // Wait for t1 to finish
+        
+        System.out.println("\nAfter t1 finishes:");
+        System.out.println("t1 state: " + t1.getState());  // TERMINATED
+        System.out.println("t2 state: " + t2.getState());  // Now running (got lock)
+        
+        // Signal t3 to wake up
+        synchronized(lock) {
+            lock.notifyAll();
+        }
+        
+        Thread.sleep(500);
+        System.out.println("t3 state: " + t3.getState());  // TERMINATED (woke up)
+    }
+}
+
+/* OUTPUT:
+Initial state of t1: NEW
+
+t1: NEW → RUNNABLE (starting)
+T2: RUNNABLE (trying to get lock)
+T3: WAITING for signal...
+T1: Got lock!
+
+States after 100ms:
+t1 state: TIMED_WAITING
+t2 state: BLOCKED
+t3 state: WAITING
+
+T1: Woke up from sleep
+T1: TERMINATED (done)
+T2: Finally got lock!
+
+After t1 finishes:
+t1 state: TERMINATED
+t2 state: RUNNABLE  (or TERMINATED if already done)
+T2: TERMINATED
+
+t3 state: RUNNABLE  (or TERMINATED if already processed)
+T3: Got signal!
+T3: TERMINATED
+*/
+```
+
+---
+
+**State Transitions (When Does State Change?):**
+
+| From | To | Reason | Code |
+|------|----|---------|----|
+| NEW | RUNNABLE | `start()` called | `t.start()` |
+| RUNNABLE | BLOCKED | Trying to enter locked `synchronized` block | `synchronized(obj) { }` (obj locked) |
+| RUNNABLE | WAITING | Calling `wait()` (waits forever) | `obj.wait()` |
+| RUNNABLE | TIMED_WAITING | Calling `sleep()` or `wait(timeout)` | `Thread.sleep(1000)` |
+| BLOCKED | RUNNABLE | Got the lock | Lock released by other thread |
+| WAITING | RUNNABLE | `notify()` or `notifyAll()` called | `obj.notify()` |
+| TIMED_WAITING | RUNNABLE | Time elapsed OR `interrupt()` | Timer expired |
+| RUNNABLE | TERMINATED | `run()` method returns | Code finishes |
+
+---
+
+**Common Mistakes:**
+
+❌ **"RUNNABLE = thread is running right now"**
+- ❌ Wrong! RUNNABLE = "running OR ready to run" (waiting for CPU scheduler)
+- ✅ Only ONE thread runs at a time (on single core)
+- ✅ Other RUNNABLE threads wait for their turn
+
+❌ **"Calling start() makes thread RUNNING"**
+- ❌ Wrong! Thread goes to RUNNABLE (might not run immediately)
+- ✅ Thread runs when OS scheduler gives it CPU time
+
+❌ **"BLOCKED vs WAITING are the same"**
+- ❌ Wrong! 
+- ✅ BLOCKED = waiting for LOCK
+- ✅ WAITING = waiting for SIGNAL (notify/notifyAll)
+
+---
+
+**Architect Perspective:**
+
+```
+Debugging thread hangs?
+  ├─ Get thread dump (kill -3 or jstack pid)
+  ├─ Look at state:
+  │  ├─ BLOCKED → Thread deadlock (waiting for lock)
+  │  ├─ WAITING → Thread waiting for signal forever
+  │  ├─ TIMED_WAITING → OK (sleeping, will resume)
+  │  └─ RUNNABLE → Thread should be running (or waiting for CPU)
+  └─ Fix based on state
+
+Example: "Thread stuck waiting for lock"
+  → Check which thread holds the lock
+  → Why isn't it releasing?
+  → Deadlock? Infinite loop? Exception?
+```
+
+---
 
 ### Q5: ConcurrentHashMap vs Synchronized Map - Deep Dive
 
