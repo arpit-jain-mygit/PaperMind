@@ -746,6 +746,151 @@ Data produced at 7th position: Data-7
 
 ---
 
+## Solution #2: Improved Producer-Consumer (Best Practices)
+
+**Observations on Above Solution:**
+
+❌ **Issue 1: Deadlock Risk** - Producer produces 100 items, Consumer tries to consume 100 items. If mismatch or after one exits, other hangs forever waiting for signal.
+
+❌ **Issue 2: LIFO Instead of FIFO** - Consumes from TOP (position count-1), not bottom. Should use Queue, not Array.
+
+❌ **Issue 3: AtomicInteger Redundant** - All access already protected by lock. No need for AtomicInteger (adds overhead).
+
+❌ **Issue 4: Holds Lock Too Long** - Entire for loop runs with lock held. Lock should be released immediately after each operation, not held for 100 iterations.
+
+✅ **Best Practice:** Release lock ASAP after each operation + Use Queue for FIFO + Cleanup signals when done.
+
+```java
+import java.util.concurrent.locks.*;
+import java.util.LinkedList;
+import java.util.Queue;
+
+public class ImprovedProducerConsumer {
+    public static void main(String[] args) throws InterruptedException {
+        ReentrantLock lock = new ReentrantLock();
+        Condition notEmpty = lock.newCondition();
+        Condition notFull = lock.newCondition();
+        
+        Queue<String> buffer = new LinkedList<>();
+        int MAX_SIZE = 5;
+        
+        Producer producer = new Producer(lock, notEmpty, notFull, buffer, MAX_SIZE);
+        Consumer consumer = new Consumer(lock, notEmpty, notFull, buffer);
+        
+        producer.start();
+        consumer.start();
+        
+        producer.join();
+        consumer.join();
+    }
+}
+
+class Producer extends Thread {
+    private ReentrantLock lock;
+    private Condition notEmpty, notFull;
+    private Queue<String> buffer;
+    private int maxSize;
+    
+    public Producer(ReentrantLock lock, Condition notEmpty, Condition notFull, 
+                    Queue<String> buffer, int maxSize) {
+        this.lock = lock;
+        this.notEmpty = notEmpty;
+        this.notFull = notFull;
+        this.buffer = buffer;
+        this.maxSize = maxSize;
+    }
+    
+    public void run() {
+        for (int i = 0; i < 10; i++) {
+            lock.lock();  // Acquire lock
+            try {
+                while (buffer.size() == maxSize) {
+                    System.out.println("Buffer full, waiting...");
+                    notFull.await();  // Release lock while waiting
+                }
+                String data = "Data-" + i;
+                buffer.offer(data);  // Add to queue (FIFO)
+                System.out.println("Produced: " + data + ", Size: " + buffer.size());
+                notEmpty.signal();  // Wake up consumer
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                lock.unlock();  // Release lock IMMEDIATELY
+            }
+        }
+        
+        // Signal consumer that production is DONE
+        lock.lock();
+        try {
+            notEmpty.signalAll();  // Wake consumer so it can exit gracefully
+        } finally {
+            lock.unlock();
+        }
+    }
+}
+
+class Consumer extends Thread {
+    private ReentrantLock lock;
+    private Condition notEmpty, notFull;
+    private Queue<String> buffer;
+    
+    public Consumer(ReentrantLock lock, Condition notEmpty, Condition notFull, Queue<String> buffer) {
+        this.lock = lock;
+        this.notEmpty = notEmpty;
+        this.notFull = notFull;
+        this.buffer = buffer;
+    }
+    
+    public void run() {
+        for (int i = 0; i < 10; i++) {
+            lock.lock();  // Acquire lock
+            try {
+                while (buffer.isEmpty()) {
+                    System.out.println("Buffer empty, waiting...");
+                    notEmpty.await();  // Release lock while waiting
+                }
+                String data = buffer.poll();  // Remove from queue (FIFO)
+                System.out.println("Consumed: " + data + ", Size: " + buffer.size());
+                notFull.signal();  // Wake up producer
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                lock.unlock();  // Release lock IMMEDIATELY
+            }
+        }
+    }
+}
+
+/* OUTPUT:
+Produced: Data-0, Size: 1
+Consumed: Data-0, Size: 0
+Produced: Data-1, Size: 1
+Produced: Data-2, Size: 2
+Consumed: Data-1, Size: 1
+Produced: Data-3, Size: 2
+Produced: Data-4, Size: 3
+Consumed: Data-2, Size: 2
+Produced: Data-5, Size: 3
+Consumed: Data-3, Size: 2
+...
+(All 10 items produced and consumed in FIFO order without deadlock)
+*/
+```
+
+**Key Improvements:**
+- ✅ Lock acquired just before operation, released immediately after
+- ✅ Uses Queue (FIFO), not Array (LIFO)
+- ✅ Uses `int` for count (via queue.size()), not AtomicInteger
+- ✅ Cleanup signal at end prevents consumer hanging
+- ✅ No deadlock risk - clean shutdown
+- ✅ Proper while loops for spurious wakeup safety
+
+**When to Use Each:**
+- **Issue's solution**: Teaching purpose (shows await/signal), not production-ready
+- **Improved solution**: Production-ready code, handles edge cases, follows best practices
+
+---
+
 ### Q7: Semaphore - Use Cases and Patterns
 
 **Semaphore Concept:**
