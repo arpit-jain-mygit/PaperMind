@@ -66,6 +66,146 @@ new Thread(() -> {
 
 ---
 
+## Solution: Producer-Consumer Using BlockingQueue
+
+**BlockingQueue simplifies Producer-Consumer dramatically!** No manual locking, no conditions, no await/signal.
+
+```java
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+
+public class BlockingQueueProducerConsumer {
+    public static void main(String[] args) throws InterruptedException {
+        // ✨ CHANGED: BlockingQueue instead of ReentrantLock + manual conditions
+        BlockingQueue<String> buffer = new LinkedBlockingQueue<>(5);  // Max size = 5
+        
+        Producer producer = new Producer(buffer);
+        Consumer consumer = new Consumer(buffer);
+        
+        producer.start();
+        consumer.start();
+        
+        producer.join();
+        consumer.join();
+    }
+}
+
+// ✨ SIMPLIFIED: Producer much simpler
+class Producer extends Thread {
+    private BlockingQueue<String> buffer;  // ✨ CHANGED: BlockingQueue instead of ReentrantLock + Condition
+    
+    public Producer(BlockingQueue<String> buffer) {
+        this.buffer = buffer;
+    }
+    
+    public void run() {
+        for (int i = 0; i < 10; i++) {
+            // ✨ CHANGED: No lock() call needed
+            try {
+                String data = "Data-" + i;
+                System.out.println("Producing: " + data);
+                
+                // ✨ CHANGED: put() is blocking (no manual while loop + await())
+                buffer.put(data);  // Automatically blocks if queue full, wakes up when space available
+                
+                System.out.println("Produced: " + data + ", Queue size: " + buffer.size());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            // ✨ CHANGED: No unlock() needed
+        }
+        System.out.println("Producer finished!");
+    }
+}
+
+// ✨ SIMPLIFIED: Consumer much simpler
+class Consumer extends Thread {
+    private BlockingQueue<String> buffer;  // ✨ CHANGED: BlockingQueue instead of ReentrantLock + Condition
+    
+    public Consumer(BlockingQueue<String> buffer) {
+        this.buffer = buffer;
+    }
+    
+    public void run() {
+        for (int i = 0; i < 10; i++) {
+            // ✨ CHANGED: No lock() call needed
+            try {
+                // ✨ CHANGED: take() is blocking (no manual while loop + await())
+                String data = buffer.take();  // Automatically blocks if queue empty, wakes up when data available
+                
+                System.out.println("Consumed: " + data + ", Queue size: " + buffer.size());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            // ✨ CHANGED: No unlock() needed
+        }
+        System.out.println("Consumer finished!");
+    }
+}
+
+/* OUTPUT:
+Producing: Data-0
+Produced: Data-0, Queue size: 1
+Producing: Data-1
+Produced: Data-1, Queue size: 2
+Consumed: Data-0, Queue size: 1
+Producing: Data-2
+Produced: Data-2, Queue size: 2
+Producing: Data-3
+Produced: Data-3, Queue size: 3
+Consumed: Data-1, Queue size: 2
+Producing: Data-4
+Produced: Data-4, Queue size: 3
+...
+Producer finished!
+Consumer finished!
+
+(All 10 items produced and consumed in FIFO order automatically!)
+*/
+```
+
+**Key Differences vs ReentrantLock Solution:**
+
+| Aspect | ReentrantLock | BlockingQueue |
+|--------|---|---|
+| **Initialization** | 4 lines (lock + 2 conditions + queue) | 1 line ✨ |
+| **Lock acquisition** | `lock.lock()` (manual) | Automatic in put/take ✨ |
+| **Wait for space (full)** | `while + notFull.await()` (manual) | Automatic in put() ✨ |
+| **Add to buffer** | `offer()` + manual signal | `put()` (blocking, auto-signal) ✨ |
+| **Lock release** | `lock.unlock()` (manual) | Automatic ✨ |
+| **Wait for data (empty)** | `while + notEmpty.await()` (manual) | Automatic in take() ✨ |
+| **Remove from buffer** | `poll()` + manual signal | `take()` (blocking, auto-signal) ✨ |
+| **Total lines** | 100+ lines | 40 lines ✨ |
+| **Error-prone?** | ❌ High (manual sync) | ✅ Low (built-in safety) |
+
+**BlockingQueue Methods:**
+
+```java
+BlockingQueue<String> queue = new LinkedBlockingQueue<>(5);
+
+// PRODUCER:
+queue.put(item);                             // Blocks if full, waits for space
+queue.offer(item, 1, TimeUnit.SECONDS);      // Try for 1 sec, fail if full
+queue.offer(item);                           // Non-blocking, returns false if full
+
+// CONSUMER:
+String item = queue.take();                  // Blocks if empty, waits for data
+queue.poll(1, TimeUnit.SECONDS);             // Wait max 1 sec for data
+queue.poll();                                // Non-blocking, returns null if empty
+
+// QUERY:
+queue.size();                                // Current size
+queue.remainingCapacity();                   // Space left
+queue.isEmpty();                             // Is empty?
+```
+
+**When to Use:**
+- ✅ **BlockingQueue**: Simple producer-consumer, most common use case
+- ✅ **ReentrantLock + Condition**: Complex multi-condition coordination, fairness needed
+- ✅ **Semaphore**: Limit N concurrent resources, not just 1 queue
+
+---
+
 ### Q2: PriorityQueue vs TreeSet - Which to Use?
 
 | Aspect | PriorityQueue | TreeSet |
