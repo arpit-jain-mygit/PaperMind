@@ -2175,44 +2175,124 @@ ref.compareAndSet("initial", "updated"); // Atomic reference update
 
 ## CAS (Compare-And-Swap) - What Problem Does It Solve?
 
-**Problem & Solution in One Table:**
+**The Problem: Lost Updates (WITHOUT CAS/Locking)**
 
 ```
-┌─────────────────────┬──────────────────────────────┬──────────────────────────┐
-│ Aspect              │ WITHOUT CAS (Race Condition) │ WITH CAS (Safe)          │
-├─────────────────────┼──────────────────────────────┼──────────────────────────┤
-│ counter = 5         │                              │                          │
-│ Thread 1            │ Read: 5 → Increment: 6      │ CAS(5→6)? YES ✅ (c=6)   │
-│ Thread 2            │ Read: 5 → Increment: 6      │ CAS(5→6)? NO ❌ Retry   │
-│ Result              │ counter = 6 ❌ LOST UPDATE! │ counter = 7 ✅ CORRECT  │
-│                     │ (should be 7)               │ (no lost updates)        │
-├─────────────────────┼──────────────────────────────┼──────────────────────────┤
-│ Method              │ Lock entire section         │ Atomic check-then-swap   │
-│ Blocking            │ ✅ YES (sequential)         │ ❌ NO (lock-free)        │
-│ Speed               │ 🐢 Slow (waits)            │ ⚡ Fast (retries)       │
-│ Use When            │ High contention             │ Low contention           │
-└─────────────────────┴──────────────────────────────┴──────────────────────────┘
+┌──────────────┬─────────────────────────────┬──────────────────────────────┐
+│ Step         │ Thread 1                    │ Thread 2                     │
+├──────────────┼─────────────────────────────┼──────────────────────────────┤
+│ Initial      │ counter = 5                 │ counter = 5                  │
+│ Read         │ "Read counter → 5"          │ "Read counter → 5"           │
+│ Increment    │ "Increment to 6"            │ "Increment to 6"             │
+│ Write back   │ "Write back 6"              │ "Write back 6"               │
+├──────────────┼─────────────────────────────┼──────────────────────────────┤
+│ Result       │ counter = 6 ❌ WRONG!       │ (should be 7, ONE LOST)      │
+│ Problem      │ Both saw 5, both wrote 6    │ Race condition!              │
+└──────────────┴─────────────────────────────┴──────────────────────────────┘
 ```
 
-**CAS in Practice:**
+**The Solution: CAS (Compare-And-Swap)**
 
 ```
-┌────────────────────────────────────────┬──────────────────────────────────┐
-│ ❌ Synchronized (Blocking)             │ ✅ AtomicInteger (CAS, Lock-Free)│
-├────────────────────────────────────────┼──────────────────────────────────┤
-│ synchronized void increment() {        │ private AtomicInteger count =    │
-│   counter++;  // One thread at a time  │   new AtomicInteger(0);         │
-│   // Others BLOCKED waiting for lock   │                                  │
-│ }                                      │ void increment() {               │
-│                                        │   count.incrementAndGet();       │
-│ Problem: Sequential, slow              │   // CAS used internally         │
-│                                        │ }                                │
-│                                        │                                  │
-│                                        │ Benefit: Parallel retries, fast  │
-└────────────────────────────────────────┴──────────────────────────────────┘
+┌──────────────┬──────────────────────────────┬──────────────────────────────┐
+│ Step         │ Thread 1                     │ Thread 2                     │
+├──────────────┼──────────────────────────────┼──────────────────────────────┤
+│ Initial      │ counter = 5                  │ counter = 5                  │
+│ Read         │ "Read counter = 5"           │ "Read counter = 5"           │
+│ CAS Check    │ "If 5, change to 6?"         │ "If 5, change to 6?"         │
+│ CAS Result   │ YES ✅ counter = 6           │ NO ❌ (already 6, retry!)   │
+│ Retry        │ -                            │ "Read counter → 6"           │
+│ CAS Check    │ -                            │ "If 6, change to 7?"         │
+│ CAS Result   │ -                            │ YES ✅ counter = 7           │
+├──────────────┼──────────────────────────────┼──────────────────────────────┤
+│ Result       │ counter = 7 ✅ CORRECT!     │ No lost updates!             │
+└──────────────┴──────────────────────────────┴──────────────────────────────┘
 ```
 
-**One-Liner:** CAS = "If value is what I expect, atomically swap it" → prevents lost updates without locks (lock-free).
+**Real-World: Bank Account Scenario**
+
+```
+WITHOUT CAS (Disaster):
+┌────────────────┬────────────────────────┬────────────────────────┐
+│ Step           │ You (Withdraw $10)     │ Mom (Withdraw $20)     │
+├────────────────┼────────────────────────┼────────────────────────┤
+│ Initial        │ Balance = $100         │ Balance = $100         │
+│ Read           │ Read: $100             │ Read: $100             │
+│ Calculate      │ $100 - $10 = $90       │ $100 - $20 = $80       │
+│ Write          │ Write: $90             │ Write: $80 ❌ LOST $10!│
+└────────────────┴────────────────────────┴────────────────────────┘
+
+WITH CAS (Safe):
+┌────────────────┬────────────────────────────┬────────────────────────────┐
+│ Step           │ You (Withdraw $10)         │ Mom (Withdraw $20)         │
+├────────────────┼────────────────────────────┼────────────────────────────┤
+│ Initial        │ Balance = $100             │ Balance = $100             │
+│ Read           │ Read: $100                 │ Read: $100                 │
+│ CAS Check      │ "If $100, make $90?"       │ "If $100, make $80?"       │
+│ CAS Result     │ YES ✅ Balance = $90       │ NO ❌ (now $90, retry)    │
+│ Retry          │ -                          │ Read: $90                  │
+│ CAS Check      │ -                          │ "If $90, make $70?"        │
+│ CAS Result     │ -                          │ YES ✅ Balance = $70       │
+├────────────────┼────────────────────────────┼────────────────────────────┤
+│ Result         │ Both transactions OK!      │ No lost withdrawals!       │
+└────────────────┴────────────────────────────┴────────────────────────────┘
+```
+
+**Code Comparison: Locks vs CAS**
+
+```
+❌ WITHOUT CAS (Using Locks - Slow):
+┌─────────────────────────────────────────────────────────────┐
+│ private int counter = 0;                                   │
+│ synchronized void increment() {                            │
+│   counter++;  // Only ONE thread at a time                 │
+│ }                                                           │
+│                                                             │
+│ Problem: Others BLOCKED waiting for lock 🔒 (sequential)   │
+└─────────────────────────────────────────────────────────────┘
+
+✅ WITH CAS (Lock-Free - Fast):
+┌─────────────────────────────────────────────────────────────┐
+│ private AtomicInteger counter = new AtomicInteger(0);      │
+│ void increment() {                                         │
+│   while (!counter.compareAndSet(counter.get(),             │
+│           counter.get() + 1)) {                            │
+│     // Retry if CAS failed (race)                          │
+│   }                                                         │
+│ }                                                           │
+│                                                             │
+│ Benefit: Multiple threads TRY simultaneously ⚡ (parallel)  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**The Key Difference: Execution Model**
+
+```
+┌─────────────────┬──────────────────────────────┬──────────────────────────┐
+│ Thread          │ WITHOUT CAS (Locks)          │ WITH CAS (Lock-Free)     │
+├─────────────────┼──────────────────────────────┼──────────────────────────┤
+│ Thread A        │ Lock → Read → Write → Unlock │ Read → CAS (atomic) done │
+│ Thread B        │ WAIT (blocked) ⏸️             │ Try CAS simultaneously ⚡│
+│ Thread C        │ WAIT (blocked) ⏸️             │ Try CAS simultaneously ⚡│
+├─────────────────┼──────────────────────────────┼──────────────────────────┤
+│ Execution Style │ Sequential (one at a time)   │ Parallel (all try)       │
+│ Speed           │ 🐢 Slow                     │ ⚡ Fast                  │
+└─────────────────┴──────────────────────────────┴──────────────────────────┘
+```
+
+**What CAS Solves (TL;DR)**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ ✅ Prevents lost updates (multiple threads modifying)     │
+│ ✅ No locks (lock-free, no blocking)                       │
+│ ✅ Atomic operation (can't be interrupted mid-update)      │
+│ ✅ Faster for low contention                               │
+│                                                             │
+│ How: "Check if value is what I expect, then atomically    │
+│        swap it" — all in one atomic step ✨                │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ---
 
