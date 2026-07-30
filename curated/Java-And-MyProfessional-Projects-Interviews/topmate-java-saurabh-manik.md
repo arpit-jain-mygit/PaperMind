@@ -375,22 +375,103 @@ Thread Birth → Execution → Waiting → Death
 
 ---
 
-**Visual Timeline:**
+**Thread Lifecycle Diagram (with Loop):**
 
 ```
-Thread t = new Thread(() -> System.out.println("Hello"));
-                      ↓
-                    [NEW] ← Created, not started
+                           ┌─────────────────────────────────────────────────┐
+                           │                                                 │
+                           │   Thread Can Loop Between These States!         │
+                           │                                                 │
+                           ▼                                                 │
+    ┌────────┐   start()  ┌──────────┐   acquires lock / await/signal ends  │
+    │ NEW    │──────────►  │RUNNABLE  │────────────────────────────┐         │
+    └────────┘            └──────────┘                             │         │
+                              ▲                                    │         │
+                              │                                    │         │
+                              │  lock released / signal received   │         │
+                              │  time limit expired / interrupt    │         │
+                              │                                    │         │
+                   ┌──────────┴────────────┬─────────────────────┘          │
+                   │                       │                                 │
+                   │                       │                                 │
+             needs lock             calls wait()               sleeps/      │
+                   │                  /join()              timeout wait      │
+                   ▼                   ▼                        ▼            │
+             ┌─────────┐           ┌────────┐            ┌──────────────┐  │
+             │ BLOCKED │           │ WAITING│            │TIMED_WAITING │  │
+             └─────────┘           └────────┘            └──────────────┘  │
+                   │                   │                        │            │
+                   └───────────────────┴────────────────────────┘            │
+                            (lock released)              (time expired)     │
+                           (signal/notify)              (interrupt)         │
+                                                                             │
+                                  Returns to RUNNABLE ◄──────────────────────
+                                        │
+                    run() method completes / thread.stop()
+                                        ▼
+                                  ┌────────────┐
+                                  │TERMINATED  │
+                                  │  (DEAD)    │
+                                  └────────────┘
+                                        │
+                                   Final State
+                                  (Cannot restart)
+```
 
-t.start();
-                      ↓
-                  [RUNNABLE] ← Running (or waiting for CPU)
-                      ↓
-            (needs lock? → BLOCKED)
-            (calls wait()? → WAITING)
-            (sleeps? → TIMED_WAITING)
-                      ↓
-                  [TERMINATED] ← Done
+**How to Read the Diagram:**
+
+```
+1️⃣  NEW → RUNNABLE
+    Thread created with new Thread()
+    Thread starts with thread.start()
+    
+2️⃣  RUNNABLE → BLOCKED (Loop)
+    Tries to enter synchronized block that's locked
+    Other thread releases lock → back to RUNNABLE
+    
+3️⃣  RUNNABLE → WAITING (Loop)
+    Calls obj.wait() / thread.join() / latch.await()
+    Other thread calls notify() / notifyAll() → back to RUNNABLE
+    
+4️⃣  RUNNABLE → TIMED_WAITING (Loop)
+    Calls Thread.sleep(1000) / lock.tryLock(2, TimeUnit.SECONDS)
+    Time expires / thread interrupted → back to RUNNABLE
+    
+5️⃣  Any State → TERMINATED
+    run() method completes
+    Thread dies (cannot restart!)
+```
+
+**Real-World Scenario:**
+
+```
+Consumer Thread Lifecycle:
+
+NEW:               Thread created
+                        ↓
+RUNNABLE:          Tries to take from queue
+                        ↓
+WAITING:           Queue empty, calls queue.take()
+                   (Thread sleeps, waiting for producer)
+                        ↓
+                   Producer puts data
+                   notify() called
+                        ↓
+RUNNABLE:          Wakes up, processes data
+                        ↓
+BLOCKED:           Tries to enter synchronized(resource)
+                   Another thread has lock
+                        ↓
+RUNNABLE:          Lock released, acquired lock
+                        ↓
+TIMED_WAITING:     Calls Thread.sleep(100) to rate-limit
+                        ↓
+RUNNABLE:          Sleep ends, goes back to process more
+                        ↓
+                   (Loops back to WAITING to get next item)
+                        ↓
+TERMINATED:        Queue closes / thread interrupted
+                   run() method ends
 ```
 
 ---
