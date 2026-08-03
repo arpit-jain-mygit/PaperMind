@@ -14,9 +14,10 @@
 # OS
 Thumbs.db
 
-# Dependencies
+# Dependencies (generate locally with npm install)
 node_modules/
 vendor/
+package-lock.json.lock
 
 # Build & Cache
 dist/
@@ -26,3 +27,8 @@ target/
 .next/
 out/
 *.log
+
+# Frontend specific
+frontend/node_modules/
+frontend/.angular/
+frontend/dist/
