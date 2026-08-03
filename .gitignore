@@ -17,3 +17,12 @@ Thumbs.db
 # Dependencies
 node_modules/
 vendor/
+
+# Build & Cache
+dist/
+build/
+target/
+.angular/
+.next/
+out/
+*.log
