@@ -37,3 +37,38 @@ kafka_2.13-*/
 *.jar
 *.so
 *.dll
+
+# Secrets and Credentials (CRITICAL)
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+secrets.yml
+secrets.yaml
+config/secrets/
+private/
+credentials/
+
+# IDE secrets
+.vscode/settings.json
+.idea/vcs.xml
+.idea/workspace.xml
+
+# API Keys and tokens
+**/application*.properties
+**/application*.yml
+!**/application.yml.example
+**/.aws/
+**/.gcloud/
+**/config.json
+
+# Build artifacts
+build/
+dist/
+*.class
+*.jar
+target/
