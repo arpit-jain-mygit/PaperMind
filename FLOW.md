@@ -444,197 +444,323 @@ When user asks: **"Can I travel to USA next week?"**
 
 ### **Step 1: User Submits Query**
 
+**Caller:** `FastAPI HTTP Handler` (app.py)
 ```
-User Action:
-curl -X POST "http://localhost:8000/api/query" \
-  -F "user_id=arpit_001" \
-  -F "question=Can I travel to USA next week?"
+POST /api/query
+    ↓
+FastAPI Route Handler (@app.post("/api/query"))
+    └─ Function: query_endpoint()
+```
 
-Input Data:
+**Input:**
+```
+HTTP POST request
+├─ user_id: "arpit_001" (string)
+└─ question: "Can I travel to USA next week?" (string)
+```
+
+**Output:** (MEMORY ONLY)
+```
+question_data: object (in RAM)
 ├─ user_id: "arpit_001"
-└─ question: "Can I travel to USA next week?"
+├─ question: "Can I travel to USA next week?"
+├─ current_date: "2026-09-22" (server-provided context)
+└─ Status: Ready for embedding
 
-Context:
-└─ Current Date: 2026-09-22 (passed to LLM)
+Note: NOT persisted yet - exists only in memory during request processing
 ```
 
-**Connection:** The query is tied to a specific user (`arpit_001`), so the system knows to search only their documents.
+**Next Step Caller:** services.query_documents()
+
+**Connection:** The query is tied to a specific user (`arpit_001`), so the system searches only their documents.
 
 ---
 
 ### **Step 2: Generate Query Embedding**
 
+**Caller:** `services.query_documents()` (Python function)
 ```
-OpenAI API Call:
-model: text-embedding-3-small
-input: "Can I travel to USA next week?"
-─────────────────────────────────────
+Called by: FastAPI endpoint (Step 1)
+    ↓
+services.py → query_documents()
+    ├─ Calls: get_openai_client() ← Lazy initialization
+    │
+    └─ openai_client.embeddings.create(
+       ├─ model: "text-embedding-3-small"
+       ├─ input: "Can I travel to USA next week?"
+       └─ Returns: query_embedding
+```
 
-Output: 1536-dimensional vector
-─────────────────────────────────────
-query_embedding = [
-  0.0123, -0.0456, 0.0789, -0.0234, 0.0567, ...(1536 values total)
-]
+**Input:** (MEMORY)
+```
+question: "Can I travel to USA next week?" (string, from Step 1)
+model: "text-embedding-3-small" (config)
+API: OpenAI embeddings endpoint
+```
+
+**Output:** (MEMORY ONLY)
+```
+query_embedding: [0.0123, -0.0456, 0.0789, -0.0234, 0.0567, ...]
+├─ Dimensions: 1536
+├─ Type: array of floats
+├─ Represents: Semantic meaning of question in vector space
+└─ Still in RAM - not persisted
 
 Why: Convert question into same vector space as document embeddings
-     so we can measure semantic similarity.
+     (generated in Upload Flow Step 4) so we can measure semantic similarity
 ```
 
-**Connection:** Question embedding is in the **same 1536-dimensional space** as the document embeddings generated in Option A Step 4.
+**Connection:** Question embedding is in the **same 1536-dimensional space** as the document embeddings, enabling similarity comparison.
+
+**Next Step Caller:** services.query_documents() continues
 
 ---
 
 ### **Step 3: Semantic Search in Qdrant**
 
+**Caller:** `vector_db.search_documents()` (Python function)
 ```
-Qdrant Query:
-Collection: papermind-documents_vectors
-Search Vector: [0.0123, -0.0456, 0.0789, ...]
-Filter: metadata.user_id = "arpit_001"  ← Only arpit_001's docs
-Top K: 3  ← Return top 3 most similar documents
-Distance Metric: COSINE similarity
-
-Search Process:
-    Query Vector [0.0123, -0.0456, ...]
-           │
-           ├─→ Compare with doc-9a140b96 vector [0.0234, -0.0567, ...]
-           │   Similarity Score: 0.92 ✅ (MATCH - about passport)
-           │
-           ├─→ Compare with doc-xxx vector [0.0345, ...]
-           │   Similarity Score: 0.45 ❌ (No match - about tax returns)
-           │
-           └─→ Compare with doc-yyy vector [...]
-               Similarity Score: 0.38 ❌ (No match - about salary slip)
-
-Results Returned:
-┌─────────────────────────────────────────┐
-│ Point ID: qdrant-xyz789                 │
-├─────────────────────────────────────────┤
-│ Similarity Score: 0.92                  │
-├─────────────────────────────────────────┤
-│ Metadata:                               │
-│ {                                       │
-│   "doc_id": "doc-9a140b96",             │
-│   "user_id": "arpit_001",               │
-│   "doc_type": "passport",               │
-│   "filename": "passport.pdf"            │
-│ }                                       │
-└─────────────────────────────────────────┘
+Called by: services.query_documents()
+    ↓
+services.py → query_documents()
+    ├─ Calls: search_documents(
+    │  ├─ query_embedding: [0.0123, ...]  ← From Step 2 (memory)
+    │  ├─ user_id: "arpit_001"            ← Filter
+    │  └─ top_k: 3                        ← Return top 3
+    │
+    └─ vector_db.py → search_documents()
+       ├─ Calls: get_qdrant_client_instance()
+       │
+       └─ qdrant_client.query_points(
+          ├─ collection_name: "papermind-documents_vectors"
+          ├─ query_vector: [0.0123, -0.0456, ...]
+          ├─ query_filter: {user_id: "arpit_001"}  ← Multi-tenant isolation
+          ├─ limit: 3
+          └─ Returns: search results
 ```
 
-**Connection:** Qdrant returns the `doc_id` (doc-9a140b96) which becomes the key to fetch data from PostgreSQL in the next step.
+**Input:**
+```
+query_embedding: [0.0123, -0.0456, 0.0789, ...] (from Step 2, memory)
+user_id: "arpit_001" (for filtering)
+top_k: 3 (return top 3 matches)
+distance_metric: COSINE (angle between vectors)
+```
+
+**Output:** (MEMORY ONLY)
+```
+search_results: list of PointStruct objects
+├─ Result 1:
+│  ├─ point_id: "qdrant-xyz789"
+│  ├─ score: 0.92 ✅ (MATCH - about passport + travel)
+│  └─ payload: {"doc_id": "doc-9a140b96", "user_id": "arpit_001", ...}
+│
+├─ Result 2:
+│  ├─ point_id: "qdrant-aaa111"
+│  ├─ score: 0.45 ❌ (Weak match - about tax returns)
+│  └─ payload: {"doc_id": "doc-xxx", ...}
+│
+└─ Result 3:
+   ├─ point_id: "qdrant-bbb222"
+   ├─ score: 0.38 ❌ (Weak match - about salary slip)
+   └─ payload: {"doc_id": "doc-yyy", ...}
+
+Note: Still in memory - array of results from Qdrant
+```
+
+**Connection:** Qdrant returns `doc_id` values (doc-9a140b96, doc-xxx, doc-yyy) which become keys to fetch actual text from PostgreSQL in the next step.
+
+**Next Step Caller:** services.query_documents() continues
 
 ---
 
 ### **Step 4: Retrieve Context from PostgreSQL**
 
+**Caller:** `services.query_documents()` (continuing same function)
 ```
-Using doc_id from Qdrant search: doc-9a140b96
-
-Query PostgreSQL:
-SELECT raw_text FROM extractions WHERE doc_id = 'doc-9a140b96'
-
-Retrieved Context (1051 chars):
-───────────────────────────────────────
-इस पासपोर्ट में 36 पृष्ठ है। This passport contains 36 pages.
-भारत गणराज्य REPUBLIC OF INDIA
-पासपोर्ट नं. M1783676
-उपनाम JAIN
-दिया गया नाम ARPIT KUMAR
-राष्ट्रीयता INDIAN
-जन्म स्थान GUNA, MADHYA PRADESH
-जन्म की तिथि 25/11/1980
-जारी करने की तिथि 30/09/2014
-समाप्ति की तिथि 29/09/2024  ← KEY: Expiry date
-───────────────────────────────────────
-
-Additional Info Added:
-├─ Today's Date: 2026-09-22  ← Critical for date comparison
-└─ Document Type: passport   ← Context for LLM
+services.py → query_documents()
+    ├─ Loops through search_results from Step 3
+    │
+    ├─ For each result:
+    │  ├─ Extracts: doc_id from result.payload
+    │  │
+    │  └─ Queries: db.query(Extraction).filter(Extraction.doc_id == doc_id)
+    │
+    └─ Retrieves: raw_text for each matched document
 ```
 
-**Connection:** Extraction table (`extractions.raw_text`) is where the actual OCR content lives. Qdrant found the document, PostgreSQL provides the full text.
+**Input:**
+```
+search_results: list from Step 3 (Qdrant results in memory)
+├─ Result 1: doc_id = "doc-9a140b96"
+├─ Result 2: doc_id = "doc-xxx"
+└─ Result 3: doc_id = "doc-yyy"
+
+Query: SQLAlchemy ORM filter on extractions table
+```
+
+**Output:** (MEMORY ONLY)
+```
+context_texts: list of strings (raw OCR text from PostgreSQL)
+
+From Result 1 (doc-9a140b96):
+├─ raw_text: "इस पासपोर्ट में 36 पृष्ठ है। This passport contains 36 pages.
+│  भारत गणराज्य REPUBLIC OF INDIA
+│  पासपोर्ट नं. M1783676
+│  उपनाम JAIN
+│  दिया गया नाम ARPIT KUMAR
+│  राष्ट्रीयता INDIAN
+│  जन्म स्थान GUNA, MADHYA PRADESH
+│  जन्म की तिथि 25/11/1980
+│  जारी करने की तिथि 30/09/2014
+│  समाप्ति की तिथि 29/09/2024" ← KEY: Expiry date
+│
+├─ result_score: 0.92 (relevance score)
+└─ source: PostgreSQL extractions table ✅ (DB)
+
+From Result 2 & 3: Similar retrieval for doc-xxx, doc-yyy
+
+Final Context (joined):
+└─ context: "\n\n".join(context_texts[:2000])  ← First 2000 chars
+
+Additional Context Added:
+├─ current_date: "2026-09-22" (from server)
+└─ question: "Can I travel to USA next week?" (from Step 1)
+
+Note: Still in memory - ready for LLM prompt assembly
+```
+
+**Connection:** Extraction table (`extractions.raw_text`) is where the actual OCR content lives. Qdrant found which documents are relevant, PostgreSQL provides the full text. Now we have:
+- Semantic relevance (from Qdrant score)
+- Complete document context (from PostgreSQL)
+- Current date for temporal reasoning
+
+**Next Step Caller:** services.query_documents() continues
 
 ---
 
 ### **Step 5: Call GPT-4o-mini with RAG Context**
 
+**Caller:** `services.query_documents()` (continuing same function)
 ```
-OpenAI API Call:
-model: gpt-4o-mini
-temperature: 0.7
-max_tokens: 500
-
-System Prompt (from prompts.py):
-────────────────────────────────────────
-"You are a document analyzer. You MUST check expiry dates 
-against today's date. If any date in the document is BEFORE 
-today, the document is EXPIRED and invalid."
-────────────────────────────────────────
-
-User Prompt:
-────────────────────────────────────────
-"TODAY'S DATE: 2026-09-22
-
-User's Question: Can I travel to USA next week?
-
-Document Context:
-पासपोर्ट नं. M1783676
-समाप्ति की तिथि 29/09/2024
-[... full extracted text ...]
-
-CRITICAL RULES - FOLLOW EXACTLY:
-1. TODAY'S DATE is 2026-09-22. Use this to check if dates have passed.
-2. If Expiry Date < Today's Date → Document is EXPIRED.
-3. If Expiry Date > Today's Date → Document is VALID.
-4. A VALID (not expired) passport is required for travel.
-5. Always compare dates mathematically.
-6. If passport is expired, clearly state 'Your passport expired 
-   on [date] and is no longer valid for travel.'"
-────────────────────────────────────────
-
-LLM Processing:
-1. Extract Expiry Date: 29/09/2024
-2. Compare: 29/09/2024 < 2026-09-22? → YES, EXPIRED
-3. Generate Answer: "Your passport expired on 29/09/2024 and 
-   is no longer valid for travel. You cannot travel to USA 
-   next week without renewing it."
+services.py → query_documents()
+    ├─ Calls: get_openai_client()
+    │
+    ├─ Assembles prompts from prompts.py:
+    │  ├─ RAG_QUERY_PROMPT (from prompts.py)
+    │  └─ SYSTEM_PROMPT (from prompts.py)
+    │
+    └─ openai_client.chat.completions.create(
+       ├─ model: "gpt-4o-mini"
+       ├─ messages: [system_prompt, user_prompt]
+       └─ Returns: response object
 ```
 
-**Connection:** The LLM has:
-- Question from user
-- Context from PostgreSQL (raw_text)
-- Current date (passed explicitly)
-- Clear instructions about date comparison
-- Document type (passport)
+**Input:**
+```
+system_prompt: "You are a document analyzer. You MUST check expiry dates 
+against today's date. If any date in the document is BEFORE today, 
+the document is EXPIRED and invalid."
 
-Result: Intelligent, contextual answer.
+user_prompt (RAG_QUERY_PROMPT.format() from Step 4):
+├─ current_date: "2026-09-22"
+├─ question: "Can I travel to USA next week?"
+├─ context: "पासपोर्ट नं. M1783676 ... समाप्ति की तिथि 29/09/2024..."
+└─ rules: 6 critical rules for date comparison and travel eligibility
+
+config:
+├─ model: "gpt-4o-mini"
+├─ temperature: 0.7
+└─ max_tokens: 500
+```
+
+**LLM Processing Flow:**
+```
+1. Parse Input:
+   - Extract Expiry Date: 29/09/2024
+   - Current Date: 2026-09-22
+   - Question: Can I travel?
+
+2. Apply Rules:
+   - Compare: 29/09/2024 < 2026-09-22? → YES, EXPIRED
+   - Conclusion: Passport is EXPIRED and invalid
+
+3. Generate Answer:
+   "Your passport expired on 29/09/2024 and is no longer 
+   valid for travel. You cannot travel to USA next week 
+   without renewing it first."
+```
+
+**Output:** (MEMORY ONLY)
+```
+response: OpenAI API response object
+├─ choices[0].message.content: "Your passport expired on 29/09/2024..."
+├─ usage.total_tokens: 245 (for cost tracking)
+└─ Still in memory - ready to store and return
+
+Key: answer = "Your passport expired on 29/09/2024..."
+```
+
+**Connection:** The LLM receives:
+- Question from user (Step 1)
+- Full document context from PostgreSQL (Step 4)
+- Current date for temporal logic
+- Clear system instructions about document validity
+
+Result: Intelligent, factually accurate answer grounded in actual document data.
+
+**Next Step Caller:** services.query_documents() continues
 
 ---
 
 ### **Step 6: Store Chat History**
 
-```sql
-TABLE: chat_history
-──────────────────────────────────────────────────────────
-id              │ chat-30f5e6b3
-user_id         │ arpit_001  ← FK to users
-message         │ "Can I travel to USA next week?"
-response        │ "Your passport expired on 29/09/2024..."
-cited_docs      │ ["doc-9a140b96"]  ← What documents were used
-model_used      │ "gpt-4o-mini"
-tokens_used     │ 245  ← For cost tracking
-created_at      │ 2026-09-22 10:15:45
-──────────────────────────────────────────────────────────
+**Caller:** `services.query_documents()` (continuing same function)
+```
+services.py → query_documents()
+    ├─ Creates: ChatHistory ORM object
+    │
+    ├─ Extracts cited_doc_ids from search results
+    │  └─ cited_doc_ids: ["doc-9a140b96"]  ← Which docs generated answer
+    │
+    └─ Calls: db.add(chat_history)
+       └─ Commits: db.commit() ← Persists to PostgreSQL
+```
 
-Foreign Key:
-  └─ user_id → users(id)
+**Input:**
+```
+user_id: "arpit_001" (FK to users table)
+message: "Can I travel to USA next week?" (question from Step 1)
+response: "Your passport expired on 29/09/2024..." (answer from Step 5)
+cited_docs: ["doc-9a140b96"] (which docs were used for RAG)
+model_used: "gpt-4o-mini" (string)
+tokens_used: 245 (from OpenAI response.usage)
+cost: 0.0 (calculated from tokens)
+```
+
+**Output:** (PERSISTED TO PostgreSQL)
+```
+PostgreSQL chat_history table INSERT:
+├─ id: "chat-30f5e6b3" ✅ (DB) ← Generated ID
+├─ user_id: "arpit_001" ✅ (FK to users)
+├─ message: "Can I travel to USA next week?" ✅ (DB)
+├─ response: "Your passport expired on 29/09/2024..." ✅ (DB)
+├─ cited_docs: ["doc-9a140b96"] ✅ (DB) ← Document lineage
+├─ model_used: "gpt-4o-mini" ✅ (DB)
+├─ tokens_used: 245 ✅ (DB) ← For cost tracking
+├─ cost: 0.0015 (calculated from tokens_used)
+└─ created_at: "2026-09-22 10:15:45" (timestamp)
+
+Key: chat_id = "chat-30f5e6b3" ← For traceability
 ```
 
 **Connection:** Chat history links back to:
-- User (via user_id)
-- Documents used (via cited_docs array)
-- Provides audit trail of all queries
+- User (via user_id) - multi-tenant isolation
+- Documents used (via cited_docs array) - RAG transparency
+- Model and tokens (for cost + performance tracking)
+- Provides complete audit trail of all queries and answers
+
+**Next:** Return to FastAPI handler and respond to user
 
 ---
 
@@ -736,6 +862,37 @@ users (arpit_001)
 
 ---
 
+## Final API Response (After All Steps)
+
+**Input:** Single API call with 2 parameters
+```json
+{
+  "user_id": "arpit_001",
+  "question": "Can I travel to USA next week?"
+}
+```
+
+**Output:** Single HTTP 200 response
+```json
+{
+  "status": "success",
+  "answer": "Your passport expired on 29/09/2024 and is no longer valid for travel. You cannot travel to USA next week without renewing it first.",
+  "cited_documents": ["doc-9a140b96"],
+  "message_id": "chat-30f5e6b3"
+}
+```
+
+**What Happened Behind the Scenes:**
+1. ✅ Question embedded (1536-dim vector)
+2. ✅ Qdrant searched (0.92 similarity match)
+3. ✅ PostgreSQL context retrieved (1051 chars)
+4. ✅ GPT-4o-mini processed (with date logic)
+5. ✅ Chat history stored (audit trail)
+
+**Total Latency:** 3-5 seconds end-to-end
+
+---
+
 ## Why These Connections?
 
 | Step | Connection | Purpose | Benefit |
@@ -753,19 +910,46 @@ users (arpit_001)
 ## Complete Query Sequence
 
 ```
-1. User asks question (user_id, question)
+1. User submits question (user_id, question) via HTTP POST
+   └─ FastAPI endpoint receives request (Step 1)
+
 2. Generate embedding of question (OpenAI)
-3. Filter Qdrant by user_id
-4. Search Qdrant with question embedding (top 3)
-5. Get doc_id from Qdrant metadata
-6. Fetch raw_text from PostgreSQL Extraction table
-7. Get current date (2026-09-22)
-8. Call GPT-4o-mini with:
-   - System Prompt (from prompts.py)
-   - User Prompt (Question + Context + Today's Date + Rules)
-9. LLM analyzes: Compare dates, check validity, generate answer
-10. Store in ChatHistory: message, response, cited_docs, tokens_used
-11. Return to user: answer + cited_documents
+   └─ Query embedded to 1536-dim vector (Step 2, memory)
+
+3. Semantic search in Qdrant
+   ├─ Filter: metadata.user_id = "arpit_001" (multi-tenant)
+   ├─ Search: Query vector vs document vectors (COSINE similarity)
+   └─ Returns: Top 3 most similar doc_ids with scores (Step 3, memory)
+
+4. Retrieve context from PostgreSQL
+   ├─ For each doc_id in results: Query extractions table
+   ├─ Fetch: raw_text (full OCR content, 1051 chars)
+   └─ Assemble: context = concatenated raw_text + current_date (Step 4, memory)
+
+5. Call GPT-4o-mini with RAG context
+   ├─ System Prompt: "You are a document analyzer. Check expiry dates..."
+   ├─ User Prompt: "TODAY'S DATE: 2026-09-22, Question: ..., Context: ..."
+   ├─ LLM analyzes: Compares 29/09/2024 < 2026-09-22 → EXPIRED
+   └─ Returns: Answer (Step 5, memory)
+
+6. Store chat history in PostgreSQL
+   ├─ Record: user_id, question, answer, cited_docs, tokens_used
+   ├─ Commit to chat_history table
+   └─ Generate chat_id for traceability (Step 6, DB)
+
+7. Return API response to user
+   ├─ status: "success"
+   ├─ answer: "Your passport expired on 29/09/2024..."
+   ├─ cited_documents: ["doc-9a140b96"]
+   └─ message_id: "chat-30f5e6b3"
 ```
 
-Each step depends on the previous one, enabling intelligent document understanding.
+**Data Flow Dependencies:**
+- Step 1 output → Step 2 input (question string)
+- Step 2 output → Step 3 input (query embedding vector)
+- Step 3 output → Step 4 input (doc_id list)
+- Step 4 output → Step 5 input (context text + date)
+- Step 5 output → Step 6 input (answer + cited docs)
+- Step 6 output → API response
+
+Each step builds on previous outputs, enabling intelligent document understanding grounded in actual data.
