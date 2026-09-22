@@ -31,53 +31,82 @@
 
 ### **Step 1: User Uploads Passport**
 
+**Caller:** `FastAPI HTTP Handler` (app.py)
 ```
-User Action:
-curl -X POST "http://localhost:8000/api/documents/upload" \
-  -F "user_id=arpit_001" \
-  -F "doc_type=passport" \
-  -F "file=@passport.pdf"
+POST /api/documents/upload
+    ↓
+FastAPI Route Handler (@app.post("/api/documents/upload"))
+    └─ Function: upload_endpoint()
+```
 
-Input Data:
-├─ user_id: "arpit_001"
-├─ doc_type: "passport"
-└─ file: passport.pdf (binary bytes)
+**Input:**
 ```
+HTTP POST request
+├─ user_id: "arpit_001" (string)
+├─ doc_type: "passport" (string)
+└─ file: passport.pdf (binary file, ~245KB)
+```
+
+**Output:** (MEMORY ONLY)
+```
+file_content: bytes (245,678 bytes in RAM)
+filename: "passport.pdf" (extracted from file)
+Status: Ready for next step
+
+Note: NOT persisted to database yet - exists only in memory
+```
+
+**Next Step Caller:** services.py → process_document_upload()
 
 ---
 
 ### **Step 2: OCR Text Extraction**
 
+**Caller:** `services.process_document_upload()` (Python function)
 ```
-Backend Process:
-pdfplumber.open(pdf_bytes)
-  └─→ Extract text from pages
-      └─→ No text found (image-based PDF)
-          └─→ Fallback to Google Document AI
+Called by: FastAPI endpoint (Step 1)
+    ↓
+services.py → process_document_upload()
+    ├─ Calls: extract_text_from_pdf(file_content)
+    │  ├─ Tries: pdfplumber.open(file_content) [Fast path]
+    │  └─ Falls back: extract_text_with_ocr() [Accurate path]
+    │
+    └─ extract_text_with_ocr()
+       ├─ Initializes: google.cloud.documentai.DocumentProcessorServiceClient()
+       ├─ Project: ultimate-bit-502715-k9
+       ├─ Processor: c1aecfacb43fff0f
+       └─ Returns: extracted_text string
+```
 
-Google Document AI Process:
-Project: ultimate-bit-502715-k9
-Processor: c1aecfacb43fff0f
-Input: passport.pdf bytes
+**Input:** (MEMORY)
+```
+file_content: bytes (245,678 bytes from Step 1, in RAM)
+filename: "passport.pdf"
+extraction_strategy: Try pdfplumber first, then Google Document AI
+```
 
-EXTRACTED TEXT (1051 chars):
-───────────────────────────────────────
-इस पासपोर्ट में 36 पृष्ठ है। This passport contains 36 pages.
-भारत गणराज्य REPUBLIC OF INDIA
-पासपोर्ट नं./ Passport No. → M1783676
-उपनाम / Surname → JAIN
-दिया गया नाम / Given Name(s) → ARPIT KUMAR
-राष्ट्रीयता / Nationality → INDIAN
-जन्म स्थान / Place of Birth → GUNA, MADHYA PRADESH
-जन्म की तिथि / Date of Birth → 25/11/1980
-जारी करने की तिथि / Date of Issue → 30/09/2014
-समाप्ति की तिथि / Date of Expiry → 29/09/2024
-───────────────────────────────────────
+**Output:** (MEMORY ONLY)
+```
+extracted_text: string (1051 characters)
+├─ Content:
+│  ├─ "इस पासपोर्ट में 36 पृष्ठ है। This passport contains 36 pages."
+│  ├─ "पासपोर्ट नं. M1783676"
+│  ├─ "उपनाम JAIN"
+│  ├─ "दिया गया नाम ARPIT KUMAR"
+│  ├─ "राष्ट्रीयता INDIAN"
+│  ├─ "जन्म की तिथि 25/11/1980"
+│  └─ "समाप्ति की तिथि 29/09/2024" ← Key data for queries
+├─ extraction_method: "google_document_ai" (string)
+└─ confidence_score: 0.99 (float)
+
+Note: Still in memory - will be persisted in Step 3
 ```
 
 **Key Point:** Two-stage extraction strategy:
-- Fast path: pdfplumber (milliseconds)
-- Fallback: Google Document AI (2-3 seconds, 99%+ accuracy)
+- Fast path: pdfplumber (milliseconds) - for digital PDFs with text
+- Fallback: Google Document AI (2-3 seconds, 99%+ accuracy) - for image-based PDFs
+
+**Next Step Caller:** services.process_document_upload() continues
 
 ---
 
@@ -85,141 +114,228 @@ EXTRACTED TEXT (1051 chars):
 
 #### **3a. Create Document Record**
 
-```sql
-TABLE: documents
-──────────────────────────────────────────────────────────
-id              │ doc-9a140b96
-user_id         │ arpit_001
-filename        │ passport.pdf
-doc_type        │ passport
-file_size       │ 245678 bytes
-encrypted_file_path │ s3://papermind/arpit_001/passport.pdf.encrypted
-upload_status   │ processing → completed
-created_at      │ 2026-09-22 10:15:30
-──────────────────────────────────────────────────────────
-
-Foreign Key: user_id (links to Users table)
+**Caller:** `services.process_document_upload()` (continuing same function)
+```
+services.py → process_document_upload()
+    ├─ Creates: Document ORM object
+    └─ Calls: db.add(document)
+       └─ Commits: db.commit() ← First database write
 ```
 
-**Purpose:** Central registry of all documents. Document ID (`doc-9a140b96`) becomes the key reference for all downstream data.
+**Input:**
+```
+user_id: "arpit_001" (string)
+filename: "passport.pdf" (string)
+doc_type: "passport" (string)
+file_size: 245678 (integer, bytes)
+upload_status: "processing" (string)
+```
+
+**Output:** (PERSISTED TO PostgreSQL)
+```
+PostgreSQL documents table INSERT:
+├─ id: "doc-9a140b96" ✅ (DB) ← Generated UUID-like ID
+├─ user_id: "arpit_001" (FK to users table)
+├─ filename: "passport.pdf"
+├─ doc_type: "passport"
+├─ file_size: 245678
+├─ encrypted_file_path: "s3://papermind/arpit_001/passport.pdf.encrypted"
+├─ upload_status: "processing"
+└─ created_at: "2026-09-22 10:15:30" (timestamp)
+
+Key: doc_id = "doc-9a140b96" ← Used by all subsequent steps
+```
+
+**Purpose:** Central registry of all documents. Document ID becomes the key reference for all downstream data (extractions, embeddings, mappings).
 
 ---
 
 #### **3b. Store Extracted Text & Metadata**
 
-```sql
-TABLE: extractions
-──────────────────────────────────────────────────────────
-id              │ ext-a1b2c3d4
-doc_id          │ doc-9a140b96  ← FK to documents
-user_id         │ arpit_001     ← FK to users
-doc_type        │ passport
-raw_text        │ (1051 chars of extracted passport data)
-extracted_data  │ {
-                │   "raw_text": "...",
-                │   "extraction_method": "google_document_ai",
-                │   "document_type": "passport"
-                │ }
-confidence_score│ 0.99
-created_at      │ 2026-09-22 10:15:32
-──────────────────────────────────────────────────────────
-
-Foreign Keys:
-  ├─ doc_id → documents(id)
-  └─ user_id → users(id)
+**Caller:** `services.process_document_upload()` (continuing same function)
+```
+services.py → process_document_upload()
+    ├─ Creates: Extraction ORM object
+    └─ Calls: db.add(extraction)
+       └─ Commits: db.commit() ← Second database write
 ```
 
-**Connection:** Extractions table **stores the OCR output** linked to the Document via `doc_id`. The `raw_text` field is what gets embedded next.
+**Input:**
+```
+doc_id: "doc-9a140b96" (FK to documents table)
+user_id: "arpit_001" (FK to users table)
+doc_type: "passport" (string)
+raw_text: "इस पासपोर्ट में 36 पृष्ठ है..." (1051 chars from Step 2, memory)
+extraction_method: "google_document_ai" (string)
+confidence_score: 0.99 (float)
+```
+
+**Output:** (PERSISTED TO PostgreSQL)
+```
+PostgreSQL extractions table INSERT:
+├─ id: "ext-a1b2c3d4" ✅ (DB)
+├─ doc_id: "doc-9a140b96" ✅ (FK to documents)
+├─ user_id: "arpit_001" ✅ (FK to users)
+├─ doc_type: "passport"
+├─ raw_text: "इस पासपोर्ट में 36 पृष्ठ है..." ✅ (DB) ← 1051 chars
+├─ extracted_data: {
+│  ├─ "raw_text": "...",
+│  ├─ "extraction_method": "google_document_ai",
+│  └─ "document_type": "passport"
+│ } (JSON)
+├─ confidence_score: 0.99
+└─ created_at: "2026-09-22 10:15:32" (timestamp)
+
+Key: extraction_id = "ext-a1b2c3d4" ← Contains raw_text for embedding + queries
+```
+
+**Connection:** Extractions table **stores the OCR output** linked to the Document via `doc_id`. The `raw_text` field is used:
+- In Step 4: Embedded for semantic search
+- In Query Flow: Retrieved for LLM context
 
 ---
 
 ### **Step 4: Generate Embeddings**
 
+**Caller:** `services.process_document_upload()` (continuing same function)
 ```
-OpenAI API Call:
-model: text-embedding-3-small
-input: (first 8191 chars of raw_text from Extraction table)
-─────────────────────────────────────
-"इस पासपोर्ट में 36 पृष्ठ है। This passport contains 36 pages.
-भारत गणराज्य REPUBLIC OF INDIA
-पासपोर्ट नं. M1783676
-उपनाम JAIN
-दिया गया नाम ARPIT KUMAR
-..."
+services.py → process_document_upload()
+    ├─ Calls: get_openai_client() ← Lazy initialization
+    │
+    └─ openai_client.embeddings.create(
+       ├─ model: "text-embedding-3-small"
+       ├─ input: raw_text[:8191]  ← From Step 2 (memory)
+       └─ Returns: embedding_response
+```
 
-Output: 1536-dimensional vector
-─────────────────────────────────────
-embedding_vector = [
-  0.0234, -0.0567, 0.0891, -0.0123, 0.0456, ...(1536 values total)
-]
+**Input:** (MEMORY)
+```
+raw_text: "इस पासपोर्ट में 36 पृष्ठ है..." (first 8191 chars, from Step 2 memory)
+model: "text-embedding-3-small" (config)
+API: OpenAI embeddings endpoint
+```
+
+**Output:** (MEMORY ONLY)
+```
+embedding_response object:
+└─ embedding_vector: [0.0234, -0.0567, 0.0891, -0.0123, 0.0456, ...] 
+   ├─ Dimensions: 1536
+   ├─ Type: array of floats
+   ├─ Represents: Semantic meaning of passport text
+   └─ Still in RAM - not persisted yet
 
 Why 1536? OpenAI's text-embedding-3-small model produces 1536 dimensions.
-Each dimension captures semantic meaning of the text.
+Each dimension captures semantic meaning of the text in vector space.
 ```
 
-**Connection:** Convert OCR text (from Extraction table) into numerical vectors for semantic search.
+**Connection:** Convert OCR text (from Step 2 memory) into numerical vectors in a semantic space where similar documents have similar embeddings. This enables fast similarity search in Qdrant.
+
+**Next Step Caller:** vector_db.store_embedding() (called from services.process_document_upload())
 
 ---
 
 ### **Step 5: Store in Qdrant Vector DB**
 
+**Caller:** `vector_db.store_embedding()` (Python function)
 ```
-Qdrant Cloud (Vector Database)
-Collection: papermind-documents_vectors
-URL: https://a71761f5-71a6-4d6e-bae7-72e0fb037b0c.eu-west-1-0.aws.cloud.qdrant.io
-
-Insert Point:
-┌─────────────────────────────────────────────────────┐
-│ Point ID: qdrant-xyz789                             │
-├─────────────────────────────────────────────────────┤
-│ Vector (1536-dim):                                  │
-│ [0.0234, -0.0567, 0.0891, -0.0123, 0.0456, ...]   │
-├─────────────────────────────────────────────────────┤
-│ Metadata (Payload):                                 │
-│ {                                                   │
-│   "doc_id": "doc-9a140b96",                         │
-│   "user_id": "arpit_001",                           │
-│   "doc_type": "passport",                           │
-│   "filename": "passport.pdf",                       │
-│   "upload_date": "2026-09-22T10:15:30"              │
-│ }                                                   │
-└─────────────────────────────────────────────────────┘
-
-Search Type: COSINE similarity (measures angle between vectors)
-Distance Metric: Closer vectors = more similar semantic meaning
+Called by: services.process_document_upload()
+    ↓
+services.py → process_document_upload()
+    ├─ Calls: store_embedding(
+    │  ├─ doc_id: "doc-9a140b96"  ← From Step 3 (DB)
+    │  ├─ user_id: "arpit_001"    ← From Step 1 (input)
+    │  └─ vector: [0.0234, ...]   ← From Step 4 (memory)
+    │
+    └─ vector_db.py → store_embedding()
+       ├─ Calls: get_qdrant_client_instance() ← Lazy init
+       │
+       └─ qdrant_client.upsert(
+          ├─ collection_name: "papermind-documents_vectors"
+          └─ points: [PointStruct(...)]  ← Sends to Qdrant Cloud
 ```
 
-**Connection:** Qdrant stores the embeddings with metadata (doc_id, user_id). This enables fast semantic search without touching PostgreSQL.
+**Input:**
+```
+embedding_vector: [0.0234, -0.0567, 0.0891, ...] (1536 floats from Step 4, memory)
+doc_id: "doc-9a140b96" (from Step 3, fetched from DB)
+user_id: "arpit_001" (from input, Step 1)
+doc_type: "passport" (string)
+filename: "passport.pdf" (string)
+upload_date: "2026-09-22T10:15:30" (ISO timestamp)
+```
+
+**Output:** (PERSISTED TO QDRANT CLOUD)
+```
+Qdrant Cloud (papermind-documents_vectors collection):
+
+Point Object:
+├─ point_id: "qdrant-xyz789" ✅ (Qdrant) ← Generated by Qdrant
+├─ vector: [0.0234, -0.0567, 0.0891, -0.0123, 0.0456, ...] ✅ (1536 dims)
+├─ payload (metadata): {
+│  ├─ "doc_id": "doc-9a140b96" ✅
+│  ├─ "user_id": "arpit_001" ✅
+│  ├─ "doc_type": "passport" ✅
+│  ├─ "filename": "passport.pdf" ✅
+│  └─ "upload_date": "2026-09-22T10:15:30" ✅
+│ }
+└─ distance_metric: COSINE (measures angle between vectors)
+
+Key: qdrant_id = "qdrant-xyz789" ← Bridge back to PostgreSQL
+```
+
+**Connection:** Qdrant stores the embeddings with metadata (doc_id, user_id). This enables:
+- Fast semantic search (<100ms) on vector similarity
+- Filtering by user_id without querying PostgreSQL
+- Complete independence from PostgreSQL (can scale separately)
+
+**Next Step Caller:** services.process_document_upload() continues
 
 ---
 
 ### **Step 6: Link Everything (Vector Mappings)**
 
-```sql
-TABLE: vector_mappings
-──────────────────────────────────────────────────────────
-id              │ vm-e5f6g7h8  ← Primary Key
-doc_id          │ doc-9a140b96 ← FK to documents
-user_id         │ arpit_001    ← FK to users
-qdrant_id       │ qdrant-xyz789 ← Points to Qdrant vector
-doc_type        │ passport
-text_chunk      │ "इस पासपोर्ट में 36 पृष्ठ..." (first 1000 chars)
-embedding_model │ openai-text-embedding-3-small
-created_at      │ 2026-09-22 10:15:34
-──────────────────────────────────────────────────────────
-
-Foreign Keys:
-  ├─ doc_id → documents(id)
-  └─ user_id → users(id)
-
-External Reference:
-  └─ qdrant_id → Qdrant.papermind-documents_vectors[point_id]
+**Caller:** `services.process_document_upload()` (continuing same function)
+```
+services.py → process_document_upload()
+    ├─ Creates: VectorMapping ORM object
+    │  ├─ doc_id: "doc-9a140b96" ← From Step 3 (DB)
+    │  ├─ user_id: "arpit_001"
+    │  └─ qdrant_id: "qdrant-xyz789" ← From Step 5 (Qdrant)
+    │
+    └─ Calls: db.add(vector_mapping)
+       └─ Commits: db.commit() ← Final database write
 ```
 
-**Connection:** Bridge between PostgreSQL (structured data) and Qdrant (vector data). This mapping table allows:
-- Fast user-filtered queries (filter by user_id in PostgreSQL)
-- Vector similarity searches (search in Qdrant)
-- Context retrieval (fetch raw_text from Extraction via doc_id)
+**Input:**
+```
+doc_id: "doc-9a140b96" (FK to documents table, from Step 3)
+qdrant_id: "qdrant-xyz789" (Qdrant point ID, from Step 5)
+user_id: "arpit_001" (string)
+doc_type: "passport" (string)
+text_chunk: "इस पासपोर्ट में 36 पृष्ठ..." (first 1000 chars for preview)
+embedding_model: "openai-text-embedding-3-small" (string)
+```
+
+**Output:** (PERSISTED TO PostgreSQL)
+```
+PostgreSQL vector_mappings table INSERT:
+├─ id: "vm-e5f6g7h8" ✅ (DB)
+├─ doc_id: "doc-9a140b96" ✅ (FK) ← Links to documents table
+├─ user_id: "arpit_001" ✅ (FK) ← Links to users table
+├─ qdrant_id: "qdrant-xyz789" ✅ (DB) ← Bridge to Qdrant vector
+├─ doc_type: "passport"
+├─ text_chunk: "इस पासपोर्ट में 36 पृष्ठ..." (1000 chars for preview)
+├─ embedding_model: "openai-text-embedding-3-small"
+└─ created_at: "2026-09-22 10:15:34" (timestamp)
+
+Key: mapping_id = "vm-e5f6g7h8" ← Bridge between PostgreSQL and Qdrant
+```
+
+**Connection:** Bridge between PostgreSQL (structured data) and Qdrant (vector data). This mapping table enables:
+- Fast user-filtered queries (filter by user_id in PostgreSQL before searching)
+- Vector similarity searches (search in Qdrant with metadata)
+- Context retrieval (fetch raw_text from Extraction via doc_id for LLM)
+- Complete data lineage tracking (doc → extraction → embedding)
 
 ---
 
