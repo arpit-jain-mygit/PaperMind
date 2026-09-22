@@ -288,3 +288,341 @@ users (arpit_001)
 8. Update Document.upload_status to "completed"
 9. Return success response with doc_id
 ```
+
+---
+
+# PaperMind: Option B - Query/RAG Flow
+
+## Real Example: Arpit's Passport Query
+
+When user asks: **"Can I travel to USA next week?"**
+
+---
+
+### **Step 1: User Submits Query**
+
+```
+User Action:
+curl -X POST "http://localhost:8000/api/query" \
+  -F "user_id=arpit_001" \
+  -F "question=Can I travel to USA next week?"
+
+Input Data:
+├─ user_id: "arpit_001"
+└─ question: "Can I travel to USA next week?"
+
+Context:
+└─ Current Date: 2026-09-22 (passed to LLM)
+```
+
+**Connection:** The query is tied to a specific user (`arpit_001`), so the system knows to search only their documents.
+
+---
+
+### **Step 2: Generate Query Embedding**
+
+```
+OpenAI API Call:
+model: text-embedding-3-small
+input: "Can I travel to USA next week?"
+─────────────────────────────────────
+
+Output: 1536-dimensional vector
+─────────────────────────────────────
+query_embedding = [
+  0.0123, -0.0456, 0.0789, -0.0234, 0.0567, ...(1536 values total)
+]
+
+Why: Convert question into same vector space as document embeddings
+     so we can measure semantic similarity.
+```
+
+**Connection:** Question embedding is in the **same 1536-dimensional space** as the document embeddings generated in Option A Step 4.
+
+---
+
+### **Step 3: Semantic Search in Qdrant**
+
+```
+Qdrant Query:
+Collection: papermind-documents_vectors
+Search Vector: [0.0123, -0.0456, 0.0789, ...]
+Filter: metadata.user_id = "arpit_001"  ← Only arpit_001's docs
+Top K: 3  ← Return top 3 most similar documents
+Distance Metric: COSINE similarity
+
+Search Process:
+    Query Vector [0.0123, -0.0456, ...]
+           │
+           ├─→ Compare with doc-9a140b96 vector [0.0234, -0.0567, ...]
+           │   Similarity Score: 0.92 ✅ (MATCH - about passport)
+           │
+           ├─→ Compare with doc-xxx vector [0.0345, ...]
+           │   Similarity Score: 0.45 ❌ (No match - about tax returns)
+           │
+           └─→ Compare with doc-yyy vector [...]
+               Similarity Score: 0.38 ❌ (No match - about salary slip)
+
+Results Returned:
+┌─────────────────────────────────────────┐
+│ Point ID: qdrant-xyz789                 │
+├─────────────────────────────────────────┤
+│ Similarity Score: 0.92                  │
+├─────────────────────────────────────────┤
+│ Metadata:                               │
+│ {                                       │
+│   "doc_id": "doc-9a140b96",             │
+│   "user_id": "arpit_001",               │
+│   "doc_type": "passport",               │
+│   "filename": "passport.pdf"            │
+│ }                                       │
+└─────────────────────────────────────────┘
+```
+
+**Connection:** Qdrant returns the `doc_id` (doc-9a140b96) which becomes the key to fetch data from PostgreSQL in the next step.
+
+---
+
+### **Step 4: Retrieve Context from PostgreSQL**
+
+```
+Using doc_id from Qdrant search: doc-9a140b96
+
+Query PostgreSQL:
+SELECT raw_text FROM extractions WHERE doc_id = 'doc-9a140b96'
+
+Retrieved Context (1051 chars):
+───────────────────────────────────────
+इस पासपोर्ट में 36 पृष्ठ है। This passport contains 36 pages.
+भारत गणराज्य REPUBLIC OF INDIA
+पासपोर्ट नं. M1783676
+उपनाम JAIN
+दिया गया नाम ARPIT KUMAR
+राष्ट्रीयता INDIAN
+जन्म स्थान GUNA, MADHYA PRADESH
+जन्म की तिथि 25/11/1980
+जारी करने की तिथि 30/09/2014
+समाप्ति की तिथि 29/09/2024  ← KEY: Expiry date
+───────────────────────────────────────
+
+Additional Info Added:
+├─ Today's Date: 2026-09-22  ← Critical for date comparison
+└─ Document Type: passport   ← Context for LLM
+```
+
+**Connection:** Extraction table (`extractions.raw_text`) is where the actual OCR content lives. Qdrant found the document, PostgreSQL provides the full text.
+
+---
+
+### **Step 5: Call GPT-4o-mini with RAG Context**
+
+```
+OpenAI API Call:
+model: gpt-4o-mini
+temperature: 0.7
+max_tokens: 500
+
+System Prompt (from prompts.py):
+────────────────────────────────────────
+"You are a document analyzer. You MUST check expiry dates 
+against today's date. If any date in the document is BEFORE 
+today, the document is EXPIRED and invalid."
+────────────────────────────────────────
+
+User Prompt:
+────────────────────────────────────────
+"TODAY'S DATE: 2026-09-22
+
+User's Question: Can I travel to USA next week?
+
+Document Context:
+पासपोर्ट नं. M1783676
+समाप्ति की तिथि 29/09/2024
+[... full extracted text ...]
+
+CRITICAL RULES - FOLLOW EXACTLY:
+1. TODAY'S DATE is 2026-09-22. Use this to check if dates have passed.
+2. If Expiry Date < Today's Date → Document is EXPIRED.
+3. If Expiry Date > Today's Date → Document is VALID.
+4. A VALID (not expired) passport is required for travel.
+5. Always compare dates mathematically.
+6. If passport is expired, clearly state 'Your passport expired 
+   on [date] and is no longer valid for travel.'"
+────────────────────────────────────────
+
+LLM Processing:
+1. Extract Expiry Date: 29/09/2024
+2. Compare: 29/09/2024 < 2026-09-22? → YES, EXPIRED
+3. Generate Answer: "Your passport expired on 29/09/2024 and 
+   is no longer valid for travel. You cannot travel to USA 
+   next week without renewing it."
+```
+
+**Connection:** The LLM has:
+- Question from user
+- Context from PostgreSQL (raw_text)
+- Current date (passed explicitly)
+- Clear instructions about date comparison
+- Document type (passport)
+
+Result: Intelligent, contextual answer.
+
+---
+
+### **Step 6: Store Chat History**
+
+```sql
+TABLE: chat_history
+──────────────────────────────────────────────────────────
+id              │ chat-30f5e6b3
+user_id         │ arpit_001  ← FK to users
+message         │ "Can I travel to USA next week?"
+response        │ "Your passport expired on 29/09/2024..."
+cited_docs      │ ["doc-9a140b96"]  ← What documents were used
+model_used      │ "gpt-4o-mini"
+tokens_used     │ 245  ← For cost tracking
+created_at      │ 2026-09-22 10:15:45
+──────────────────────────────────────────────────────────
+
+Foreign Key:
+  └─ user_id → users(id)
+```
+
+**Connection:** Chat history links back to:
+- User (via user_id)
+- Documents used (via cited_docs array)
+- Provides audit trail of all queries
+
+---
+
+## Complete Query Flow Diagram
+
+```
+┌────────────────────────┐
+│  "Can I travel to USA  │
+│  next week?"           │
+│  (User Question)       │
+└────────┬───────────────┘
+         │
+         ▼
+    ┌──────────────────────────┐
+    │ OpenAI Embeddings        │
+    │ text-embedding-3-small   │
+    └────────┬─────────────────┘
+             │
+      query_embedding:
+      [0.0123, -0.0456, ...]
+             │
+             ▼
+    ┌──────────────────────────┐
+    │ Qdrant Semantic Search   │
+    │ Filter: user_id =        │
+    │ arpit_001                │
+    │ Top K: 3                 │
+    └────────┬─────────────────┘
+             │
+     Returns: doc_id = doc-9a140b96
+             │
+     ┌───────┴─────────┐
+     │                 │
+     ▼                 ▼
+┌──────────────┐  ┌──────────────────┐
+│ PostgreSQL   │  │ Current Date     │
+│ extractions  │  │ 2026-09-22       │
+├──────────────┤  └──────────────────┘
+│ raw_text:    │           │
+│ "Expiry:     │           │
+│ 29/09/2024"  │           │
+└──────┬───────┘           │
+       │                   │
+       └───────┬───────────┘
+               │
+               ▼
+    ┌──────────────────────────┐
+    │  GPT-4o-mini             │
+    │  (RAG + Date Logic)      │
+    │                          │
+    │  Input: Q + Context +    │
+    │         Today's Date     │
+    │         + Instructions   │
+    └────────┬─────────────────┘
+             │
+      Response:
+      "Passport expired on 29/09/2024.
+       Cannot travel."
+             │
+             ▼
+    ┌──────────────────────────┐
+    │ PostgreSQL chat_history  │
+    │ Store: question, answer, │
+    │        cited_docs        │
+    └──────────────────────────┘
+```
+
+---
+
+## Query Connection Map
+
+```
+users (arpit_001)
+   │
+   ├─→ Submits Question
+   │   "Can I travel to USA next week?"
+   │
+   ├─→ Question → Embedding [0.0123, ...]
+   │
+   ├─→ Qdrant Search (with user_id filter)
+   │   └─→ Returns: qdrant-xyz789
+   │       Metadata: doc_id = doc-9a140b96
+   │
+   ├─→ PostgreSQL Lookup
+   │   ├─→ Extraction: raw_text = "Expiry: 29/09/2024..."
+   │   └─→ Document: filename = passport.pdf
+   │
+   ├─→ GPT-4o-mini Processing
+   │   ├─→ Input: Question + raw_text + Today's Date
+   │   ├─→ Logic: Compare 29/09/2024 < 2026-09-22
+   │   └─→ Output: "Passport expired..."
+   │
+   └─→ chat_history Record
+       ├─→ message: Question
+       ├─→ response: Answer
+       ├─→ cited_docs: [doc-9a140b96]
+       └─→ user_id: arpit_001
+```
+
+---
+
+## Why These Connections?
+
+| Step | Connection | Purpose | Benefit |
+|------|-----------|---------|---------|
+| **Query → Embedding** | Convert text to vectors | Match question with documents | Semantic understanding, not keyword matching |
+| **Query Embedding → Qdrant** | Search similar vectors | Find relevant documents | Sub-100ms response, scale to millions of docs |
+| **Qdrant → doc_id** | Return document reference | Know which document matched | Fetch full context without re-searching |
+| **doc_id → PostgreSQL** | Retrieve raw_text | Get full extracted content | LLM has complete context for accurate answers |
+| **Extractions + Date → LLM** | Provide context + current date | Enable date comparisons | LLM can understand temporal validity |
+| **LLM Output → ChatHistory** | Store question + answer + docs | Create audit trail | Track all queries, debug issues, cost tracking |
+| **cited_docs array** | Link answer to source documents | Transparency | User knows which documents were used |
+
+---
+
+## Complete Query Sequence
+
+```
+1. User asks question (user_id, question)
+2. Generate embedding of question (OpenAI)
+3. Filter Qdrant by user_id
+4. Search Qdrant with question embedding (top 3)
+5. Get doc_id from Qdrant metadata
+6. Fetch raw_text from PostgreSQL Extraction table
+7. Get current date (2026-09-22)
+8. Call GPT-4o-mini with:
+   - System Prompt (from prompts.py)
+   - User Prompt (Question + Context + Today's Date + Rules)
+9. LLM analyzes: Compare dates, check validity, generate answer
+10. Store in ChatHistory: message, response, cited_docs, tokens_used
+11. Return to user: answer + cited_documents
+```
+
+Each step depends on the previous one, enabling intelligent document understanding.
