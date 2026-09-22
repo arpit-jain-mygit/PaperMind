@@ -1,4 +1,31 @@
-# PaperMind: Option A - Document Upload Flow
+# PaperMind: Application Flows
+
+## Table of Contents
+1. [Upload Flow](#upload-flow)
+   - [Step 1: User Uploads Passport](#step-1-user-uploads-passport)
+   - [Step 2: OCR Text Extraction](#step-2-ocr-text-extraction)
+   - [Step 3: Store in PostgreSQL](#step-3-store-in-postgresql)
+   - [Step 4: Generate Embeddings](#step-4-generate-embeddings)
+   - [Step 5: Store in Qdrant Vector DB](#step-5-store-in-qdrant-vector-db)
+   - [Step 6: Link Everything (Vector Mappings)](#step-6-link-everything-vector-mappings)
+   - [Data Flow Diagram](#complete-data-flow-diagram)
+   - [Connection Map](#connection-map-how-tables-talk)
+   - [Why These Connections](#why-these-connections)
+
+2. [Query Flow](#query-flow)
+   - [Step 1: User Submits Query](#step-1-user-submits-query)
+   - [Step 2: Generate Query Embedding](#step-2-generate-query-embedding)
+   - [Step 3: Semantic Search in Qdrant](#step-3-semantic-search-in-qdrant)
+   - [Step 4: Retrieve Context from PostgreSQL](#step-4-retrieve-context-from-postgresql)
+   - [Step 5: Call GPT-4o-mini with RAG Context](#step-5-call-gpt-4o-mini-with-rag-context)
+   - [Step 6: Store Chat History](#step-6-store-chat-history)
+   - [Query Flow Diagram](#complete-query-flow-diagram)
+   - [Connection Map](#query-connection-map)
+   - [Why These Connections](#why-these-connections-1)
+
+---
+
+# Upload Flow
 
 ## Real Example: Arpit's Passport Upload
 
@@ -291,7 +318,7 @@ users (arpit_001)
 
 ---
 
-# PaperMind: Option B - Query/RAG Flow
+# Query Flow
 
 ## Real Example: Arpit's Passport Query
 
